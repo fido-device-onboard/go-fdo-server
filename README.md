@@ -180,7 +180,7 @@ TO0 will be completed in the respective Owner and RV.
 
 ### Prerequisites
 
-- Docker
+- Container runtime (Docker or Podman)
 - Make
 
 ### Makefile Targets
@@ -194,11 +194,12 @@ TO0 will be completed in the respective Owner and RV.
 
 The following variables can be set to customize the behavior of the `make run` command:
 
-- `IMAGE_NAME`: The name of the Docker image (default: `fdo_server`).
-- `CONTAINER_NAME`: The name of the Docker container (default: `fdo_server`).
+- `CONTAINER_RUNTIME`: The container runtime executable to use (default: `docker`).
+- `IMAGE_NAME`: The name of the container image (default: `fdo_server`).
+- `CONTAINER_NAME`: The name of the container (default: `fdo_server`).
 - `DB_PATH`: The path to the SQLite database file (default: `./test.db`).
 - `DB_PASS`: The SQLite database encryption-at-rest passphrase. **NOTE**:This field should be populated before starting the container.
-- `NETWORK`: The Docker network setting (default: `host`).
+- `NETWORK`: The container network setting (default: `host`).
 - `DEBUG`: Debug flag to print HTTP contents (default: `--debug`).
 - `HTTP_ADDR`: The address to listen on (default: `localhost:8080`).
 - `EXT_HTTP_ADDR`: The external address devices should connect to (default: `127.0.0.1:8080`).
@@ -215,16 +216,16 @@ The following variables can be set to customize the behavior of the `make run` c
 
 ## Usage
 
-### Building the Docker Image
+### Building the container image
 
-To build the Docker image, run:
+To build the container image, run:
 
 ```console
 make build
 ```
 
-### Running the Docker Container
-To start the FDO Go service as a Docker container, run:
+### Running the container
+To start the FDO Go service as a container, run:
 
 ```console
 make run
@@ -236,14 +237,14 @@ make copy
 ```
 This will copy the files uploaded using fdo.upload FSIM module to `app-data` folder present in host system.
 
-### Stoping the Docker Container
-To stop the Docker Container, run:
+### Stoping the container
+To stop the container, run:
 ```console
 make stop
 ```
 
 ### Default Target
-To build and run the Docker container in one step, run:
+To build and run the container in one step, run:
 ```console
 make all
 ```

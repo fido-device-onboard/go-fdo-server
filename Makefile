@@ -17,14 +17,15 @@ RESALE_GUID =
 RESALE_KEY =
 REUSE_CRED =
 WGET_URLS =
+CONTAINER_RUNTIME ?= docker
 
 # Build the Docker image
 build:
-	docker build -t $(IMAGE_NAME) .
+	${CONTAINER_RUNTIME} build -t $(IMAGE_NAME) .
 
 # Run the Docker container with all flags
 run:
-	docker run -v $(PWD)/app-data:/app-data:rw --name $(CONTAINER_NAME) -d --network=$(NETWORK) $(IMAGE_NAME) \
+	${CONTAINER_RUNTIME} run -v $(PWD)/app-data:/app-data:rw --name $(CONTAINER_NAME) -d --network=$(NETWORK) $(IMAGE_NAME) \
 		-db $(DB_PATH) \
 		$(if $(DB_PASS),-db-pass $(DB_PASS)) \
 		$(DEBUG) \
@@ -43,17 +44,17 @@ run:
 
 # Docker stop
 stop:
-	docker stop $(CONTAINER_NAME)
-	docker rm $(CONTAINER_NAME)
+	${CONTAINER_RUNTIME} stop $(CONTAINER_NAME)
+	${CONTAINER_RUNTIME} rm $(CONTAINER_NAME)
 
 # Clean up Docker images
 clean:
-	docker rmi $(IMAGE_NAME)
+	${CONTAINER_RUNTIME} rmi $(IMAGE_NAME)
 
 # Copy Upload Files to host
 copy:
 	@for upfile in $(UPLOAD_FILES); do \
-                docker cp $(CONTAINER_NAME):/app/$$upfile ./app-data; \
+                ${CONTAINER_RUNTIME} cp $(CONTAINER_NAME):/app/$$upfile ./app-data; \
                 done
 
 # Default target
