@@ -26,7 +26,7 @@ build:
 # Run the Docker container with all flags
 run:
 	${CONTAINER_RUNTIME} run -v $(PWD)/app-data:/app-data:rw --name $(CONTAINER_NAME) -d --network=$(NETWORK) $(IMAGE_NAME) \
-		-db $(DB_PATH) \
+		-db /home/nonroot/$(DB_PATH) \
 		$(if $(DB_PASS),-db-pass $(DB_PASS)) \
 		$(DEBUG) \
 		-http $(HTTP_ADDR) \

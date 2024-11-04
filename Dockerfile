@@ -14,7 +14,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 COPY --from=builder /app/fdo_server /app/fdo_server
-USER nonroot
 
 ENTRYPOINT ["./fdo_server"]
 CMD []
