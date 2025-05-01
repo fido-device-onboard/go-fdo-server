@@ -671,7 +671,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 		if cmdDate && slices.Contains(modules, "fdo.command") {
 			if !yield("fdo.command", &fsim.RunCommand{
 				Command: "date",
-				Args:    []string{"+%s"},
+				Args:    []string{"--utc"},
 				Stdout:  os.Stdout,
 				Stderr:  os.Stderr,
 			}) {
