@@ -19,7 +19,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"golang.org/x/time/rate"
 	"iter"
 	"log"
 	"log/slog"
@@ -37,6 +36,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
@@ -316,7 +317,7 @@ func doPrintOwnerPubKey(state *sqlite.DB) error {
 	if err != nil {
 		return fmt.Errorf("%w: see usage", err)
 	}
-	key, _, err := state.OwnerKey(keyType)
+	key, _, err := state.OwnerKey(context.Background(), keyType, 3072)
 	if err != nil {
 		return err
 	}
@@ -353,7 +354,7 @@ func doImportVoucher(state *sqlite.DB) error {
 	if err != nil {
 		return fmt.Errorf("error parsing owner public key from voucher: %w", err)
 	}
-	ownerKey, _, err := state.OwnerKey(ov.Header.Val.ManufacturerKey.Type)
+	ownerKey, _, err := state.OwnerKey(context.Background(), ov.Header.Val.ManufacturerKey.Type, 3072)
 	if err != nil {
 		return fmt.Errorf("error getting owner key: %w", err)
 	}
@@ -414,6 +415,11 @@ func resell(state *sqlite.DB) error {
 
 //nolint:gocyclo
 func newHandler(state *ServerState) (*transport.Handler, error) {
+	aio := fdo.AllInOne{
+		DIAndOwner:         state.DB,
+		RendezvousAndOwner: withOwnerAddrs{state.DB, state.RvInfo},
+	}
+	autoExtend := aio.Extend
 	// Generate manufacturing component keys
 	rsa2048MfgKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -517,33 +523,9 @@ func newHandler(state *ServerState) (*transport.Handler, error) {
 
 	// Auto-register RV blob so that TO1 can be tested unless a TO0 address is
 	// given or RV bypass is set
-	var autoTO0 fdo.AutoTO0
-	var autoTO0Addrs []protocol.RvTO2Addr
+	var autoTO0 func(context.Context, fdo.Voucher) error
 	if !rvBypass {
-		autoTO0 = state.DB
-
-		for _, directive := range protocol.ParseDeviceRvInfo(state.RvInfo) {
-			if directive.Bypass {
-				continue
-			}
-
-			for _, url := range directive.URLs {
-				to1Host := url.Hostname()
-				to1Port, err := strconv.ParseUint(url.Port(), 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("error parsing TO1 port to use for TO2: %w", err)
-				}
-				proto := protocol.HTTPTransport
-				if useTLS {
-					proto = protocol.HTTPSTransport
-				}
-				autoTO0Addrs = append(autoTO0Addrs, protocol.RvTO2Addr{
-					DNSAddress:        &to1Host,
-					Port:              uint16(to1Port),
-					TransportProtocol: proto,
-				})
-			}
-		}
+		autoTO0 = aio.RegisterOwnerAddr
 	}
 
 	return &transport.Handler{
@@ -555,10 +537,9 @@ func newHandler(state *ServerState) (*transport.Handler, error) {
 			DeviceInfo: func(_ context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.KeyType, protocol.KeyEncoding, error) {
 				return info.DeviceInfo, info.KeyType, info.KeyEncoding, nil
 			},
-			AutoExtend:   state.DB,
-			AutoTO0:      autoTO0,
-			AutoTO0Addrs: autoTO0Addrs,
-			RvInfo:       func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return state.RvInfo, nil },
+			BeforeVoucherPersist: autoExtend,
+			AfterVoucherPersist:  autoTO0,
+			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return state.RvInfo, nil },
 		},
 		TO0Responder: &fdo.TO0Server{
 			Session: state.DB,
@@ -573,13 +554,75 @@ func newHandler(state *ServerState) (*transport.Handler, error) {
 			Vouchers:        state.DB,
 			OwnerKeys:       state.DB,
 			RvInfo:          func(context.Context, fdo.Voucher) ([][]protocol.RvInstruction, error) { return state.RvInfo, nil },
-			OwnerModules:    ownerModules,
-			ReuseCredential: func(context.Context, fdo.Voucher) bool { return reuseCred },
-		},
+			Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
+			ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil }},
 	}, nil
 }
 
-func ownerModules(ctx context.Context, guid protocol.GUID, info string, chain []*x509.Certificate, devmod serviceinfo.Devmod, modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
+type moduleStateMachines struct {
+	DB *sqlite.DB
+	// current module state machine state for all sessions (indexed by token)
+	states map[string]*moduleStateMachineState
+}
+
+type moduleStateMachineState struct {
+	Name string
+	Impl serviceinfo.OwnerModule
+	Next func() (string, serviceinfo.OwnerModule, bool)
+	Stop func()
+}
+
+func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
+	token, ok := s.DB.TokenFromContext(ctx)
+	if !ok {
+		return "", nil, fmt.Errorf("invalid context: no token")
+	}
+	module, ok := s.states[token]
+	if !ok {
+		return "", nil, fmt.Errorf("NextModule not called")
+	}
+	return module.Name, module.Impl, nil
+}
+
+func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
+	token, ok := s.DB.TokenFromContext(ctx)
+	if !ok {
+		return false, fmt.Errorf("invalid context: no token")
+	}
+	module, ok := s.states[token]
+	if !ok {
+		// Create a new module state machine
+		_, modules, _, err := s.DB.Devmod(ctx)
+		if err != nil {
+			return false, fmt.Errorf("error getting devmod: %w", err)
+		}
+		next, stop := iter.Pull2(ownerModules(modules))
+		module = &moduleStateMachineState{
+			Next: next,
+			Stop: stop,
+		}
+		s.states[token] = module
+	}
+
+	var valid bool
+	module.Name, module.Impl, valid = module.Next()
+	return valid, nil
+}
+
+func (s moduleStateMachines) CleanupModules(ctx context.Context) {
+	token, ok := s.DB.TokenFromContext(ctx)
+	if !ok {
+		return
+	}
+	module, ok := s.states[token]
+	if !ok {
+		return
+	}
+	module.Stop()
+	delete(s.states, token)
+}
+
+func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if slices.Contains(modules, "fdo.download") {
 			for _, name := range downloads {
@@ -628,7 +671,7 @@ func ownerModules(ctx context.Context, guid protocol.GUID, info string, chain []
 		if cmdDate && slices.Contains(modules, "fdo.command") {
 			if !yield("fdo.command", &fsim.RunCommand{
 				Command: "date",
-				Args:    []string{"--utc"},
+				Args:    []string{"+%s"},
 				Stdout:  os.Stdout,
 				Stderr:  os.Stderr,
 			}) {
@@ -723,4 +766,36 @@ func tlsCert(db *sql.DB) (*tls.Certificate, error) {
 		Certificate: [][]byte{tlsCA.Raw},
 		PrivateKey:  tlsKey,
 	}, nil
+}
+
+type withOwnerAddrs struct {
+	*sqlite.DB
+	RVInfo [][]protocol.RvInstruction
+}
+
+func (s withOwnerAddrs) OwnerAddrs(context.Context, fdo.Voucher) ([]protocol.RvTO2Addr, time.Duration, error) {
+	var autoTO0Addrs []protocol.RvTO2Addr
+	for _, directive := range protocol.ParseDeviceRvInfo(s.RVInfo) {
+		if directive.Bypass {
+			continue
+		}
+
+		for _, url := range directive.URLs {
+			to1Host := url.Hostname()
+			to1Port, err := strconv.ParseUint(url.Port(), 10, 16)
+			if err != nil {
+				return nil, 0, fmt.Errorf("error parsing TO1 port to use for TO2: %w", err)
+			}
+			proto := protocol.HTTPTransport
+			if useTLS {
+				proto = protocol.HTTPSTransport
+			}
+			autoTO0Addrs = append(autoTO0Addrs, protocol.RvTO2Addr{
+				DNSAddress:        &to1Host,
+				Port:              uint16(to1Port),
+				TransportProtocol: proto,
+			})
+		}
+	}
+	return autoTO0Addrs, 0, nil
 }
