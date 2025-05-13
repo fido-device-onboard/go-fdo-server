@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2024 Intel Corporation
 // SPDX-License-Identifier: Apache 2.0
 
-package main
+package cmd
 
 import (
 	"context"
@@ -14,10 +14,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"database/sql"
-	"encoding/hex"
-	"encoding/pem"
 	"errors"
-	"flag"
 	"fmt"
 	"iter"
 	"log"
@@ -30,14 +27,10 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
-
-	"golang.org/x/time/rate"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
@@ -45,76 +38,101 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/internal/ownerinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
-	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/custom"
-	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
+	"github.com/fido-device-onboard/go-fdo/fsim"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/serviceinfo"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
+	"github.com/spf13/cobra"
 )
-
-const (
-	minPasswordLength = 8
-)
-
-var serverFlags = flag.NewFlagSet("server", flag.ContinueOnError)
 
 var (
-	useTLS           bool
-	addr             string
-	dbPath           string
-	dbPass           string
-	extAddr          string
-	resaleGUID       string
-	resaleKey        string
-	reuseCred        bool
-	rvBypass         bool
-	downloads        stringList
-	uploadDir        string
-	uploadReqs       stringList
-	insecureTLS      bool
-	serverCertPath   string
-	serverKeyPath    string
-	printOwnerPubKey string
-	importVoucher    string
-	cmdDate          bool
-	wgets            stringList
+	address         string
+	insecureTLS     bool
+	serverCertPath  string
+	serverKeyPath   string
+	externalAddress string
+	date            bool
+	wgets           []string
+	uploads         []string
+	uploadDir       string
+	downloads       []string
+	reuseCred       bool
+	//
+	rvBypass bool
 )
 
-var limiter = rate.NewLimiter(1, 5)
+// serveCmd represents the serve command
+var serveCmd = &cobra.Command{
+	Use:   "serve http_address",
+	Short: "Serve an instance of the HTTP server for the role",
+	Long: `Serve runs the HTTP server for the FDO protocol. It can act as all the three
+	main servers in the FDO spec.`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+			return err
+		}
+		address = args[0]
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		state, err := getState()
+		if err != nil {
+			return err
+		}
 
-type stringList []string
+		if externalAddress == "" {
+			externalAddress = address
+		}
 
-func (list *stringList) Set(v string) error {
-	*list = append(*list, v)
-	return nil
-}
+		host, portStr, err := net.SplitHostPort(externalAddress)
+		if err != nil {
+			return fmt.Errorf("invalid external addr: %w", err)
+		}
 
-func (list *stringList) String() string {
-	return fmt.Sprintf("[%s]", strings.Join(*list, ","))
-}
+		portNum, err := strconv.ParseUint(portStr, 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid external port: %w", err)
+		}
+		port := uint16(portNum)
 
-func init() {
-	serverFlags.StringVar(&dbPath, "db", "", "SQLite database file path")
-	serverFlags.StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
-	serverFlags.BoolVar(&debug, "debug", debug, "Print HTTP contents")
-	serverFlags.StringVar(&extAddr, "ext-http", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-	serverFlags.StringVar(&addr, "http", "localhost:8080", "The `addr`ess to listen on")
-	serverFlags.StringVar(&resaleGUID, "resale-guid", "", "Voucher `guid` to extend for resale")
-	serverFlags.StringVar(&resaleKey, "resale-key", "", "The `path` to a PEM-encoded x.509 public key for the next owner")
-	serverFlags.BoolVar(&reuseCred, "reuse-cred", false, "Perform the Credential Reuse Protocol in TO2")
-	serverFlags.BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
-	serverFlags.StringVar(&serverCertPath, "server-cert", "", "Path to server certificate")
-	serverFlags.StringVar(&serverKeyPath, "server-key", "", "Path to server private key")
-	serverFlags.StringVar(&printOwnerPubKey, "print-owner-public", "", "Print owner public key of `type` and exit")
-	serverFlags.StringVar(&importVoucher, "import-voucher", "", "Import a PEM encoded voucher file at `path`")
-	serverFlags.BoolVar(&cmdDate, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
-	serverFlags.Var(&downloads, "download", "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
-	serverFlags.StringVar(&uploadDir, "upload-dir", "uploads", "The directory `path` to put file uploads")
-	serverFlags.Var(&uploadReqs, "upload", "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
-	serverFlags.Var(&wgets, "wget", "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
+		err = db.InitDb(state)
+		if err != nil {
+			return err
+		}
 
+		// set tls for TO0
+		to0.SetTo0Tls(insecureTLS)
+
+		// Retrieve RV info from DB
+		rvInfo, err := rvinfo.FetchRvInfo()
+		if err != nil {
+			return err
+		}
+
+		if rvInfo != nil {
+			rvBypass = rvinfo.HasRVBypass(rvInfo)
+		} else {
+			rvBypass = false
+		}
+
+		// CreateRvInfo initializes new RV info if not found in DB
+		if rvInfo == nil {
+			rvInfo, err = rvinfo.CreateRvInfo(insecureTLS, host, port)
+			if err != nil {
+				return err
+			}
+		}
+
+		// CreateRvTO2Addr initializes new owner info and stores it with default values if not found in DB
+		err = ownerinfo.CreateRvTO2Addr(host, port, insecureTLS)
+		if err != nil {
+			return fmt.Errorf("failed to create and store rvTO2Addrs: %v", err)
+		}
+
+		return serveHTTP(rvInfo, state, insecureTLS)
+	},
 }
 
 // Server represents the HTTP server
@@ -195,103 +213,12 @@ func (s *Server) Start() error {
 	return srv.Serve(lis)
 }
 
-func server() error { //nolint:gocyclo
-	if debug {
-		level.Set(slog.LevelDebug)
-	}
-
-	if dbPath == "" {
-		return errors.New("db flag is required")
-	}
-
-	if dbPass == "" {
-		return errors.New("db password is empty")
-	}
-
-	err := validatePassword(dbPass)
-	if err != nil {
-		return err
-	}
-
-	state, err := sqlite.Open(dbPath, dbPass)
-
-	if err != nil {
-		return err
-	}
-	// If printing owner public key, do so and exit
-	if printOwnerPubKey != "" {
-		return doPrintOwnerPubKey(state)
-	}
-
-	// If importing a voucher, do so and exit
-	if importVoucher != "" {
-		return doImportVoucher(state)
-	}
-	useTLS = insecureTLS
-
-	if extAddr == "" {
-		extAddr = addr
-	}
-
-	host, portStr, err := net.SplitHostPort(extAddr)
-	if err != nil {
-		return fmt.Errorf("invalid external addr: %w", err)
-	}
-
-	portNum, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return fmt.Errorf("invalid external port: %w", err)
-	}
-	port := uint16(portNum)
-
-	err = db.InitDb(state)
-	if err != nil {
-		return err
-	}
-
-	// set tls for TO0
-	to0.SetTo0Tls(useTLS)
-
-	// Retrieve RV info from DB
-	rvInfo, err := rvinfo.FetchRvInfo()
-	if err != nil {
-		return err
-	}
-
-	if rvInfo != nil {
-		rvBypass = rvinfo.HasRVBypass(rvInfo)
-	} else {
-		rvBypass = false
-	}
-
-	// CreateRvInfo initializes new RV info if not found in DB
-	if rvInfo == nil {
-		rvInfo, err = rvinfo.CreateRvInfo(useTLS, host, port)
-		if err != nil {
-			return err
-		}
-	}
-
-	// CreateRvTO2Addr initializes new owner info and stores it with default values if not found in DB
-	err = ownerinfo.CreateRvTO2Addr(host, port, useTLS)
-	if err != nil {
-		return fmt.Errorf("failed to create and store rvTO2Addrs: %v", err)
-	}
-
-	// Invoke resale protocol if a GUID is specified
-	if resaleGUID != "" {
-		return resell(state)
-	}
-
-	return serveHTTP(rvInfo, state)
-}
-
 type ServerState struct {
 	RvInfo [][]protocol.RvInstruction
 	DB     *sqlite.DB
 }
 
-func serveHTTP(rvInfo [][]protocol.RvInstruction, db *sqlite.DB) error {
+func serveHTTP(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
 	state := &ServerState{
 		RvInfo: rvInfo,
 		DB:     db,
@@ -305,112 +232,10 @@ func serveHTTP(rvInfo [][]protocol.RvInstruction, db *sqlite.DB) error {
 	// Handle messages
 	httpHandler := api.NewHTTPHandler(handler, &state.RvInfo, state.DB).RegisterRoutes()
 	// Listen and serve
-	server := NewServer(addr, extAddr, httpHandler, useTLS, state.DB)
+	server := NewServer(address, externalAddress, httpHandler, useTLS, state.DB)
 
-	slog.Debug("Starting server on:", "addr", addr)
+	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
-
-}
-
-func doPrintOwnerPubKey(state *sqlite.DB) error {
-	keyType, err := protocol.ParseKeyType(printOwnerPubKey)
-	if err != nil {
-		return fmt.Errorf("%w: see usage", err)
-	}
-	key, _, err := state.OwnerKey(context.Background(), keyType, 3072)
-	if err != nil {
-		return err
-	}
-	der, err := x509.MarshalPKIXPublicKey(key.Public())
-	if err != nil {
-		return err
-	}
-	return pem.Encode(os.Stdout, &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: der,
-	})
-}
-
-func doImportVoucher(state *sqlite.DB) error {
-	// Parse voucher
-	pemVoucher, err := os.ReadFile(filepath.Clean(importVoucher))
-	if err != nil {
-		return err
-	}
-	blk, _ := pem.Decode(pemVoucher)
-	if blk == nil {
-		return fmt.Errorf("invalid PEM encoded file: %s", importVoucher)
-	}
-	if blk.Type != "OWNERSHIP VOUCHER" {
-		return fmt.Errorf("expected PEM block of ownership voucher type, found %s", blk.Type)
-	}
-	var ov fdo.Voucher
-	if err := cbor.Unmarshal(blk.Bytes, &ov); err != nil {
-		return fmt.Errorf("error parsing voucher: %w", err)
-	}
-
-	// Check that voucher owner key matches
-	expectedPubKey, err := ov.OwnerPublicKey()
-	if err != nil {
-		return fmt.Errorf("error parsing owner public key from voucher: %w", err)
-	}
-	ownerKey, _, err := state.OwnerKey(context.Background(), ov.Header.Val.ManufacturerKey.Type, 3072)
-	if err != nil {
-		return fmt.Errorf("error getting owner key: %w", err)
-	}
-	if !ownerKey.Public().(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
-		return fmt.Errorf("owner key in database does not match the owner of the voucher")
-	}
-
-	// Store voucher
-	return state.AddVoucher(context.Background(), &ov)
-}
-
-func resell(state *sqlite.DB) error {
-	// Parse resale-guid flag
-	guidBytes, err := hex.DecodeString(strings.ReplaceAll(resaleGUID, "-", ""))
-	if err != nil {
-		return fmt.Errorf("error parsing GUID of voucher to resell: %w", err)
-	}
-	if len(guidBytes) != 16 {
-		return fmt.Errorf("error parsing GUID of voucher to resell: must be 16 bytes")
-	}
-	var guid protocol.GUID
-	copy(guid[:], guidBytes)
-
-	// Parse next owner key
-	if resaleKey == "" {
-		return fmt.Errorf("resale-guid depends on resale-key flag being set")
-	}
-	keyBytes, err := os.ReadFile(filepath.Clean(resaleKey))
-	if err != nil {
-		return fmt.Errorf("error reading next owner key file: %w", err)
-	}
-	blk, _ := pem.Decode(keyBytes)
-	if blk == nil {
-		return fmt.Errorf("invalid PEM file: %s", resaleKey)
-	}
-	nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
-	if err != nil {
-		return fmt.Errorf("error parsing x.509 public key: %w", err)
-	}
-
-	// Perform resale protocol
-	extended, err := (&fdo.TO2Server{
-		Vouchers:  state,
-		OwnerKeys: state,
-	}).Resell(context.TODO(), guid, nextOwner, nil)
-	if err != nil {
-		return fmt.Errorf("resale protocol: %w", err)
-	}
-	ovBytes, err := cbor.Marshal(extended)
-	if err != nil {
-		return fmt.Errorf("resale protocol: error marshaling voucher: %w", err)
-	}
-	return pem.Encode(os.Stdout, &pem.Block{
-		Type:  "OWNERSHIP VOUCHER",
-		Bytes: ovBytes,
-	})
 }
 
 //nolint:gocyclo
@@ -643,7 +468,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 		}
 
 		if slices.Contains(modules, "fdo.upload") {
-			for _, name := range uploadReqs {
+			for _, name := range uploads {
 				if !yield("fdo.upload", &fsim.UploadRequest{
 					Dir:  uploadDir,
 					Name: name,
@@ -668,7 +493,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 			}
 		}
 
-		if cmdDate && slices.Contains(modules, "fdo.command") {
+		if date && slices.Contains(modules, "fdo.command") {
 			if !yield("fdo.command", &fsim.RunCommand{
 				Command: "date",
 				Args:    []string{"--utc"},
@@ -679,29 +504,6 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 			}
 		}
 	}
-}
-
-func validatePassword(dbPass string) error {
-	// Enforce rate limiting
-	if !limiter.Allow() {
-		return errors.New("too many attempts, please slow down")
-	}
-
-	// Check password length
-	if len(dbPass) < minPasswordLength {
-		return fmt.Errorf("password must be at least %d characters long", minPasswordLength)
-	}
-
-	// Check password complexity
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString
-	hasSpecial := regexp.MustCompile(`[!@#~$%^&*()_+{}:"<>?]`).MatchString
-
-	if !hasNumber(dbPass) || !hasUpper(dbPass) || !hasSpecial(dbPass) {
-		return errors.New("password must include a number, an uppercase letter, and a special character")
-	}
-
-	return nil
 }
 
 func tlsCert(db *sql.DB) (*tls.Certificate, error) {
@@ -787,7 +589,7 @@ func (s withOwnerAddrs) OwnerAddrs(context.Context, fdo.Voucher) ([]protocol.RvT
 				return nil, 0, fmt.Errorf("error parsing TO1 port to use for TO2: %w", err)
 			}
 			proto := protocol.HTTPTransport
-			if useTLS {
+			if insecureTLS {
 				proto = protocol.HTTPSTransport
 			}
 			autoTO0Addrs = append(autoTO0Addrs, protocol.RvTO2Addr{
@@ -798,4 +600,19 @@ func (s withOwnerAddrs) OwnerAddrs(context.Context, fdo.Voucher) ([]protocol.RvT
 		}
 	}
 	return autoTO0Addrs, 0, nil
+}
+
+func init() {
+	rootCmd.AddCommand(serveCmd)
+	// TODO(runcom): bind to viper
+	serveCmd.Flags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
+	serveCmd.Flags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
+	serveCmd.Flags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
+	serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	serveCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
+	serveCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
+	serveCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
+	serveCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
+	serveCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
+	serveCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
 }

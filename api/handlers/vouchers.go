@@ -8,8 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"net/http"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 

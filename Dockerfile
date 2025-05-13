@@ -7,13 +7,13 @@ WORKDIR /app
 COPY . .
 
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o fdo_server ./cmd/fdo_server/
+RUN CGO_ENABLED=0 go build
 
 # Start a new stage
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
-COPY --from=builder /app/fdo_server /app/fdo_server
+COPY --from=builder /app/go-fdo-server /app/go-fdo-server
 
-ENTRYPOINT ["./fdo_server"]
+ENTRYPOINT ["./go-fdo-server"]
 CMD []

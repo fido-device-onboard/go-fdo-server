@@ -11,24 +11,16 @@
 - Go 1.23.0 or later
 - A Go module initialized with `go mod init`
 
-
-The `update-deps.sh` script updates all dependencies in your Go module to their latest versions and cleans up the `go.mod` and `go.sum` files.
-
-To update your dependencies, simply run the script:
-```sh
-./update-deps.sh
-```
-
 ## Building the Example Server Application
 
-The example server application can be built with `go build` directly
+The example server application can be built with `go install` directly
 
 ```console
-$ go build -o fdo_server ./cmd/fdo_server/
-$ ./fdo_server
+$ go install .
+$ $(go env GOPATH)/bin/go-fdo-server
 
 Usage:
-  fdo_server [--] [options]
+  go-fdo-server [--] [options]
 
 Server options:
   -command-date
@@ -96,21 +88,21 @@ This guide provides instructions to set up and run the FDO server and client ins
 ### Manufacturer Instance
 Start the FDO server with the test database:
 ```sh
-./fdo_server -http 127.0.0.1:8038 -db ./mfg.db -db-pass <db-password> -debug
+go-fdo-server serve 127.0.0.1:8038 -db ./mfg.db -db-pass <db-password> -debug
 ```
 This server instance acts as the Manufacturer.
 
 ### RV Instance
 Start another instance of the FDO server on a different port with a different database:
 ```
-./fdo_server -http 127.0.0.1:8041 -db ./rv.db -db-pass <db-password> -debug
+go-fdo-server serve 127.0.0.1:8041 -db ./rv.db -db-pass <db-password> -debug
 ```
 This server instance acts as the RV.
 
 ### Owner Instance
 Start another instance of the FDO server on a different port with a different database:
 ```
-./fdo_server -http 127.0.0.1:8043 -db ./own.db -db-pass <db-password> -debug
+go-fdo-server serve 127.0.0.1:8043 -db ./own.db -db-pass <db-password> -debug
 ```
 This server instance acts as the Owner.
 
@@ -177,77 +169,3 @@ curl --location --request GET 'http://localhost:8043/api/v1/to0/<guid>'
 TO0 will be completed in the respective Owner and RV.
 ## Execute TO1 and TO2 from the FDO GO Client.
 ## Building and Running the Example Server Application using Containers
-
-### Prerequisites
-
-- Container runtime (Docker or Podman)
-- Make
-
-### Makefile Targets
-
-- `build`: Builds the Server image.
-- `run`: Runs the Server container.
-- `clean`: Removes the Server image.
-- `all`: Builds the Server image and then runs the container.
-
-### Variables
-
-The following variables can be set to customize the behavior of the `make run` command:
-
-- `CONTAINER_RUNTIME`: The container runtime executable to use (default: `docker`).
-- `IMAGE_NAME`: The name of the container image (default: `fdo_server`).
-- `CONTAINER_NAME`: The name of the container (default: `fdo_server`).
-- `DB_PATH`: The path to the SQLite database file (default: `./test.db`).
-- `DB_PASS`: The SQLite database encryption-at-rest passphrase. **NOTE**:This field should be populated before starting the container.
-- `NETWORK`: The container network setting (default: `host`).
-- `DEBUG`: Debug flag to print HTTP contents (default: `--debug`).
-- `HTTP_ADDR`: The address to listen on (default: `localhost:8080`).
-- `EXT_HTTP_ADDR`: The external address devices should connect to (default: `127.0.0.1:8080`).
-- `UPLOAD_DIR`: The directory path to put file uploads (default: `uploads`).
-- `DOWNLOAD_FILES`: Files to use with `fdo.download` FSIM (can be multiple files).
-- `UPLOAD_FILES`: Files to use with `fdo.upload` FSIM (can be multiple files).
-- `IMPORT_VOUCHER`: Path to import a PEM encoded voucher file.
-- `INSECURE_TLS`: Flag to listen with a self-signed TLS certificate.
-- `PRINT_OWNER_PUBLIC`: Type of owner public key to print and exit.
-- `RESALE_GUID`: Voucher GUID to extend for resale.
-- `RESALE_KEY`: Path to a PEM-encoded x.509 public key for the next owner.
-- `REUSE_CRED`: Flag to perform the Credential Reuse Protocol in TO2.
-- `WGET_URLS`: URLs to use with `fdo.wget` FSIM (can be multiple URLs).
-
-## Usage
-
-### Building the container image
-
-To build the container image, run:
-
-```console
-make build
-```
-
-### Running the container
-To start the FDO Go service as a container, run:
-
-```console
-make run
-```
-This will start the container with the specified network settings and database path.
-
-```console
-make copy
-```
-This will copy the files uploaded using fdo.upload FSIM module to `app-data` folder present in host system.
-
-### Stoping the container
-To stop the container, run:
-```console
-make stop
-```
-
-### Default Target
-To build and run the container in one step, run:
-```console
-make all
-```
-
-***NOTE:***
-Supports all server parameters specified in the building section. Use network mode based on the host machine and requirements.
