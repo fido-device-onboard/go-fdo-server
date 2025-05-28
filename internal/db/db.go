@@ -60,7 +60,7 @@ func FetchVoucher(guid []byte) (Voucher, error) {
 func FetchOwnerKeys() ([]OwnerKey, error) {
 	rows, err := db.Query("SELECT type, pkcs8, x509_chain FROM owner_keys")
 	if err != nil {
-		return nil, err
+		return []OwnerKey{}, err
 	}
 	defer rows.Close()
 
@@ -68,10 +68,16 @@ func FetchOwnerKeys() ([]OwnerKey, error) {
 	for rows.Next() {
 		var ownerKey OwnerKey
 		if err := rows.Scan(&ownerKey.Type, &ownerKey.PKCS8, &ownerKey.X509Chain); err != nil {
-			return nil, err
+			return []OwnerKey{}, err
 		}
 		ownerKeys = append(ownerKeys, ownerKey)
 	}
+
+	// Ensure we always return an empty slice rather than nil
+	if ownerKeys == nil {
+		ownerKeys = []OwnerKey{}
+	}
+
 	return ownerKeys, nil
 }
 
@@ -82,7 +88,7 @@ func InsertVoucher(voucher Voucher) error {
 
 func UpdateOwnerKeys(ownerKeys []OwnerKey) error {
 	for _, ownerKey := range ownerKeys {
-		_, err := db.Exec("UPDATE owner_keys SET pkcs8 = ?, x509_chain = ? WHERE type = ?", ownerKey.PKCS8, ownerKey.X509Chain, ownerKey.Type)
+		_, err := db.Exec("INSERT OR REPLACE INTO owner_keys (type, pkcs8, x509_chain) VALUES (?, ?, ?)", ownerKey.Type, ownerKey.PKCS8, ownerKey.X509Chain)
 		if err != nil {
 			return err
 		}
