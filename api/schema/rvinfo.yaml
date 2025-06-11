@@ -1,0 +1,279 @@
+# SPDX-FileCopyrightText: (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache 2.0
+
+components:
+  schemas:
+    RvInfo:
+      description: The Rendezvous Information structure as a list of Rendezvous Directives
+      type: object
+      properties:
+        Value:
+          type: array
+          items:
+            $ref: '#/components/schemas/RendezvousDirective'
+    RendezvousDirective:
+      description: A list of Rendezvous Instructions
+      type: array
+      items:
+        $ref: '#/components/schemas/RVInstr'
+    RVInstr:
+      description: A single Rendezvous Instruction
+      type: array
+      items:
+        anyOf:
+          - $ref: '#/components/schemas/RVDevOnly'
+          - $ref: '#/components/schemas/RVOwnerOnly'
+          - $ref: '#/components/schemas/RVIPAddress'
+          - $ref: '#/components/schemas/RVDevPort'
+          - $ref: '#/components/schemas/RVOwnerPort'
+          - $ref: '#/components/schemas/RVDns'
+          - $ref: '#/components/schemas/RVSvCertHash'
+          - $ref: '#/components/schemas/RVClCertHash'
+          - $ref: '#/components/schemas/RVUserInput'
+          - $ref: '#/components/schemas/RVWifiSsid'
+          - $ref: '#/components/schemas/RVWifiPw'
+          - $ref: '#/components/schemas/RVMedium'
+          - $ref: '#/components/schemas/RVProtocol'
+          - $ref: '#/components/schemas/RVDelaysec'
+          - $ref: '#/components/schemas/RVBypass'
+          - $ref: '#/components/schemas/RVExtRV'
+    RVDevOnly:
+      description: Directive applies to Device only
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 0
+          maximum: 0
+    RVOwnerOnly:
+      description: Directive applies to Owner only
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 1
+          maximum: 1
+    RVIPAddress:
+      description: An IPv4 or IPv6 address (RVIPAddress)
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 2
+          maximum: 2
+        RVValue:
+          oneOf:
+            - type: string
+              format: ipv4
+            - type: string
+              format: ipv6
+    RVDevPort:
+      description: Protocol specific port number used by Device
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 3
+          maximum: 3
+        RVValue:
+          type: integer
+          format: uint16
+    RVOwnerPort:
+      description: Protocol specific port number used by Owner
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 4
+          maximum: 4
+        RVValue:
+          type: integer
+          format: uint16
+    RVDns:
+      description: DNS address
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 5
+          maximum: 5
+        RVValue:
+          type: string
+          format: hostname
+    RVSvCertHash:
+      description: TLS server certificate hash
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 6
+          maximum: 6
+        RVValue:
+          type: object
+          properties:
+            HashType:
+              type: integer
+            Hash:
+              type: string
+              format: byte
+    RVClCertHash:
+     description: TLS Client CA certificate hash
+     type: object
+     properties:
+       RVVariable:
+         type: integer
+         format: uint8
+         minimum: 7
+         maximum: 7
+       RVValue:
+         type: object
+         properties:
+           HashType:
+             type: integer
+           Hash:
+             type: string
+             format: byte
+    RVUserInput:
+      description: Use user input if available
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 8
+          maximum: 8
+        RVValue:
+          type: boolean
+    RVWifiSsid:
+      description: WiFi SSID of the onboarding network
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 9
+          maximum: 9
+        RVValue:
+          type: string
+    RVWifiPw:
+      description: Password for access to RVWifiSsid network
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 10
+          maximum: 10
+        RVValue:
+          type: string
+    RVMedium:
+      description: Preferred network interface
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 11
+          maximum: 11
+        RVValue:
+          $ref: "#/components/schemas/RVMediumValue"
+    RVProtocol:
+      description: Transport protocol to use (HTTP, HTTPS, TLS, etc)
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 12
+          maximum: 12
+        RVValue:
+          $ref: "#/components/schemas/RVProtocolValue"
+    RVDelaysec:
+      description: Delay the given number of seconds
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 13
+          maximum: 13
+        RVValue:
+          type: integer
+          format: uint32
+    RVBypass:
+      description: Bypass the TO1 protocol (use an alternate rendezvous mechanism)
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 14
+          maximum: 14
+    RVExtRV:
+      description: Describes an external rendezvous mechanism (RVBypass must be given)
+      type: object
+      properties:
+        RVVariable:
+          type: integer
+          format: uint8
+          minimum: 15
+          maximum: 15
+        RVValue:
+          type: array
+          minItems: 1
+          prefixItems:
+            - type: string
+    RVProtocolValue:
+      type: integer
+      title: RVProtocolValue
+      description: Preferred transport protocol to use
+      oneOf:
+        - title: RVProtRest
+          const: 0
+          description: Select from HTTPS, HTTP, COAP UDP, COAP TCP
+        - title: RVProtHttp
+          const: 1
+          description: Use the HTTP protocol
+        - title: RVProtHttps
+          const: 2
+          description: Use the HTTP protocol over TLS
+        - title: RVProtTcp
+          const: 3
+          description: Use bare TCP protocol
+        - title: RVProtTls
+          const: 4
+          description: Use bare TLS protocol
+        - title: RVProtCoapTcp
+          const: 5
+          description: Use Constrained Application Protocol over TCP
+        - title: RVProtCoapUdp
+          const: 6
+          description: Use Constrained Application Protocol over UDP
+    RVMediumValue:
+      type: integer
+      title: RVMediumValue
+      description: Preferred medium to use
+      oneOf:
+        - title: RVMedEth
+          description: Mapped to the first ten ethernet devices
+          type: integer
+          minimum: 0
+          maximum: 9
+        - title: RVMedEthAll
+          description: Select from any available ethernet device
+          const: 20
+        - title: RVMedWifi
+          description: Mapped to the first ten WiFi interfaces
+          type: integer
+          minimum: 10
+          maximum: 19
+        - title: RVMedWifiAll
+          description: Select from any available WiFi device
+          const: 21
