@@ -21,7 +21,7 @@ var voucherPath string
 var importVoucherCmd = &cobra.Command{
 	Use:   "import-voucher path",
 	Short: "Import an ownership voucher",
-	Long: `Import takes a PEM encoded voucher and store it in the owner database.`,
+	Long:  `Import takes a PEM encoded voucher and store it in the owner database.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 			return err
