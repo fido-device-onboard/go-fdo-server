@@ -12,7 +12,6 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
-	"golang.org/x/time/rate"
 	"hermannm.dev/devlog"
 )
 
@@ -60,8 +59,6 @@ func init() {
 		logLevel.Set(slog.LevelDebug)
 	}
 }
-
-var limiter = rate.NewLimiter(1, 5)
 
 const (
 	minPasswordLength = 8
