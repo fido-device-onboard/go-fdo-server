@@ -149,15 +149,16 @@ Use GET and PUT requests to view and update existing owner redirect data.
 
 ## Fetch and Post Voucher
 Fetch a Voucher
+
 Fetch a voucher using curl and save it to a file named ownervoucher:
 ```
 curl --location --request GET 'http://localhost:8038/api/v1/vouchers?guid=<guid>' -o ownervoucher
 ```
-Post the Voucher to RV and Owner Server
-Post the fetched voucher to the RV and Owner server using curl:
+Post the Voucher to the Owner Server
+
+Post the fetched voucher to the Owner server using curl:
 ```
-curl -X POST 'http://localhost:8041/api/v1/owner/vouchers' -d @ownervoucher
-curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' -d @ownervoucher
+curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' --data-binary @ownervoucher
 ```
 ## Execute DI from the FDO GO Client.
 For Running the FDO GO Client setup, please refer to the FDO Go Client README.

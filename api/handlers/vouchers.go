@@ -6,16 +6,18 @@ package handlers
 import (
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 )
 
@@ -49,66 +51,50 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerKeys, err := db.FetchOwnerKeys()
-	if err != nil {
-		slog.Debug("Error querying owner_keys", "error", err)
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	if err := pem.Encode(w, &pem.Block{
+		Type:  "OWNERSHIP VOUCHER",
+		Bytes: voucher.CBOR,
+	}); err != nil {
+		slog.Debug("Error encoding voucher", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	response := struct {
-		Voucher   db.Voucher    `json:"voucher"`
-		OwnerKeys []db.OwnerKey `json:"owner_keys"`
-	}{
-		Voucher:   voucher,
-		OwnerKeys: ownerKeys,
-	}
-
-	data, err := json.Marshal(response)
-	if err != nil {
-		slog.Debug("Error marshalling JSON", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
 }
 
 func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Voucher   db.Voucher    `json:"voucher"`
-			OwnerKeys []db.OwnerKey `json:"owner_keys"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
-			return
-		}
-
-		guidHex := hex.EncodeToString(request.Voucher.GUID)
-		slog.Debug("Inserting voucher", "GUID", guidHex)
-
-		if err := db.InsertVoucher(request.Voucher); err != nil {
-			slog.Debug("Error inserting into database", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		if err := db.UpdateOwnerKeys(request.OwnerKeys); err != nil {
-			slog.Debug("Error updating owner key in database", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		newRvInfo, err := rvinfo.GetRvInfoFromVoucher(request.Voucher.CBOR)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("Error:", err)
+			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
 			return
 		}
-		*rvInfo = newRvInfo
+
+		for block, rest := pem.Decode(body); block != nil; block, rest = pem.Decode(rest) {
+			if block.Type != "OWNERSHIP VOUCHER" {
+				slog.Debug("Got unknown label type", "type", block.Type)
+				continue
+			}
+			var ov fdo.Voucher
+			if err := cbor.Unmarshal(block.Bytes, &ov); err != nil {
+				slog.Debug("Unable to decode cbor", "block", block.Bytes)
+				http.Error(w, "Unable to decode cbor", http.StatusInternalServerError)
+				return
+			}
+
+			// TODO: https://github.com/fido-device-onboard/go-fdo-server/issues/18
+			slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
+
+			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes}); err != nil {
+				slog.Debug("Error inserting into database", "error", err.Error())
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			*rvInfo = ov.Header.Val.RvInfo
+		}
+
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(guidHex))
 	}
 }
