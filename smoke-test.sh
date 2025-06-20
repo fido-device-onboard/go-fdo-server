@@ -28,7 +28,7 @@ rm -rf cred.bin
 GUID=$(./go-fdo-client/fdo_client -print | grep GUID | awk '{print $2}')
 # fetch and post voucher
 curl --location --request GET 'http://127.0.0.1:8038/api/v1/vouchers?guid='${GUID} -o ownervoucher
-curl -v -X POST 'http://127.0.0.1:8041/api/v1/owner/vouchers' -d @ownervoucher
-curl -v -X POST 'http://127.0.0.1:8043/api/v1/owner/vouchers' -d @ownervoucher
+curl -v -X POST 'http://127.0.0.1:8041/api/v1/owner/vouchers' --data-binary @ownervoucher
+curl -v -X POST 'http://127.0.0.1:8043/api/v1/owner/vouchers' --data-binary @ownervoucher
 # run onboarding
 ./go-fdo-client/fdo_client -debug | grep 'FIDO Device Onboard Complete'
