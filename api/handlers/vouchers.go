@@ -4,18 +4,22 @@
 package handlers
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 )
 
@@ -49,65 +53,50 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerKeys, err := db.FetchOwnerKeys()
-	if err != nil {
-		slog.Debug("Error querying owner_keys", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	var ovBytes bytes.Buffer
+	if err := pem.Encode(&ovBytes, &pem.Block{
+		Type:  "OWNERSHIP VOUCHER",
+		Bytes: voucher.CBOR,
+	}); err != nil {
 		return
 	}
 
-	response := struct {
-		Voucher   db.Voucher    `json:"voucher"`
-		OwnerKeys []db.OwnerKey `json:"owner_keys"`
-	}{
-		Voucher:   voucher,
-		OwnerKeys: ownerKeys,
-	}
-
-	data, err := json.Marshal(response)
-	if err != nil {
-		slog.Debug("Error marshalling JSON", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Write(ovBytes.Bytes())
 }
 
 func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Voucher   db.Voucher    `json:"voucher"`
-			OwnerKeys []db.OwnerKey `json:"owner_keys"`
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
 		}
-
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		blk, _ := pem.Decode(body)
+		if blk == nil {
+			return
+		}
+		if blk.Type != "OWNERSHIP VOUCHER" {
+			return
+		}
+		var ov fdo.Voucher
+		if err := cbor.Unmarshal(blk.Bytes, &ov); err != nil {
 			return
 		}
 
-		guidHex := hex.EncodeToString(request.Voucher.GUID)
-		slog.Debug("Inserting voucher", "GUID", guidHex)
+		slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
 
-		if err := db.InsertVoucher(request.Voucher); err != nil {
+		if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: blk.Bytes}); err != nil {
 			slog.Debug("Error inserting into database", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
-		if err := db.UpdateOwnerKeys(request.OwnerKeys); err != nil {
-			slog.Debug("Error updating owner key in database", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		newRvInfo, err := rvinfo.GetRvInfoFromVoucher(request.Voucher.CBOR)
+		newRvInfo, err := rvinfo.GetRvInfoFromVoucher(blk.Bytes)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
 		}
 		*rvInfo = newRvInfo
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(guidHex))
 	}
 }
