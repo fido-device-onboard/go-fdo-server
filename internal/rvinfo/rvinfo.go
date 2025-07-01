@@ -116,11 +116,19 @@ func UpdateRvInfo(rvInfo *[][]protocol.RvInstruction, index int, rvMap map[proto
 		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVDns, Value: utils.MustMarshal(rvMap[protocol.RVDns].(string))})
 	}
 
-	host := rvMap[protocol.RVIPAddress].(string)
-	if host == "" {
+	if rvMap[protocol.RVIPAddress] == nil {
 		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: utils.MustMarshal(net.IP{127, 0, 0, 1})})
-	} else if hostIP := net.ParseIP(host); hostIP.To4() != nil || hostIP.To16() != nil {
-		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: utils.MustMarshal(hostIP)})
+	} else {
+		host, ok := rvMap[protocol.RVIPAddress].(string)
+		if !ok {
+			return fmt.Errorf("error parsing rvData: Invalid RVIPAddress")
+		}
+		hostIP := net.ParseIP(host)
+		if hostIP != nil && (hostIP.To4() != nil || hostIP.To16() != nil) {
+			newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: utils.MustMarshal(hostIP)})
+		} else {
+			return fmt.Errorf("error parsing rvData: Invalid RVIPAddress: '%s'", host)
+		}
 	}
 
 	if rvMap[protocol.RVDevPort] != nil {
