@@ -8,8 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"net/http"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 
@@ -106,6 +107,7 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			return
 		}
 		*rvInfo = newRvInfo
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(guidHex))
 	}

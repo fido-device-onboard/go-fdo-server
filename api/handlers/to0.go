@@ -4,9 +4,10 @@
 package handlers
 
 import (
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"net/http"
 	"path"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -34,6 +35,7 @@ func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB) http.Handl
 			}
 		}
 
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(to0Guid))
 	}

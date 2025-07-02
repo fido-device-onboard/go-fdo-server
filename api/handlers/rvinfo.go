@@ -90,8 +90,8 @@ func createRvData(w http.ResponseWriter, r *http.Request, rvInfo *[][]protocol.R
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(rvData)
 }
 
