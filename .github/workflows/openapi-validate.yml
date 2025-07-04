@@ -1,0 +1,24 @@
+name: Validate OpenAPI Schema
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate-openapi:
+    name: Validate OpenAPI schema
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install OpenAPI Generator CLI
+        run: npm install @openapitools/openapi-generator-cli -g
+      - name: Validate OpenAPI schema
+        run: openapi-generator-cli validate -i api/schema/openapi.yaml 
