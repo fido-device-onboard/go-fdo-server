@@ -60,7 +60,7 @@ func FetchVoucher(guid []byte) (Voucher, error) {
 func FetchOwnerKeys() ([]OwnerKey, error) {
 	rows, err := db.Query("SELECT type, pkcs8, x509_chain FROM owner_keys")
 	if err != nil {
-		return nil, err
+		return []OwnerKey{}, err
 	}
 	defer rows.Close()
 
@@ -68,10 +68,16 @@ func FetchOwnerKeys() ([]OwnerKey, error) {
 	for rows.Next() {
 		var ownerKey OwnerKey
 		if err := rows.Scan(&ownerKey.Type, &ownerKey.PKCS8, &ownerKey.X509Chain); err != nil {
-			return nil, err
+			return []OwnerKey{}, err
 		}
 		ownerKeys = append(ownerKeys, ownerKey)
 	}
+
+	// Ensure we always return an empty slice rather than nil
+	if ownerKeys == nil {
+		ownerKeys = []OwnerKey{}
+	}
+
 	return ownerKeys, nil
 }
 

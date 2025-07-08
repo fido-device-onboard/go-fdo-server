@@ -107,7 +107,8 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			return
 		}
 		*rvInfo = newRvInfo
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(guidHex))
 	}
 }
