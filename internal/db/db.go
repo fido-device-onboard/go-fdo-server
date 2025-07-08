@@ -88,7 +88,7 @@ func InsertVoucher(voucher Voucher) error {
 
 func UpdateOwnerKeys(ownerKeys []OwnerKey) error {
 	for _, ownerKey := range ownerKeys {
-		_, err := db.Exec("INSERT OR REPLACE INTO owner_keys (type, pkcs8, x509_chain) VALUES (?, ?, ?)", ownerKey.Type, ownerKey.PKCS8, ownerKey.X509Chain)
+		_, err := db.Exec("UPDATE owner_keys SET pkcs8 = ?, x509_chain = ? WHERE type = ?", ownerKey.PKCS8, ownerKey.X509Chain, ownerKey.Type)
 		if err != nil {
 			return err
 		}

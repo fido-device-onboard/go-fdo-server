@@ -4,6 +4,10 @@
 package handlersTest
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -252,6 +256,42 @@ func setupTestVoucherServer(t *testing.T) (*httptest.Server, func()) {
 
 	err = db.InitDb(state)
 	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-seed owner_info table. The actual server does this as
+	// well. It is necessary since the server does an UPDATE operation
+	// on voucher load, which expects the table to already have data.
+
+	rsa2048OwnerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsa3072OwnerKey, err := rsa.GenerateKey(rand.Reader, 3072)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ec256OwnerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ec384OwnerKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AddOwnerKey(protocol.Rsa2048RestrKeyType, rsa2048OwnerKey, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AddOwnerKey(protocol.RsaPkcsKeyType, rsa3072OwnerKey, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AddOwnerKey(protocol.RsaPssKeyType, rsa3072OwnerKey, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AddOwnerKey(protocol.Secp256r1KeyType, ec256OwnerKey, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AddOwnerKey(protocol.Secp384r1KeyType, ec384OwnerKey, nil); err != nil {
 		t.Fatal(err)
 	}
 
