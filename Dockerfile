@@ -3,17 +3,16 @@
 
 FROM golang:1.23-alpine AS builder
 
-WORKDIR /app
+WORKDIR /go/src/app
 COPY . .
 
-RUN go mod download
-RUN CGO_ENABLED=0 go build
-
+RUN apk add make
+RUN make
+RUN install -D -m 755 go-fdo-server /go/bin/
 # Start a new stage
 FROM gcr.io/distroless/static-debian12:nonroot
 
-WORKDIR /app
-COPY --from=builder /app/go-fdo-server /app/go-fdo-server
+COPY --from=builder /go/bin/go-fdo-server /usr/bin/go-fdo-server
 
-ENTRYPOINT ["./go-fdo-server"]
+ENTRYPOINT ["go-fdo-server"]
 CMD []
