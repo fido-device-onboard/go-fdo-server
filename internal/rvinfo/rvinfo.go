@@ -11,10 +11,11 @@ import (
 	"strconv"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 func CreateRvInfo(useTLS bool, host string, port uint16) ([][]protocol.RvInstruction, error) {
@@ -43,7 +44,7 @@ func RetrieveRvInfo(rvInfo *[][]protocol.RvInstruction) error {
 		return fmt.Errorf("error fetching rvData after POST: %w", err)
 	}
 
-	parsedData, ok := rvData.Value.([]interface{})
+	parsedData, ok := rvData.Value.([]any)
 	if !ok || len(parsedData) == 0 {
 		return fmt.Errorf("error parsing rvData after POST: %v", rvData.Value)
 	}
@@ -61,19 +62,19 @@ func RetrieveRvInfo(rvInfo *[][]protocol.RvInstruction) error {
 	return nil
 }
 
-func ParseRvMap(rvDirectiveIndex int, rvDirective interface{}) (map[protocol.RvVar]interface{}, error) {
-	rvMap := make(map[protocol.RvVar]interface{})
-	nestedItems, ok := rvDirective.([]interface{})
+func ParseRvMap(rvDirectiveIndex int, rvDirective any) (map[protocol.RvVar]any, error) {
+	rvMap := make(map[protocol.RvVar]any)
+	nestedItems, ok := rvDirective.([]any)
 	if !ok {
 		return nil, fmt.Errorf("error parsing item: %v", rvDirective)
 	}
 	for rvPairIndex, rvPair := range nestedItems {
-		keyValue, ok := rvPair.([]interface{})
+		keyValue, ok := rvPair.([]any)
 		if !ok || len(keyValue) < 1 {
 			return nil, fmt.Errorf("error parsing pair %d in item: %v", rvPairIndex, rvPair)
 		}
 		key := keyValue[0]
-		var value interface{} = nil
+		var value any = nil
 		if len(keyValue) > 1 {
 			value = keyValue[1]
 		}
@@ -89,7 +90,7 @@ func ParseRvMap(rvDirectiveIndex int, rvDirective interface{}) (map[protocol.RvV
 	return rvMap, nil
 }
 
-func UpdateRvInfo(rvInfo *[][]protocol.RvInstruction, index int, rvMap map[protocol.RvVar]interface{}) error {
+func UpdateRvInfo(rvInfo *[][]protocol.RvInstruction, index int, rvMap map[protocol.RvVar]any) error {
 	var newRvInfo [][]protocol.RvInstruction
 
 	if index > 0 {
@@ -116,10 +117,17 @@ func UpdateRvInfo(rvInfo *[][]protocol.RvInstruction, index int, rvMap map[proto
 		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVDns, Value: utils.MustMarshal(rvMap[protocol.RVDns].(string))})
 	}
 
-	host := rvMap[protocol.RVIPAddress].(string)
-	if host == "" {
+	if rvMap[protocol.RVIPAddress] == nil {
 		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: utils.MustMarshal(net.IP{127, 0, 0, 1})})
-	} else if hostIP := net.ParseIP(host); hostIP.To4() != nil || hostIP.To16() != nil {
+	} else {
+		host, ok := rvMap[protocol.RVIPAddress].(string)
+		if !ok {
+			return fmt.Errorf("error parsing rvData: Invalid RVIPAddress")
+		}
+		hostIP := net.ParseIP(host)
+		if hostIP == nil {
+			return fmt.Errorf("error parsing rvData: Invalid RVIPAddress: '%s'", host)
+		}
 		newRvInfo[index] = append(newRvInfo[index], protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: utils.MustMarshal(hostIP)})
 	}
 
