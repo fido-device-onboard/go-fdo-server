@@ -1,0 +1,4 @@
+networks:
+  fdo:
+    name: fdo
+    driver: bridge

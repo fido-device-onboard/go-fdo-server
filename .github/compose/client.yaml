@@ -1,0 +1,12 @@
+include:
+  - networks.yaml
+services:
+  fdo_client:
+    container_name: fdo_client
+    hostname: fdo_client
+    image: fdo_client
+    #build: https://github.com/fido-device-onboard/go-fdo-client.git#main
+    build: https://github.com/mmartinv/go-fdo-client.git#build-enhacements
+    networks:
+      - fdo
+    restart: no
