@@ -1,0 +1,100 @@
+name: Test Container
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test-containers:
+    name: Test Containers
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Build and spawn FDO server containers
+        id: build-and-run-servers
+        uses: hoverkraft-tech/compose-action@v2.3.0
+        with:
+          compose-file: ".github/compose/servers.yaml"
+          services-log-level: debug
+          up-flags: "--build"
+
+      - name: Make sure there are no changes after build
+        uses: NathanielHill/fail-if-changes@master
+
+      - name: Wait for the services to be ready
+        run: |
+          set -euo pipefail
+          wait_for_service() {
+              local status
+              local retry=0
+              local -r interval=2
+              local -r max_retries=1005
+              local service=$1
+              echo "Waiting for ${service} to be healthy"
+              while true; do
+                  test $(curl --silent --output /dev/null --write-out '%{http_code}' http://${service}/health) = 200 && break
+                  status=$?
+                  ((retry+=1))
+                  if [ $retry -gt $max_retries ]; then
+                      return $status
+                  fi
+                  echo "info: Waiting for a while, then retry ..." 1>&2
+                  sleep "$interval"
+              done
+          }
+          # Manufacturer server
+          wait_for_service localhost:8038
+          # Rendezvous server
+          wait_for_service localhost:8041
+          # Owner server
+          wait_for_service localhost:8043
+
+      - name: Build FDO client container image
+        uses: hoverkraft-tech/compose-action@v2.3.0
+        with:
+          compose-file: ".github/compose/client.yaml"
+          services-log-level: debug
+          up-flags: "--build --no-start"
+
+      - name: Set Rendezvous Info in Manufacturer server
+        run: |
+          set -xeuo pipefail
+          RVIPAddr=$(docker inspect --format='{{json .NetworkSettings.Networks}}' rendezvous | jq -r '.[]|.IPAddress')
+          curl --fail --verbose --silent \
+               --header 'Content-Type: text/plain' \
+               --data-raw "[[[5,\"rendezvous\"],[3,8041],[12,1],[2,\"${RVIPAddr}\"],[4,8041]]]" \
+               'http://localhost:8038/api/v1/rvinfo'
+
+      - name: Run Device Initialization
+        run: |
+          set -xeuo pipefail
+          docker run --rm --volume /tmp/device-credentials:/device-credentials --network fdo --workdir /device-credentials \
+                 fdo_client --blob /device-credentials/creds.bin --debug device-init http://manufacturer:8038 --device-info=gotest --key ec256
+
+      - name: Send the Ownership Voucher to the Owner server and run TO0
+        run: |
+          set -xeuo pipefail
+          GUID=$(docker run --rm --volume /tmp/device-credentials:/device-credentials --network fdo --workdir /device-credentials \
+                        fdo_client --blob /device-credentials/creds.bin --debug print | grep GUID | awk '{print $2}')
+          curl --fail --verbose --silent "http://127.0.0.1:8038/api/v1/vouchers?guid=${GUID}" -o ownervoucher
+          curl --fail --verbose --silent "http://127.0.0.1:8043/api/v1/owner/vouchers" -d @ownervoucher
+          curl --fail --verbose --silent "http://127.0.0.1:8043/api/v1/to0/${GUID}"
+
+      - name: Run FIDO Device Onboarding
+        run: |
+          set -xeuo pipefail
+          docker run --rm --volume /tmp/device-credentials:/device-credentials --network fdo --workdir /device-credentials \
+                 fdo_client --blob /device-credentials/creds.bin --debug onboard --key ec256 --kex ECDH256 | tee onboarding.log
+          grep 'FIDO Device Onboard Complete' onboarding.log
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+        if: failure() && steps.build-and-run-servers.outcome == 'success'
+        run: |
+          set -xeuo pipefail
+          docker logs manufacturer
+          docker logs rendezvous
+          docker logs owner
