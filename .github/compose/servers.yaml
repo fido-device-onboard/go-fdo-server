@@ -1,0 +1,116 @@
+include:
+  - networks.yaml
+services:
+  manufacturer:
+    container_name: manufacturer
+    hostname: manufacturer
+    image: manufacturer
+    build: ../..
+    environment:
+      TZ: Europe/Madrid
+    ports:
+      - 8038:8038
+    command:
+     - --db=/tmp/sqlite.db
+     - --db-pass='2=,%95QF<uTLLHt' \
+     - --debug
+     - manufacturing
+     - manufacturer:8038
+     - --manufacturing-key=/tmp/certs/manufacturer.key
+     - --owner-cert=/tmp/certs/owner.crt
+     - --device-ca-cert=/tmp/certs/device-ca.crt
+     - --device-ca-key=/tmp/certs/device-ca.key
+    volumes:
+      - /tmp/certs:/tmp/certs
+    networks:
+      - fdo
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://manufacturer:8038/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+
+  rendezvous:
+    container_name: rendezvous
+    hostname: rendezvous
+    image: rendezvous
+    build: ../..
+    environment:
+      TZ: Europe/Madrid
+    ports:
+      - 8041:8041
+    command:
+      - --db=/tmp/sqlite.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - rendezvous
+      - rendezvous:8041
+    networks:
+      - fdo
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://rendezvous:8041/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+
+  owner:
+    container_name: owner
+    hostname: owner
+    image: owner
+    build: ../..
+    environment:
+      TZ: Europe/Madrid
+    ports:
+      - 8043:8043
+    command:
+      - --db=/tmp/sqlite.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - owner:8043
+      - --owner-key=/tmp/certs/owner.key
+      - --device-ca-cert=/tmp/certs/device-ca.crt
+    volumes:
+      - /tmp/certs:/tmp/certs
+    networks:
+      - fdo
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://owner:8043/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+
+  new-owner:
+    container_name: new-owner
+    hostname: new-owner
+    image: new-owner
+    build: ../..
+    environment:
+      TZ: Europe/Madrid
+    ports:
+      - 8045:8045
+    command:
+      - --db=/tmp/sqlite.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - new-owner:8045
+      - --owner-key=/tmp/certs/new-owner.key
+      - --device-ca-cert=/tmp/certs/device-ca.crt
+    volumes:
+      - /tmp/certs:/tmp/certs
+    networks:
+      - fdo
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://owner:8045/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
