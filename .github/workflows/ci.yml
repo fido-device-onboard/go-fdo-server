@@ -39,3 +39,53 @@ jobs:
         with:
           configFile: .github/commitlint.config.mjs
           failOnWarnings: true
+
+  test-makefile:
+    name: build and test makefile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Generate certs
+        run: |
+          source .github/scripts/fdo-utils.sh
+          generate_certs
+
+      - name: Build and install the binary
+        run: |
+           make && sudo install -D -m 755 go-fdo-server /usr/bin/
+
+      - name: Fail if the source code has changes after build
+        uses: NathanielHill/fail-if-changes@master
+
+      - name: Build and install 'go-fdo-client'
+        run: |
+          source .github/scripts/fdo-utils.sh
+          install_client
+
+      - name: Setup the environment
+        run: |
+          source .github/scripts/fdo-utils.sh
+          setup_env
+
+      - name: Test FIDO Device Onboarding
+        run: |
+          source .github/scripts/fdo-utils.sh
+          test_onboarding
+
+      - name: Test FIDO Resale Protocol
+        run: |
+          source .github/scripts/fdo-utils.sh
+          test_resale
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+        if: failure()
+        run: |
+          source .github/scripts/fdo-utils.sh
+          get_server_logs
