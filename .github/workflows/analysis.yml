@@ -1,4 +1,4 @@
-name: Code analysis
+name: Code scanning
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   analysis_devskim:
-    name: DevSkim
+    name: devskim
     runs-on: ubuntu-latest
     permissions:
       actions: read
