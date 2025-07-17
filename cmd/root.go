@@ -33,6 +33,11 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if debug {
+			logLevel.Set(slog.LevelDebug)
+		}
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -54,10 +59,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
 	rootCmd.MarkPersistentFlagRequired("db")
 	rootCmd.MarkPersistentFlagRequired("db-pass")
-
-	if debug {
-		logLevel.Set(slog.LevelDebug)
-	}
 }
 
 const (
