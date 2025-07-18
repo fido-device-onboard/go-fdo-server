@@ -73,7 +73,7 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 
 		for block, rest := pem.Decode(body); block != nil; block, rest = pem.Decode(rest) {
 			if block.Type != "OWNERSHIP VOUCHER" {
-				slog.Debug("Got unknown certificate type", "type", block.Type)
+				slog.Debug("Got unknown label type", "type", block.Type)
 				http.Error(w, "Unknown certificate type", http.StatusInternalServerError)
 
 				continue
