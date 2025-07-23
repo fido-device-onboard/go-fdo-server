@@ -56,7 +56,7 @@ func (h *HTTPHandler) RegisterRoutes() *http.ServeMux {
 	apiRouter := http.NewServeMux()
 	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(h.rvInfo))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("/to0/", handlers.To0Handler(h.rvInfo, h.state))
+	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(h.rvInfo, h.state))
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler(h.rvInfo))
 
