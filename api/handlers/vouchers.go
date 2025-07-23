@@ -4,6 +4,8 @@
 package handlers
 
 import (
+	"crypto"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"encoding/pem"
@@ -12,13 +14,15 @@ import (
 	"net/http"
 
 	"github.com/fido-device-onboard/go-fdo"
+
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +82,62 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			var ov fdo.Voucher
 			if err := cbor.Unmarshal(block.Bytes, &ov); err != nil {
 				slog.Debug("Unable to decode cbor", "block", block.Bytes)
-				http.Error(w, "Unable to decode cbor", http.StatusInternalServerError)
+				http.Error(w, "Unable to decode cbor", http.StatusBadRequest)
+				return
+			}
+
+			// Check that voucher owner key matches
+			expectedPubKey, err := ov.OwnerPublicKey()
+			if err != nil {
+				slog.Debug("Unable to parse owner public key of voucher", "err", err)
+				http.Error(w, "Invalid voucher", http.StatusBadRequest)
+				return
+			}
+			expectedKeyType := ov.Header.Val.ManufacturerKey.Type
+
+			ownerKeys, err := db.FetchOwnerKeys()
+			if err != nil {
+				slog.Debug("Error getting owner key", "err", err)
+				http.Error(w, "Unable to get appropriate owner key type", http.StatusInternalServerError)
+				return
+			}
+			var possibleOwnerKeys []db.OwnerKey
+			for _, ownerKey := range ownerKeys {
+				if ownerKey.Type == int(expectedKeyType) {
+					possibleOwnerKeys = append(possibleOwnerKeys, ownerKey)
+				}
+			}
+		CheckOwnerKey:
+			switch possibilities := len(possibleOwnerKeys); possibilities {
+			case 0:
+				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
+				return
+
+			case 1, 2: // Can be two in the case of RSA 2048+3072 support
+				if possibilities == 2 && expectedKeyType != protocol.RsaPkcsKeyType && expectedKeyType != protocol.RsaPssKeyType {
+					slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
+					http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
+					return
+				}
+
+				for _, possibleOwnerKey := range possibleOwnerKeys {
+					ownerKey, err := x509.ParsePKCS8PrivateKey(possibleOwnerKey.PKCS8)
+					if err != nil {
+						slog.Error("invalid owner key in DB", "type", expectedKeyType, "err", err)
+						http.Error(w, "owner key in database is malformed", http.StatusInternalServerError)
+						return
+					}
+					if ownerKey.(interface{ Public() crypto.PublicKey }).Public().(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
+						break CheckOwnerKey
+					}
+				}
+
+				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
+				return
+
+			default:
+				slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
+				http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
 				return
 			}
 
