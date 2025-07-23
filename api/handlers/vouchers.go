@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/x509"
 	"database/sql"
@@ -74,7 +75,8 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			return
 		}
 
-		for block, rest := pem.Decode(body); block != nil; block, rest = pem.Decode(rest) {
+		block, rest := pem.Decode(body)
+		for ; block != nil; block, rest = pem.Decode(rest) {
 			if block.Type != "OWNERSHIP VOUCHER" {
 				slog.Debug("Got unknown label type", "type", block.Type)
 				continue
@@ -151,6 +153,11 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			}
 
 			*rvInfo = ov.Header.Val.RvInfo
+		}
+
+		if len(bytes.TrimSpace(rest)) > 0 {
+			http.Error(w, "Unable to decode PEM content", http.StatusBadRequest)
+			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
