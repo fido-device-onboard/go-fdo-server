@@ -88,6 +88,14 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 				return
 			}
 
+			if dbOv, err := db.FetchVoucher(ov.Header.Val.GUID[:]); err == nil {
+				if bytes.Equal(block.Bytes, dbOv.CBOR) {
+					slog.Debug("Voucher already exists", "guid", ov.Header.Val.GUID[:])
+					continue
+				}
+				slog.Debug("Voucher guid already exists. not overwriting it", "guid", ov.Header.Val.GUID[:])
+			}
+
 			// Check that voucher owner key matches
 			expectedPubKey, err := ov.OwnerPublicKey()
 			if err != nil {
