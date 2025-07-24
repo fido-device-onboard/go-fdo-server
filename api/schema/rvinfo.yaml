@@ -1,0 +1,261 @@
+# SPDX-FileCopyrightText: (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache 2.0
+
+components:
+  schemas:
+    RvInfo:
+      description: The Rendezvous Information structure as a list of Rendezvous Directives
+      type: object
+      properties:
+        value:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RendezvousDirective'
+      required:
+        - value
+    RendezvousDirective:
+      description: A list of Rendezvous Instructions
+      type: array
+      minItems: 1
+      items:
+        $ref: '#/components/schemas/RVInstr'
+    RVInstr:
+      description: A single Rendezvous Instruction
+      oneOf:
+        - $ref: '#/components/schemas/RVDevOnly'
+        - $ref: '#/components/schemas/RVOwnerOnly'
+        - $ref: '#/components/schemas/RVIPAddress'
+        - $ref: '#/components/schemas/RVDevPort'
+        - $ref: '#/components/schemas/RVOwnerPort'
+        - $ref: '#/components/schemas/RVDns'
+        - $ref: '#/components/schemas/RVSvCertHash'
+        - $ref: '#/components/schemas/RVClCertHash'
+        - $ref: '#/components/schemas/RVUserInput'
+        - $ref: '#/components/schemas/RVWifiSsid'
+        - $ref: '#/components/schemas/RVWifiPw'
+        - $ref: '#/components/schemas/RVMedium'
+        - $ref: '#/components/schemas/RVProtocol'
+        - $ref: '#/components/schemas/RVDelaysec'
+        - $ref: '#/components/schemas/RVBypass'
+        - $ref: '#/components/schemas/RVExtRV'
+    RVDevOnly:
+      title: RVDevOnly
+      description: This Rendezvous Directive list applies to Device only
+      type: array
+      minItems: 1
+      maxItems: 1
+      prefixItems:
+        - const: 0
+    RVOwnerOnly:
+      title: RVOwnerOnly
+      description: This Rendezvous Directive list applies to Owner only
+      type: array
+      minItems: 1
+      maxItems: 1
+      prefixItems:
+        - const: 1
+    RVIPAddress:
+      title: RVIPAddress
+      description: An IPv4 or IPv6 address (RVIPAddress)
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 2
+        - anyOf:
+            - type: string
+              format: ipv4
+            - type: string
+              format: ipv6
+    RVDevPort:
+      title: RVDevPort
+      description: Protocol specific port number used by Device
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 3
+        - type: integer
+          format: uint16
+    RVOwnerPort:
+      title: RVOwnerPort
+      description: Protocol specific port number used by Owner
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 4
+        - type: integer
+          format: uint16
+    RVDns:
+      title: RVDns
+      description: DNS address
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 5
+        - type: string
+          format: hostname
+    RVSvCertHash:
+      title: RVSvCertHash
+      description: TLS server certificate hash
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 6
+        - $ref: "#/components/schemas/Hash"
+    RVClCertHash:
+      title: RVClCertHash
+      description: TLS Client CA certificate hash
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 7
+        - $ref: "#/components/schemas/Hash"
+    RVUserInput:
+      title: RVUserInput
+      description: Take user input if True
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 8
+        - type: boolean
+    RVWifiSsid:
+      title: RVWifiSsid
+      description: WiFi SSID of the onboarding network
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 9
+        - type: string
+    RVWifiPw:
+      title: RVWifiPw
+      description: Password for access to RVWifiSsid network
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 10
+        - type: string
+    RVMedium:
+      title: RVMedium
+      description: Preferred network interface
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 11
+        - $ref: "#/components/schemas/RVMediumValue"
+    RVProtocol:
+      title: RVProtocol
+      description: Transport protocol to use (HTTP, HTTPS, TLS, etc)
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 12
+        - $ref: "#/components/schemas/RVProtocolValue"
+    RVDelaysec:
+      title: RVDelaysec
+      description: Delay the given number of seconds
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 13
+        - type: integer
+          format: uint32
+    RVBypass:
+      title: RVBypass
+      description: Bypass the TO1 protocol (use an alternate rendezvous mechanism)
+      type: array
+      minItems: 1
+      maxItems: 1
+      prefixItems:
+        - const: 14
+    RVExtRV:
+      title: RVExtRV
+      description: Describes an external rendezvous mechanism (RVBypass must be given)
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - const: 15
+        - type: array
+          minItems: 1
+          prefixItems:
+            - type: string
+              description: Specifies the external mechanism to use
+          items: true
+    RVProtocolValue:
+      type: integer
+      title: RVProtocolValue
+      description: Preferred transport protocol to use
+      oneOf:
+        - title: RVProtRest
+          description: Select from HTTPS, HTTP, COAP UDP, COAP TCP
+          const: 0
+        - title: RVProtHttp
+          description: Use the HTTP protocol
+          const: 1
+        - title: RVProtHttps
+          description: Use the HTTP protocol over TLS
+          const: 2
+        - title: RVProtTcp
+          description: Use bare TCP protocol
+          const: 3
+        - title: RVProtTls
+          description: Use bare TLS protocol
+          const: 4
+        - title: RVProtCoapTcp
+          description: Use Constrained Application Protocol over TCP
+          const: 5
+        - title: RVProtCoapUdp
+          description: Use Constrained Application Protocol over UDP
+          const: 6
+    RVMediumValue:
+      type: integer
+      title: RVMediumValue
+      description: Preferred medium to use
+      oneOf:
+        - title: RVMedEth
+          description: Mapped to the first ten ethernet devices
+          type: integer
+          minimum: 0
+          maximum: 9
+        - title: RVMedEthAll
+          description: Select from any available ethernet device
+          const: 20
+        - title: RVMedWifi
+          description: Mapped to the first ten WiFi interfaces
+          type: integer
+          minimum: 10
+          maximum: 19
+        - title: RVMedWifiAll
+          description: Select from any available WiFi device
+          const: 21
+    Hash:
+      description: Cryptographic hash
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - title: HashType
+          oneOf:
+            - title: SHA256
+              const: -16
+            - title: SHA384
+              const: -43
+            - title: HMAC-SHA256
+              const: 5
+            - title: HMAC-SHA384
+              const: 6
+        - title: hash
+          type: string
+          format: byte
