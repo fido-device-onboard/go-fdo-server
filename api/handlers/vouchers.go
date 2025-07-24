@@ -4,19 +4,26 @@
 package handlers
 
 import (
+	"bytes"
+	"crypto"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
+
+	"github.com/fido-device-onboard/go-fdo"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 
 	"log/slog"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
@@ -49,66 +56,119 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerKeys, err := db.FetchOwnerKeys()
-	if err != nil {
-		slog.Debug("Error querying owner_keys", "error", err)
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	if err := pem.Encode(w, &pem.Block{
+		Type:  "OWNERSHIP VOUCHER",
+		Bytes: voucher.CBOR,
+	}); err != nil {
+		slog.Debug("Error encoding voucher", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	response := struct {
-		Voucher   db.Voucher    `json:"voucher"`
-		OwnerKeys []db.OwnerKey `json:"owner_keys"`
-	}{
-		Voucher:   voucher,
-		OwnerKeys: ownerKeys,
-	}
-
-	data, err := json.Marshal(response)
-	if err != nil {
-		slog.Debug("Error marshalling JSON", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
 }
 
 func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Voucher   db.Voucher    `json:"voucher"`
-			OwnerKeys []db.OwnerKey `json:"owner_keys"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
-			return
-		}
-
-		guidHex := hex.EncodeToString(request.Voucher.GUID)
-		slog.Debug("Inserting voucher", "GUID", guidHex)
-
-		if err := db.InsertVoucher(request.Voucher); err != nil {
-			slog.Debug("Error inserting into database", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		if err := db.UpdateOwnerKeys(request.OwnerKeys); err != nil {
-			slog.Debug("Error updating owner key in database", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		newRvInfo, err := rvinfo.GetRvInfoFromVoucher(request.Voucher.CBOR)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Println("Error:", err)
+			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
 			return
 		}
-		*rvInfo = newRvInfo
+
+		block, rest := pem.Decode(body)
+		for ; block != nil; block, rest = pem.Decode(rest) {
+			if block.Type != "OWNERSHIP VOUCHER" {
+				slog.Debug("Got unknown label type", "type", block.Type)
+				continue
+			}
+			var ov fdo.Voucher
+			if err := cbor.Unmarshal(block.Bytes, &ov); err != nil {
+				slog.Debug("Unable to decode cbor", "block", block.Bytes)
+				http.Error(w, "Unable to decode cbor", http.StatusBadRequest)
+				return
+			}
+
+			if dbOv, err := db.FetchVoucher(ov.Header.Val.GUID[:]); err == nil {
+				if bytes.Equal(block.Bytes, dbOv.CBOR) {
+					slog.Debug("Voucher already exists", "guid", ov.Header.Val.GUID[:])
+					continue
+				}
+				slog.Debug("Voucher guid already exists. not overwriting it", "guid", ov.Header.Val.GUID[:])
+			}
+
+			// Check that voucher owner key matches
+			expectedPubKey, err := ov.OwnerPublicKey()
+			if err != nil {
+				slog.Debug("Unable to parse owner public key of voucher", "err", err)
+				http.Error(w, "Invalid voucher", http.StatusBadRequest)
+				return
+			}
+			expectedKeyType := ov.Header.Val.ManufacturerKey.Type
+
+			ownerKeys, err := db.FetchOwnerKeys()
+			if err != nil {
+				slog.Debug("Error getting owner key", "err", err)
+				http.Error(w, "Unable to get appropriate owner key type", http.StatusInternalServerError)
+				return
+			}
+			var possibleOwnerKeys []db.OwnerKey
+			for _, ownerKey := range ownerKeys {
+				if ownerKey.Type == int(expectedKeyType) {
+					possibleOwnerKeys = append(possibleOwnerKeys, ownerKey)
+				}
+			}
+		CheckOwnerKey:
+			switch possibilities := len(possibleOwnerKeys); possibilities {
+			case 0:
+				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
+				return
+
+			case 1, 2: // Can be two in the case of RSA 2048+3072 support
+				if possibilities == 2 && expectedKeyType != protocol.RsaPkcsKeyType && expectedKeyType != protocol.RsaPssKeyType {
+					slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
+					http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
+					return
+				}
+
+				for _, possibleOwnerKey := range possibleOwnerKeys {
+					ownerKey, err := x509.ParsePKCS8PrivateKey(possibleOwnerKey.PKCS8)
+					if err != nil {
+						slog.Error("invalid owner key in DB", "type", expectedKeyType, "err", err)
+						http.Error(w, "owner key in database is malformed", http.StatusInternalServerError)
+						return
+					}
+					if ownerKey.(interface{ Public() crypto.PublicKey }).Public().(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
+						break CheckOwnerKey
+					}
+				}
+
+				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
+				return
+
+			default:
+				slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
+				http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
+				return
+			}
+
+			// TODO: https://github.com/fido-device-onboard/go-fdo-server/issues/18
+			slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
+
+			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes}); err != nil {
+				slog.Debug("Error inserting into database", "error", err.Error())
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			*rvInfo = ov.Header.Val.RvInfo
+		}
+
+		if len(bytes.TrimSpace(rest)) > 0 {
+			http.Error(w, "Unable to decode PEM content", http.StatusBadRequest)
+			return
+		}
+
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(guidHex))
 	}
 }

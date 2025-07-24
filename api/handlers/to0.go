@@ -5,22 +5,17 @@ package handlers
 
 import (
 	"net/http"
-	"path"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
-
-	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		to0Guid := path.Base(r.URL.Path)
-		if to0Guid == "" {
-			http.Error(w, "GUID is required", http.StatusBadRequest)
-			return
-		}
+		to0Guid := r.PathValue("guid")
 
 		if !utils.IsValidGUID(to0Guid) {
 			http.Error(w, "GUID is not a valid GUID", http.StatusBadRequest)
@@ -37,6 +32,6 @@ func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB) http.Handl
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(to0Guid))
+		_, _ = w.Write([]byte(to0Guid))
 	}
 }

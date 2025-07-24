@@ -56,6 +56,7 @@ var importVoucherCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error parsing owner public key from voucher: %w", err)
 		}
+		// TODO: Allow importing vouchers with RSA 2048 manufacturer keys
 		ownerKey, _, err := state.OwnerKey(context.Background(), ov.Header.Val.ManufacturerKey.Type, 3072)
 		if err != nil {
 			return fmt.Errorf("error getting owner key: %w", err)
