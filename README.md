@@ -152,7 +152,7 @@ Fetch a Voucher
 
 Fetch a voucher using curl and save it to a file named ownervoucher:
 ```
-curl --location --request GET 'http://localhost:8038/api/v1/vouchers?guid=<guid>' -o ownervoucher
+curl --location --request GET 'http://localhost:8038/api/v1/vouchers/<guid>' -o ownervoucher
 ```
 Post the Voucher to the Owner Server
 

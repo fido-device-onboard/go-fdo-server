@@ -9,10 +9,13 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/samber/lo"
 
 	"github.com/fido-device-onboard/go-fdo"
 
@@ -27,9 +30,27 @@ import (
 )
 
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
-	guidHex := r.URL.Query().Get("guid")
+	guidHex := r.PathValue("guid")
+
 	if guidHex == "" {
-		http.Error(w, "GUID is required", http.StatusBadRequest)
+		dbVouchers, err := db.FetchVouchers()
+		if err != nil {
+			slog.Debug("Error querying database", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		vouchers := lo.Map(dbVouchers, func(v db.Voucher, _ int) string {
+			return hex.EncodeToString(v.GUID)
+		})
+
+		if err := json.NewEncoder(w).Encode(vouchers); err != nil {
+			http.Error(w, "Error encoding vouchers", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 

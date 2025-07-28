@@ -6,6 +6,7 @@ require (
 	github.com/fido-device-onboard/go-fdo v0.0.0-20250512135234-b46a4b0731f2
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
 	github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250512135234-b46a4b0731f2
+	github.com/samber/lo v1.51.0
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/time v0.11.0
 	hermannm.dev/devlog v0.5.0
@@ -21,4 +22,5 @@ require (
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
 )
