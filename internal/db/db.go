@@ -57,6 +57,27 @@ func FetchVoucher(guid []byte) (Voucher, error) {
 	return voucher, err
 }
 
+func FetchVouchers() ([]Voucher, error) {
+	var vouchers []Voucher
+	rows, err := db.Query("SELECT guid, cbor FROM owner_vouchers")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var voucher Voucher
+		if err := rows.Scan(&voucher.GUID, &voucher.CBOR); err != nil {
+			return vouchers, err
+		}
+		vouchers = append(vouchers, voucher)
+	}
+	if err = rows.Err(); err != nil {
+		return vouchers, err
+	}
+	return vouchers, err
+}
+
 func FetchOwnerKeys() ([]OwnerKey, error) {
 	rows, err := db.Query("SELECT type, pkcs8, x509_chain FROM owner_keys")
 	if err != nil {
