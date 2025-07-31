@@ -52,19 +52,15 @@ func NewHTTPHandler(handler *transport.Handler, rvInfo *[][]protocol.RvInstructi
 }
 
 // RegisterRoutes registers the routes for the HTTP server
-func (h *HTTPHandler) RegisterRoutes() *http.ServeMux {
-	apiRouter := http.NewServeMux()
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(h.rvInfo))
-	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(h.rvInfo, h.state))
-	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler(h.rvInfo))
-
+func (h *HTTPHandler) RegisterRoutes(apiRouter *http.ServeMux) *http.ServeMux {
 	apiHandler := rateLimitMiddleware(rate.NewLimiter(2, 10),
 		bodySizeMiddleware(1<<20, /* 1MB */
 			apiRouter,
 		),
 	)
+
+	// TO0/TO1 rendezvous
+	// TO2 owner
 
 	handler := http.NewServeMux()
 	handler.Handle("POST /fdo/101/msg/{msg}", h.handler)
