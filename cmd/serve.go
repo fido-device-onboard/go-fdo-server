@@ -45,6 +45,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/serviceinfo"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -59,6 +60,7 @@ var (
 	uploadDir       string
 	downloads       []string
 	reuseCred       bool
+	configFilePath  string
 	//
 	rvBypass bool
 )
@@ -69,21 +71,18 @@ var serveCmd = &cobra.Command{
 	Short: "Serve an instance of the HTTP server for the role",
 	Long: `Serve runs the HTTP server for the FDO protocol. It can act as all the three
 	main servers in the FDO spec.`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
-			return err
-		}
-		address = args[0]
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Override rootCmd configuration load. It must be done after
+		// serveCmdLoadConfig() reads in the configuration file.
 		return nil
+	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return serveCmdLoadConfig(args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		state, err := getState()
 		if err != nil {
 			return err
-		}
-
-		if externalAddress == "" {
-			externalAddress = address
 		}
 
 		host, portStr, err := net.SplitHostPort(externalAddress)
@@ -604,15 +603,60 @@ func (s withOwnerAddrs) OwnerAddrs(context.Context, fdo.Voucher) ([]protocol.RvT
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
-	// TODO(runcom): bind to viper
-	serveCmd.Flags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
-	serveCmd.Flags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
-	serveCmd.Flags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
-	serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-	serveCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
-	serveCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
-	serveCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
-	serveCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
-	serveCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
-	serveCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
+	serveCmd.Flags().Bool("insecure-tls", false, "Listen with a self-signed TLS certificate")
+	serveCmd.Flags().String("server-cert-path", "", "Path to server certificate")
+	serveCmd.Flags().String("server-key-path", "", "Path to server private key")
+	serveCmd.Flags().String("external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	serveCmd.Flags().Bool("command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
+	serveCmd.Flags().StringArray("command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
+	serveCmd.Flags().StringArray("command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
+	serveCmd.Flags().String("upload-directory", "", "The directory `path` to put file uploads")
+	serveCmd.Flags().StringArray("command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
+	serveCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
+	serveCmd.Flags().String("config", "", "Pathname of the configuration file")
+	viper.BindPFlags(serveCmd.Flags())
+
+}
+
+// Load configuration from viper
+func serveCmdLoadConfig(args []string) error {
+	// If the http_address has been provided on the command line it
+	// will take precedence over the content of the configuration
+	// file. Yet viper has no visibility of the command line so we
+	// force it here:
+	if len(args) > 0 {
+		viper.Set("address", args[0])
+	}
+
+	configFilePath = viper.GetString("config")
+	if configFilePath != "" {
+		slog.Debug("Loading server configuration file", "path", configFilePath)
+		viper.SetConfigFile(configFilePath)
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("configuration file read failed: %w", err)
+		}
+	}
+
+	if err := rootCmdLoadConfig(); err != nil {
+		return err
+	}
+	insecureTLS = viper.GetBool("insecure-tls")
+	serverCertPath = viper.GetString("server-cert-path")
+	serverKeyPath = viper.GetString("server-key-path")
+	externalAddress = viper.GetString("external-address")
+	date = viper.GetBool("command-date")
+	wgets = viper.GetStringSlice("command-wget")
+	uploads = viper.GetStringSlice("command-upload")
+	uploadDir = viper.GetString("upload-directory")
+	downloads = viper.GetStringSlice("command-download")
+	reuseCred = viper.GetBool("reuse-credentials")
+	address = viper.GetString("address")
+	if address == "" {
+		return fmt.Errorf("the serve command requires the 'http_address' argument")
+	}
+	// Default externalAddress to address if not explicitly provided
+	if externalAddress == "" {
+		externalAddress = address
+	}
+	return nil
 }

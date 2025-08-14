@@ -12,6 +12,7 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
 )
 
@@ -33,10 +34,8 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if debug {
-			logLevel.Set(slog.LevelDebug)
-		}
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return rootCmdLoadConfig()
 	},
 }
 
@@ -54,11 +53,36 @@ func init() {
 		Level: &logLevel,
 	})))
 
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "SQLite database file path")
-	rootCmd.PersistentFlags().StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
-	rootCmd.MarkPersistentFlagRequired("db")
-	rootCmd.MarkPersistentFlagRequired("db-pass")
+	rootCmd.PersistentFlags().Bool("debug", false, "Print debug contents")
+	rootCmd.PersistentFlags().String("db", "", "SQLite database file path")
+	rootCmd.PersistentFlags().String("db-pass", "", "SQLite database encryption-at-rest passphrase")
+	// Note: viper does not enforce cobra's "MarkFlagRequired"
+	// functionality when the configuration is read from a
+	// file. Manually check for required flags when loading the
+	// configuration.
+	viper.BindPFlags(rootCmd.PersistentFlags())
+}
+
+// Initialize configuration flags from viper's configuration. Enforce
+// required flags are present.
+func rootCmdLoadConfig() error {
+	if !viper.IsSet("db") {
+		return errors.New("missing required path to the database (--db)")
+	}
+	if !viper.IsSet("db-pass") {
+		return errors.New("missing database password (--db-pass)")
+	}
+	dbPath = viper.GetString("db")
+	dbPass = viper.GetString("db-pass")
+	err := validatePassword(dbPass)
+	if err != nil {
+		return err
+	}
+	debug = viper.GetBool("debug")
+	if debug {
+		logLevel.Set(slog.LevelDebug)
+	}
+	return nil
 }
 
 const (
@@ -66,19 +90,6 @@ const (
 )
 
 func getState() (*sqlite.DB, error) {
-	if dbPath == "" {
-		return nil, errors.New("db flag is required")
-	}
-
-	if dbPass == "" {
-		return nil, errors.New("db password is empty")
-	}
-
-	err := validatePassword(dbPass)
-	if err != nil {
-		return nil, err
-	}
-
 	return sqlite.Open(dbPath, dbPass)
 }
 

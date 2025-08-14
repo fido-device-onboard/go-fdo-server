@@ -17,6 +17,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -30,6 +31,16 @@ var resellCmd = &cobra.Command{
 	Long: `Resell takes a stored voucher ID and a new owner key and runs the FDO
 	resale protocol`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// initialize configuration flags from viper
+		if !viper.IsSet("guid") {
+			return fmt.Errorf("Voucher GUID (--guid) is required.")
+		}
+		if !viper.IsSet("key") {
+			return fmt.Errorf("Path to PEM key file (--key) is required.")
+		}
+		guidS = viper.GetString("guid")
+		resaleKeyPath = viper.GetString("key")
+
 		// Parse resale-guid flag
 		guidBytes, err := hex.DecodeString(strings.ReplaceAll(guidS, "-", ""))
 		if err != nil {
@@ -83,9 +94,7 @@ var resellCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(resellCmd)
-	resellCmd.Flags().StringVar(&guidS, "guid", "", "Voucher guid to extend for resale")
-	resellCmd.Flags().StringVar(&resaleKeyPath, "key", "", "Path to a PEM-encoded x.509 public key for the next owner")
-	// TODO(runcom): why MarkFlagsRequiredTogether doesn't work?
-	resellCmd.MarkFlagRequired("guid")
-	resellCmd.MarkFlagRequired("key")
+	resellCmd.Flags().String("guid", "", "Voucher guid to extend for resale")
+	resellCmd.Flags().String("key", "", "Path to a PEM-encoded x.509 public key for the next owner")
+	viper.BindPFlags(resellCmd.Flags())
 }

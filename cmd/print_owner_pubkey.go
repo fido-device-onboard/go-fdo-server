@@ -7,10 +7,12 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"os"
 
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -23,6 +25,13 @@ var printOwnerPubkeyCmd = &cobra.Command{
 	Short: "Print the owner public key.",
 	Long:  `Print the owner public key given the key type.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// initialize configuration flags from viper
+		if !viper.IsSet("type") {
+			return fmt.Errorf("The key type (--type) is required.")
+		}
+		pubKeyTypeS = viper.GetString("type")
+		keySize = viper.GetInt("key-size")
+
 		state, err := getState()
 		if err != nil {
 			return err
@@ -54,7 +63,8 @@ var printOwnerPubkeyCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(printOwnerPubkeyCmd)
-	printOwnerPubkeyCmd.Flags().StringVar(&pubKeyTypeS, "type", "", "Public key type")
-	printOwnerPubkeyCmd.Flags().IntVar(&keySize, "key-size", 0, "Key size for RSA keys (required for PKCS/PSS, ignored otherwise)")
+	printOwnerPubkeyCmd.Flags().String("type", "", "Public key type")
+	printOwnerPubkeyCmd.Flags().Int("key-size", 0, "Key size for RSA keys (required for PKCS/PSS, ignored otherwise)")
 	printOwnerPubkeyCmd.MarkFlagRequired("type")
+	viper.BindPFlags(printOwnerPubkeyCmd.Flags())
 }
