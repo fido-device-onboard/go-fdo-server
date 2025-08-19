@@ -8,7 +8,10 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"iter"
 	"log"
 	"log/slog"
@@ -28,6 +31,8 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -203,13 +208,23 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 	if err != nil {
 		return err
 	}
-	cert, err := x509.ParseCertificate(c)
+	blk, _ := pem.Decode(c)
+	cert, err := x509.ParseCertificate(blk.Bytes)
 	if err != nil {
 		return err
 	}
 	state.chain = []*x509.Certificate{cert}
-	// Create FDO responder
-	handler, err := newOwnerHandler(state)
+
+	to2Server := &fdo.TO2Server{
+		Session:         state.DB,
+		Vouchers:        state.DB,
+		OwnerKeys:       state,
+		RvInfo:          func(context.Context, fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
+		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
+		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil },
+	}
+
+	handler, err := newOwnerHandler(state, to2Server)
 	if err != nil {
 		return err
 	}
@@ -219,6 +234,7 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&rvInfo, db, useTLS))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler(&rvInfo, []crypto.PublicKey{okey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
+	apiRouter.Handle("POST /owner/resell/{guid}", resellHandler(to2Server))
 	httpHandler := api.NewHTTPHandler(handler, &state.RvInfo, state.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
@@ -228,21 +244,78 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 	return server.Start()
 }
 
+// TODO: move this to handlers
+func resellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		guidHex := r.PathValue("guid")
+
+		if !utils.IsValidGUID(guidHex) {
+			http.Error(w, "GUID is not a valid GUID", http.StatusBadRequest)
+			return
+		}
+
+		guidBytes, err := hex.DecodeString(guidHex)
+		if err != nil {
+			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
+			slog.Debug(err.Error())
+			return
+		}
+
+		var guid protocol.GUID
+		copy(guid[:], guidBytes)
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+		blk, _ := pem.Decode(body)
+		if blk == nil {
+			http.Error(w, "Invalid PEM content", http.StatusInternalServerError)
+			return
+		}
+		nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
+		if err != nil {
+			http.Error(w, "Error parsing x.509 public key", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+
+		extended, err := to2Server.Resell(context.TODO(), guid, nextOwner, nil)
+		if err != nil {
+			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+		ovBytes, err := cbor.Marshal(extended)
+		if err != nil {
+			http.Error(w, "Error marshaling voucher", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-pem-file")
+		if err := pem.Encode(w, &pem.Block{
+			Type:  "OWNERSHIP VOUCHER",
+			Bytes: ovBytes,
+		}); err != nil {
+			slog.Debug("Error encoding voucher", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
 	return state.ownerKey, state.chain, nil
 }
 
 //nolint:gocyclo
-func newOwnerHandler(state *OwnerServerState) (*transport.Handler, error) {
+func newOwnerHandler(state *OwnerServerState, to2Server protocol.Responder) (*transport.Handler, error) {
 	return &transport.Handler{
-		Tokens: state.DB,
-		TO2Responder: &fdo.TO2Server{
-			Session:         state.DB,
-			Vouchers:        state.DB,
-			OwnerKeys:       state,
-			RvInfo:          func(context.Context, fdo.Voucher) ([][]protocol.RvInstruction, error) { return state.RvInfo, nil },
-			Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
-			ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil }},
+		Tokens:       state.DB,
+		TO2Responder: to2Server,
 	}, nil
 }
 
