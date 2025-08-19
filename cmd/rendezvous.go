@@ -5,16 +5,8 @@ package cmd
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"log/slog"
-	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -163,107 +155,6 @@ func serveRendezvous(db *sqlite.DB, useTLS bool) error {
 
 //nolint:gocyclo
 func newRendezvousHandler(state *RendezvousServerState) (*transport.Handler, error) {
-	// Generate manufacturing component keys
-	rsa2048MfgKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, err
-	}
-	rsa3072MfgKey, err := rsa.GenerateKey(rand.Reader, 3072)
-	if err != nil {
-		return nil, err
-	}
-	ec256MfgKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	ec384MfgKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	generateCA := func(key crypto.Signer) ([]*x509.Certificate, error) {
-		template := &x509.Certificate{
-			SerialNumber:          big.NewInt(1),
-			Subject:               pkix.Name{CommonName: "Test CA"},
-			NotBefore:             time.Now(),
-			NotAfter:              time.Now().Add(30 * 365 * 24 * time.Hour),
-			BasicConstraintsValid: true,
-			IsCA:                  true,
-		}
-		der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
-		if err != nil {
-			return nil, err
-		}
-		cert, err := x509.ParseCertificate(der)
-		if err != nil {
-			return nil, err
-		}
-		return []*x509.Certificate{cert}, nil
-	}
-	rsa2048Chain, err := generateCA(rsa2048MfgKey)
-	if err != nil {
-		return nil, err
-	}
-	rsa3072Chain, err := generateCA(rsa3072MfgKey)
-	if err != nil {
-		return nil, err
-	}
-	ec256Chain, err := generateCA(ec256MfgKey)
-	if err != nil {
-		return nil, err
-	}
-	ec384Chain, err := generateCA(ec384MfgKey)
-	if err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddManufacturerKey(protocol.Rsa2048RestrKeyType, rsa2048MfgKey, rsa2048Chain); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddManufacturerKey(protocol.RsaPkcsKeyType, rsa3072MfgKey, rsa3072Chain); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddManufacturerKey(protocol.RsaPssKeyType, rsa3072MfgKey, rsa3072Chain); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddManufacturerKey(protocol.Secp256r1KeyType, ec256MfgKey, ec256Chain); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddManufacturerKey(protocol.Secp384r1KeyType, ec384MfgKey, ec384Chain); err != nil {
-		return nil, err
-	}
-
-	// Generate owner keys
-	rsa2048OwnerKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, err
-	}
-	rsa3072OwnerKey, err := rsa.GenerateKey(rand.Reader, 3072)
-	if err != nil {
-		return nil, err
-	}
-	ec256OwnerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	ec384OwnerKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddOwnerKey(protocol.Rsa2048RestrKeyType, rsa2048OwnerKey, nil); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddOwnerKey(protocol.RsaPkcsKeyType, rsa3072OwnerKey, nil); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddOwnerKey(protocol.RsaPssKeyType, rsa3072OwnerKey, nil); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddOwnerKey(protocol.Secp256r1KeyType, ec256OwnerKey, nil); err != nil {
-		return nil, err
-	}
-	if err := state.DB.AddOwnerKey(protocol.Secp384r1KeyType, ec384OwnerKey, nil); err != nil {
-		return nil, err
-	}
-
 	return &transport.Handler{
 		Tokens: state.DB,
 		TO0Responder: &fdo.TO0Server{
