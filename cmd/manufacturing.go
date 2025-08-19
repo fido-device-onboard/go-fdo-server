@@ -7,18 +7,12 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"database/sql"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -89,12 +83,11 @@ type ManufacturingServer struct {
 	extAddr string
 	handler http.Handler
 	useTLS  bool
-	state   *sqlite.DB
 }
 
 // NewServer creates a new Server
-func NewManufacturingServer(addr string, extAddr string, handler http.Handler, useTLS bool, state *sqlite.DB) *ManufacturingServer {
-	return &ManufacturingServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS, state: state}
+func NewManufacturingServer(addr string, extAddr string, handler http.Handler, useTLS bool) *ManufacturingServer {
+	return &ManufacturingServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
 }
 
 // Start starts the HTTP server
@@ -130,7 +123,6 @@ func (s *ManufacturingServer) Start() error {
 	slog.Info("Listening", "local", lis.Addr().String(), "external", s.extAddr)
 
 	if s.useTLS {
-
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
@@ -145,54 +137,72 @@ func (s *ManufacturingServer) Start() error {
 			}
 			return srv.ServeTLS(lis, serverCertPath, serverKeyPath)
 		} else {
-			// TODO(runcom): drop this shit...., no certs from db, just config/cli is sane to me
-			cert, err := tlsCert(s.state.DB())
-			if err != nil {
-				return err
-			}
-			srv.TLSConfig = &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				Certificates: []tls.Certificate{*cert},
-				CipherSuites: preferredCipherSuites,
-			}
-			return srv.ServeTLS(lis, "", "")
-
+			return fmt.Errorf("no TLS cert or key provided")
 		}
 	}
 	return srv.Serve(lis)
 }
 
-type ManufacturingServerState struct {
-	RvInfo [][]protocol.RvInstruction
-	DB     *sqlite.DB
-}
-
 func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
-	state := &ManufacturingServerState{
-		RvInfo: rvInfo,
-		DB:     db,
-	}
-	// Create FDO responder
-	handler, err := newManufacturingHandler(state)
+	key, keyType, err := parsePrivateKey(manufacturingKey)
 	if err != nil {
 		return err
+	}
+	c, err := os.ReadFile(deviceCert)
+	if err != nil {
+		return err
+	}
+	blk, _ := pem.Decode(c)
+	cert, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return err
+	}
+	o, err := os.ReadFile(ownerKey)
+	if err != nil {
+		return err
+	}
+	block, _ := pem.Decode([]byte(o))
+	if block == nil {
+		return fmt.Errorf("unable to decode owner public key")
+	}
+	var ownerCert *x509.Certificate
+	ownerCert, _ = x509.ParseCertificate(block.Bytes)
+	som := &SingleOwnerManufacturer{
+		nextOwner: ownerCert.PublicKey.(crypto.PublicKey),
+		chain:     []*x509.Certificate{cert},
+		mfgKey:    key,
+		keyType:   keyType,
+	}
+
+	// Create FDO responder
+	handler := &transport.Handler{
+		Tokens: db,
+		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
+			Session:               db,
+			Vouchers:              db,
+			SignDeviceCertificate: custom.SignDeviceCertificate(som),
+			DeviceInfo: func(_ context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.KeyType, protocol.KeyEncoding, error) {
+				return info.DeviceInfo, info.KeyType, info.KeyEncoding, nil
+			},
+			BeforeVoucherPersist: som.Extend,
+			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
+		},
 	}
 
 	// Handle messages
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&state.RvInfo))
-	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
+	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&rvInfo))
+	httpHandler := api.NewHTTPHandler(handler, db).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewManufacturingServer(address, externalAddress, httpHandler, useTLS, state.DB)
+	server := NewManufacturingServer(address, externalAddress, httpHandler, useTLS)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
 }
 
 type SingleOwnerManufacturer struct {
-	state     *sqlite.DB
 	nextOwner crypto.PublicKey
 	chain     []*x509.Certificate
 	mfgKey    crypto.Signer
@@ -251,7 +261,7 @@ func getPrivateKeyType(key any) (protocol.KeyType, error) {
 		case 2048:
 			return protocol.Rsa2048RestrKeyType, nil
 		case 3072:
-			// TODO: rsaPss should be an additional key path (right?)
+			// TODO: rsaPss should be an additional key path maybe? or what?
 			if rsaPss {
 				return protocol.RsaPssKeyType, nil
 			} else {
@@ -307,121 +317,6 @@ func parsePrivateKey(keyPath string) (crypto.Signer, protocol.KeyType, error) {
 		return key.(crypto.Signer), keyType, nil
 	}
 	return nil, 0, fmt.Errorf("unable to parse private key %s", keyPath)
-}
-
-//nolint:gocyclo
-func newManufacturingHandler(state *ManufacturingServerState) (*transport.Handler, error) {
-	key, keyType, err := parsePrivateKey(manufacturingKey)
-	if err != nil {
-		return nil, err
-	}
-	c, err := os.ReadFile(deviceCert)
-	if err != nil {
-		return nil, err
-	}
-	blk, _ := pem.Decode(c)
-	cert, err := x509.ParseCertificate(blk.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	o, err := os.ReadFile(ownerKey)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode([]byte(o))
-	if block == nil {
-		return nil, fmt.Errorf("unable to decode owner public key")
-	}
-	var ownerCert *x509.Certificate
-	ownerCert, _ = x509.ParseCertificate(block.Bytes)
-	som := &SingleOwnerManufacturer{
-		state:     state.DB,
-		nextOwner: ownerCert.PublicKey.(crypto.PublicKey),
-		chain:     []*x509.Certificate{cert},
-		mfgKey:    key,
-		keyType:   keyType,
-	}
-
-	return &transport.Handler{
-		Tokens: state.DB,
-		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
-			Session:               state.DB,
-			Vouchers:              state.DB,
-			SignDeviceCertificate: custom.SignDeviceCertificate(som),
-			DeviceInfo: func(_ context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.KeyType, protocol.KeyEncoding, error) {
-				return info.DeviceInfo, info.KeyType, info.KeyEncoding, nil
-			},
-			BeforeVoucherPersist: som.Extend,
-			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
-		},
-	}, nil
-}
-
-// TODO(runcom): move to a more agnostic place
-func tlsCert(db *sql.DB) (*tls.Certificate, error) {
-	// Ensure that the https table exists
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS https
-		( cert BLOB NOT NULL
-		, key BLOB NOT NULL
-		)`); err != nil {
-		return nil, err
-	}
-
-	// Load a TLS cert and key from the database
-	row := db.QueryRow("SELECT cert, key FROM https LIMIT 1")
-	var certDer, keyDer []byte
-	if err := row.Scan(&certDer, &keyDer); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	if len(keyDer) > 0 {
-		key, err := x509.ParsePKCS8PrivateKey(keyDer)
-		if err != nil {
-			return nil, fmt.Errorf("bad HTTPS key stored: %w", err)
-		}
-		return &tls.Certificate{
-			Certificate: [][]byte{certDer},
-			PrivateKey:  key,
-		}, nil
-	}
-
-	// TODO(runcom)
-	// remove this stuff, certs have to be passed from CLI/config
-	// Generate a new self-signed TLS CA
-	tlsKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	caTemplate := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "Test CA"},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(30 * 365 * 24 * time.Hour),
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, tlsKey.Public(), tlsKey)
-	if err != nil {
-		return nil, err
-	}
-	tlsCA, err := x509.ParseCertificate(caDER)
-	if err != nil {
-		return nil, err
-	}
-
-	// Store TLS cert and key to the database
-	keyDER, err := x509.MarshalPKCS8PrivateKey(tlsKey)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec("INSERT INTO https (cert, key) VALUES (?, ?)", caDER, keyDER); err != nil {
-		return nil, err
-	}
-
-	// Use CA to serve TLS
-	return &tls.Certificate{
-		Certificate: [][]byte{tlsCA.Raw},
-		PrivateKey:  tlsKey,
-	}, nil
 }
 
 func init() {

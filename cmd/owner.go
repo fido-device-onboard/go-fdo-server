@@ -91,19 +91,7 @@ var ownerCmd = &cobra.Command{
 			return err
 		}
 
-		// Retrieve RV info from DB
-		rvInfo, err := rvinfo.FetchRvInfo()
-		if err != nil {
-			return err
-		}
-
-		// // CreateRvTO2Addr initializes new owner info and stores it with default values if not found in DB
-		// err = ownerinfo.CreateRvTO2Addr(host, port, insecureTLS)
-		// if err != nil {
-		// 	return fmt.Errorf("failed to create and store rvTO2Addrs: %v", err)
-		// }
-
-		return serveOwner(rvInfo, state, insecureTLS)
+		return serveOwner(state, insecureTLS)
 	},
 }
 
@@ -113,12 +101,11 @@ type OwnerServer struct {
 	extAddr string
 	handler http.Handler
 	useTLS  bool
-	state   *sqlite.DB
 }
 
 // NewServer creates a new Server
-func NewOwnerServer(addr string, extAddr string, handler http.Handler, useTLS bool, state *sqlite.DB) *OwnerServer {
-	return &OwnerServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS, state: state}
+func NewOwnerServer(addr string, extAddr string, handler http.Handler, useTLS bool) *OwnerServer {
+	return &OwnerServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
 }
 
 // Start starts the HTTP server
@@ -154,7 +141,6 @@ func (s *OwnerServer) Start() error {
 	slog.Info("Listening", "local", lis.Addr().String(), "external", s.extAddr)
 
 	if s.useTLS {
-
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
@@ -169,34 +155,22 @@ func (s *OwnerServer) Start() error {
 			}
 			return srv.ServeTLS(lis, serverCertPath, serverKeyPath)
 		} else {
-			cert, err := tlsCert(s.state.DB())
-			if err != nil {
-				return err
-			}
-			srv.TLSConfig = &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				Certificates: []tls.Certificate{*cert},
-				CipherSuites: preferredCipherSuites,
-			}
-			return srv.ServeTLS(lis, "", "")
-
+			return fmt.Errorf("no TLS cert or key provided")
 		}
 	}
 	return srv.Serve(lis)
 }
 
 type OwnerServerState struct {
-	RvInfo       [][]protocol.RvInstruction
 	DB           *sqlite.DB
 	ownerKey     crypto.Signer
 	ownerKeyType protocol.KeyType
 	chain        []*x509.Certificate
 }
 
-func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
+func serveOwner(db *sqlite.DB, useTLS bool) error {
 	state := &OwnerServerState{
-		RvInfo: rvInfo,
-		DB:     db,
+		DB: db,
 	}
 	okey, keyType, err := parsePrivateKey(ownerPrivateKeyPath)
 	if err != nil {
@@ -224,9 +198,9 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil },
 	}
 
-	handler, err := newOwnerHandler(state, to2Server)
-	if err != nil {
-		return err
+	handler := &transport.Handler{
+		Tokens:       state.DB,
+		TO2Responder: to2Server,
 	}
 
 	// Handle messages
@@ -238,7 +212,7 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewOwnerServer(address, externalAddress, httpHandler, useTLS, state.DB)
+	server := NewOwnerServer(address, externalAddress, httpHandler, useTLS)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
@@ -309,14 +283,6 @@ func resellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
 
 func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
 	return state.ownerKey, state.chain, nil
-}
-
-//nolint:gocyclo
-func newOwnerHandler(state *OwnerServerState, to2Server protocol.Responder) (*transport.Handler, error) {
-	return &transport.Handler{
-		Tokens:       state.DB,
-		TO2Responder: to2Server,
-	}, nil
 }
 
 type moduleStateMachines struct {
