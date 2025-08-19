@@ -18,14 +18,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 )
 
-var useTLS bool
-
-func SetTo0Tls(value bool) {
-	useTLS = value
-}
-
-func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, state *sqlite.DB) error {
-
+func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, state *sqlite.DB, useTLS bool) error {
 	to0Addr1, to0Addr2, err := rvinfo.GetRVIPAddress(RvInfo)
 	if err != nil {
 		fmt.Println("Error:", err)
