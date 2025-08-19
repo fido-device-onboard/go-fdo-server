@@ -235,7 +235,7 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{okey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", resellHandler(to2Server))
-	httpHandler := api.NewHTTPHandler(handler, &state.RvInfo, state.DB).RegisterRoutes(apiRouter)
+	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewOwnerServer(address, externalAddress, httpHandler, useTLS, state.DB)

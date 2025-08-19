@@ -144,7 +144,7 @@ func serveRendezvous(db *sqlite.DB, useTLS bool) error {
 		return err
 	}
 
-	httpHandler := api.NewHTTPHandler(handler, nil, state.DB).RegisterRoutes(nil)
+	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(nil)
 
 	// Listen and serve
 	server := NewRendezvousServer(address, externalAddress, httpHandler, useTLS, state.DB)

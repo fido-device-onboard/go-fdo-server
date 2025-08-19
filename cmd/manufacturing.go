@@ -181,8 +181,8 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	// Handle messages
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&rvInfo))
-	httpHandler := api.NewHTTPHandler(handler, &state.RvInfo, state.DB).RegisterRoutes(apiRouter)
+	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&state.RvInfo))
+	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewManufacturingServer(address, externalAddress, httpHandler, useTLS, state.DB)
