@@ -13,7 +13,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
-func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB) http.HandlerFunc {
+func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB, useTLS bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		to0Guid := r.PathValue("guid")
 
@@ -23,7 +23,7 @@ func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB) http.Handl
 		}
 
 		if to0Guid != "" {
-			err := to0.RegisterRvBlob(*rvInfo, to0Guid, state)
+			err := to0.RegisterRvBlob(*rvInfo, to0Guid, state, useTLS)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

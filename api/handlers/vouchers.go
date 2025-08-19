@@ -6,7 +6,6 @@ package handlers
 import (
 	"bytes"
 	"crypto"
-	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"encoding/pem"
@@ -67,7 +66,7 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
+func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction, ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -105,20 +104,17 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 			}
 			expectedKeyType := ov.Header.Val.ManufacturerKey.Type
 
-			ownerKeys, err := db.FetchOwnerKeys()
-			if err != nil {
-				slog.Debug("Error getting owner key", "err", err)
-				http.Error(w, "Unable to get appropriate owner key type", http.StatusInternalServerError)
-				return
-			}
-			var possibleOwnerKeys []db.OwnerKey
-			for _, ownerKey := range ownerKeys {
-				if ownerKey.Type == int(expectedKeyType) {
-					possibleOwnerKeys = append(possibleOwnerKeys, ownerKey)
-				}
-			}
+			// TODO: there's only one owner key when the server starts,
+			// fix this by allowing more key types for rsa mainly
+			//
+			// var possibleOwnerKeys []db.OwnerKey
+			// for _, ownerKey := range ownerPKeys {
+			// 	if ownerKey.Type == int(expectedKeyType) {
+			// 		possibleOwnerKeys = append(possibleOwnerKeys, ownerKey)
+			// 	}
+			// }
 		CheckOwnerKey:
-			switch possibilities := len(possibleOwnerKeys); possibilities {
+			switch possibilities := len(ownerPKeys); possibilities {
 			case 0:
 				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
 				return
@@ -130,14 +126,8 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 					return
 				}
 
-				for _, possibleOwnerKey := range possibleOwnerKeys {
-					ownerKey, err := x509.ParsePKCS8PrivateKey(possibleOwnerKey.PKCS8)
-					if err != nil {
-						slog.Error("invalid owner key in DB", "type", expectedKeyType, "err", err)
-						http.Error(w, "owner key in database is malformed", http.StatusInternalServerError)
-						return
-					}
-					if ownerKey.(interface{ Public() crypto.PublicKey }).Public().(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
+				for _, possibleOwnerKey := range ownerPKeys {
+					if possibleOwnerKey.(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
 						break CheckOwnerKey
 					}
 				}
