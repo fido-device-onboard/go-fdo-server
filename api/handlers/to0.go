@@ -4,16 +4,18 @@
 package handlers
 
 import (
+	"encoding/hex"
 	"net/http"
 
-	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
-func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB, useTLS bool) http.HandlerFunc {
+func To0Handler(state *sqlite.DB, useTLS bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		to0Guid := r.PathValue("guid")
 
@@ -22,12 +24,24 @@ func To0Handler(rvInfo *[][]protocol.RvInstruction, state *sqlite.DB, useTLS boo
 			return
 		}
 
-		if to0Guid != "" {
-			err := to0.RegisterRvBlob(*rvInfo, to0Guid, state, useTLS)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+		guid, err := hex.DecodeString(to0Guid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		ov, err := db.FetchVoucher(guid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		rvInfo, err := rvinfo.GetRvInfoFromVoucher(ov.CBOR)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := to0.RegisterRvBlob(rvInfo, to0Guid, state, useTLS); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")

@@ -231,8 +231,8 @@ func serveOwner(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) e
 
 	// Handle messages
 	apiRouter := http.NewServeMux()
-	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&rvInfo, db, useTLS))
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler(&rvInfo, []crypto.PublicKey{okey.Public()}))
+	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(db, useTLS))
+	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{okey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", resellHandler(to2Server))
 	httpHandler := api.NewHTTPHandler(handler, &state.RvInfo, state.DB).RegisterRoutes(apiRouter)

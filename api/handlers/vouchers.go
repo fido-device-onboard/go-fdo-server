@@ -66,7 +66,7 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction, ownerPKeys []crypto.PublicKey) http.HandlerFunc {
+func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -149,8 +149,6 @@ func InsertVoucherHandler(rvInfo *[][]protocol.RvInstruction, ownerPKeys []crypt
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
-
-			*rvInfo = ov.Header.Val.RvInfo
 		}
 
 		if len(bytes.TrimSpace(rest)) > 0 {
