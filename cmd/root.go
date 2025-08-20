@@ -16,10 +16,13 @@ import (
 )
 
 var (
-	dbPath   string
-	dbPass   string
-	debug    bool
-	logLevel slog.LevelVar
+	dbPath         string
+	dbPass         string
+	debug          bool
+	logLevel       slog.LevelVar
+	insecureTLS    bool
+	serverCertPath string
+	serverKeyPath  string
 )
 
 var rootCmd = &cobra.Command{
@@ -59,6 +62,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
 	rootCmd.MarkPersistentFlagRequired("db")
 	rootCmd.MarkPersistentFlagRequired("db-pass")
+	rootCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
+	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
+	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
 }
 
 const (

@@ -147,5 +147,5 @@ func serveRendezvous(db *sqlite.DB, useTLS bool) error {
 }
 
 func init() {
-	serveCmd.AddCommand(rendezvousCmd)
+	rootCmd.AddCommand(rendezvousCmd)
 }

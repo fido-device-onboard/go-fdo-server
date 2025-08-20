@@ -261,7 +261,6 @@ func getPrivateKeyType(key any) (protocol.KeyType, error) {
 		case 2048:
 			return protocol.Rsa2048RestrKeyType, nil
 		case 3072:
-			// TODO: rsaPss should be an additional key path maybe? or what?
 			if rsaPss {
 				return protocol.RsaPssKeyType, nil
 			} else {
@@ -320,7 +319,7 @@ func parsePrivateKey(keyPath string) (crypto.Signer, protocol.KeyType, error) {
 }
 
 func init() {
-	serveCmd.AddCommand(manufacturingCmd)
+	rootCmd.AddCommand(manufacturingCmd)
 
 	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
 	manufacturingCmd.Flags().StringVar(&manufacturingKey, "manufacturing-key", "", "test 1")
