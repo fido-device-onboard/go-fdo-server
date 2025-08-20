@@ -167,7 +167,7 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	}
 	var ownerCert *x509.Certificate
 	ownerCert, _ = x509.ParseCertificate(block.Bytes)
-	som := &SingleOwnerManufacturer{
+	state := &SingleOwnerManufacturer{
 		nextOwner: ownerCert.PublicKey.(crypto.PublicKey),
 		chain:     []*x509.Certificate{cert},
 		mfgKey:    key,
@@ -180,11 +180,11 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
 			Session:               db,
 			Vouchers:              db,
-			SignDeviceCertificate: custom.SignDeviceCertificate(som),
+			SignDeviceCertificate: custom.SignDeviceCertificate(state),
 			DeviceInfo: func(_ context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.KeyType, protocol.KeyEncoding, error) {
 				return info.DeviceInfo, info.KeyType, info.KeyEncoding, nil
 			},
-			BeforeVoucherPersist: som.Extend,
+			BeforeVoucherPersist: state.Extend,
 			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
 		},
 	}
@@ -212,21 +212,21 @@ type SingleOwnerManufacturer struct {
 // ManufacturerKey returns the signer of a given key type and its certificate
 // chain (required). If key type is not RSAPKCS or RSAPSS then rsaBits is
 // ignored. Otherwise it must be either 2048 or 3072.
-func (som *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
+func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
 	// TODO: check key types are the same as the one asked
-	return som.mfgKey, som.chain, nil
+	return state.mfgKey, state.chain, nil
 }
 
-func (som *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
+func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
 	mfgKey := ov.Header.Val.ManufacturerKey
 	keyType, rsaBits := mfgKey.Type, mfgKey.RsaBits()
-	owner, _, err := som.ManufacturerKey(ctx, keyType, rsaBits)
+	owner, _, err := state.ManufacturerKey(ctx, keyType, rsaBits)
 	if err != nil {
 		return fmt.Errorf("auto extend: error getting %s manufacturer key: %w", keyType, err)
 	}
-	switch som.nextOwner.(type) {
+	switch state.nextOwner.(type) {
 	case *ecdsa.PublicKey:
-		nextOwner, ok := som.nextOwner.(*ecdsa.PublicKey)
+		nextOwner, ok := state.nextOwner.(*ecdsa.PublicKey)
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
@@ -238,7 +238,7 @@ func (som *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher)
 		return nil
 
 	case *rsa.PublicKey:
-		nextOwner, ok := som.nextOwner.(*rsa.PublicKey)
+		nextOwner, ok := state.nextOwner.(*rsa.PublicKey)
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
