@@ -83,6 +83,54 @@ Key exchange suites:
   - ECDH384
 ```
 
+## Configuration File Support
+
+The FDO server supports configuration files for all three subcommands: `manufacturing`, `owner`, and `rendezvous`. Configuration files can be used to specify all command-line options, making it easier to manage complex configurations.
+
+### Using Configuration Files
+
+Each subcommand supports a `--config` flag that accepts a path to a YAML configuration file:
+
+```sh
+go-fdo-server manufacturing --config config.yaml 127.0.0.1:8080
+go-fdo-server owner --config config.yaml 127.0.0.1:8080  
+go-fdo-server rendezvous --config config.yaml 127.0.0.1:8080
+```
+
+### Configuration File Format
+
+Configuration files use YAML format and can include any of the command-line options. Here's an example:
+
+```yaml
+# Common settings (applied to all subcommands)
+db: "fdo-server.db"
+db-pass: "MySecurePassword123!"
+debug: true
+insecure-tls: false
+server-cert-path: "/path/to/server.crt"
+server-key-path: "/path/to/server.key"
+
+# Manufacturing server specific settings
+manufacturing-key: "/path/to/manufacturing.key"
+device-ca-cert: "/path/to/device.ca"
+device-ca-key: "/path/to/device.key"
+owner-cert: "/path/to/owner.crt"
+
+# Owner server specific settings
+external-address: "0.0.0.0:8443"
+command-date: true
+command-wget: ["https://example.com/file1", "https://example.com/file2"]
+command-upload: ["upload1.txt", "upload2.txt"]
+upload-directory: "/tmp/uploads"
+command-download: ["download1.txt", "download2.txt"]
+reuse-credentials: true
+owner-key: "/path/to/owner.key"
+```
+
+### Precedence
+
+Command-line arguments take precedence over configuration file values. The server address (http_address) can be specified either as a command-line argument or in the configuration file under the `address` key.
+
 ## Starting the FDO Server
 This guide provides instructions to set up and run the FDO server and client instances for different roles: Manufacturer, Rendezvous (RV), and Owner.
 ### Manufacturer Instance

@@ -35,6 +35,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/serviceinfo"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -49,25 +50,21 @@ var (
 	reuseCred         bool
 )
 
-// serveCmd represents the serve command
+// ownerCmd represents the owner command
 var ownerCmd = &cobra.Command{
 	Use:   "owner http_address",
 	Short: "Serve an instance of the owner server",
-	Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Load configuration first
+		if err := ownerCmdLoadConfig(cmd, args); err != nil {
 			return err
 		}
-		address = args[0]
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		state, err := getState()
 		if err != nil {
 			return err
-		}
-
-		if externalAddress == "" {
-			externalAddress = address
 		}
 
 		// host, portStr, err := net.SplitHostPort(externalAddress)
@@ -361,15 +358,68 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 func init() {
 	rootCmd.AddCommand(ownerCmd)
 
-	//serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-	ownerCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
-	ownerCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
-	ownerCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
-	ownerCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
-	ownerCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
-	ownerCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
-	ownerCmd.Flags().StringVar(&ownerDeviceCACert, "device-ca-cert", "", "Device CA certificate path")
-	ownerCmd.Flags().StringVar(&ownerPrivateKey, "owner-key", "", "Owner private key path")
-	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	ownerCmd.Flags().Bool("command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
+	ownerCmd.Flags().StringArray("command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
+	ownerCmd.Flags().StringArray("command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
+	ownerCmd.Flags().String("upload-directory", "", "The directory `path` to put file uploads")
+	ownerCmd.Flags().StringArray("command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
+	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
+	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
+	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
+	ownerCmd.Flags().String("external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	ownerCmd.Flags().String("config", "", "Pathname of the configuration file")
+	viper.BindPFlags(ownerCmd.Flags())
+}
 
+// Load configuration from viper
+func ownerCmdLoadConfig(cmd *cobra.Command, args []string) error {
+	// If the http_address has been provided on the command line it
+	// will take precedence over the content of the configuration
+	// file. Yet viper has no visibility of the command line so we
+	// force it here:
+	if len(args) > 0 {
+		viper.Set("address", args[0])
+	}
+
+	// Get the config flag directly from the command
+	configFilePath, err := cmd.Flags().GetString("config")
+	if err != nil {
+		return fmt.Errorf("failed to get config flag: %w", err)
+	}
+
+	if configFilePath != "" {
+		slog.Debug("Loading owner server configuration file", "path", configFilePath)
+		viper.SetConfigFile(configFilePath)
+		viper.SetConfigType("yaml")
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("configuration file read failed: %w", err)
+		}
+	}
+
+	// Load root configuration after reading config file
+	if err := rootCmdLoadConfig(); err != nil {
+		return err
+	}
+
+	date = viper.GetBool("command-date")
+	wgets = viper.GetStringSlice("command-wget")
+	uploads = viper.GetStringSlice("command-upload")
+	uploadDir = viper.GetString("upload-directory")
+	downloads = viper.GetStringSlice("command-download")
+	reuseCred = viper.GetBool("reuse-credentials")
+	ownerDeviceCACert = viper.GetString("device-ca-cert")
+	ownerPrivateKey = viper.GetString("owner-key")
+	externalAddress = viper.GetString("external-address")
+	address = viper.GetString("address")
+
+	if address == "" {
+		return fmt.Errorf("the owner command requires the 'http_address' argument")
+	}
+
+	// Default externalAddress to address if not explicitly provided
+	if externalAddress == "" {
+		externalAddress = address
+	}
+
+	return nil
 }

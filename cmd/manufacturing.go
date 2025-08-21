@@ -30,6 +30,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -40,15 +41,15 @@ var (
 	ownerPKey        string
 )
 
-// serveCmd represents the serve command
+// manufacturingCmd represents the manufacturing command
 var manufacturingCmd = &cobra.Command{
 	Use:   "manufacturing http_address",
 	Short: "Serve an instance of the manufacturing server",
-	Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Load configuration first
+		if err := manufacturingCmdLoadConfig(cmd, args); err != nil {
 			return err
 		}
-		address = args[0]
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -178,7 +179,7 @@ func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
 		return nil, err
 	}
 	return &SingleOwnerManufacturer{
-		ownerKey:        ownerCert.PublicKey.(crypto.PublicKey),
+		ownerKey: ownerCert.PublicKey.(crypto.PublicKey),
 		// TODO: chain length >1 should be supported too
 		chain:           []*x509.Certificate{parsedDeviceCACert},
 		mfgKey:          mfgKey,
@@ -280,8 +281,54 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 func init() {
 	rootCmd.AddCommand(manufacturingCmd)
 
-	manufacturingCmd.Flags().StringVar(&manufacturingKey, "manufacturing-key", "", "Manufacturing private key path")
-	manufacturingCmd.Flags().StringVar(&deviceCACert, "device-ca-cert", "", "Device certificate path")
-	manufacturingCmd.Flags().StringVar(&ownerPKey, "owner-cert", "", "Owner certificate path")
-	manufacturingCmd.Flags().StringVar(&deviceCAKey, "device-ca-key", "", "Device CA private key path")
+	manufacturingCmd.Flags().String("manufacturing-key", "", "Manufacturing private key path")
+	manufacturingCmd.Flags().String("device-ca-cert", "", "Device certificate path")
+	manufacturingCmd.Flags().String("owner-cert", "", "Owner certificate path")
+	manufacturingCmd.Flags().String("device-ca-key", "", "Device CA private key path")
+	manufacturingCmd.Flags().String("config", "", "Pathname of the configuration file")
+	viper.BindPFlags(manufacturingCmd.Flags())
+}
+
+// Load configuration from viper
+func manufacturingCmdLoadConfig(cmd *cobra.Command, args []string) error {
+	// If the http_address has been provided on the command line it
+	// will take precedence over the content of the configuration
+	// file. Yet viper has no visibility of the command line so we
+	// force it here:
+	if len(args) > 0 {
+		viper.Set("address", args[0])
+	}
+
+	// Get the config flag directly from the CLI
+	configFilePath, err := cmd.Flags().GetString("config")
+	if err != nil {
+		return fmt.Errorf("failed to get config flag: %w", err)
+	}
+
+	if configFilePath != "" {
+		slog.Debug("Loading manufacturing server configuration file", "path", configFilePath)
+		viper.SetConfigFile(configFilePath)
+		viper.SetConfigType("yaml")
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("configuration file read failed: %w", err)
+		}
+	}
+
+	// We can now load the root configuration after reading config
+	// file
+	if err := rootCmdLoadConfig(); err != nil {
+		return err
+	}
+
+	manufacturingKey = viper.GetString("manufacturing-key")
+	deviceCACert = viper.GetString("device-ca-cert")
+	ownerPKey = viper.GetString("owner-cert")
+	deviceCAKey = viper.GetString("device-ca-key")
+	address = viper.GetString("address")
+
+	if address == "" {
+		return fmt.Errorf("the manufacturing command requires the 'http_address' argument")
+	}
+
+	return nil
 }
