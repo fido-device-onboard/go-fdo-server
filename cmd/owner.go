@@ -8,10 +8,8 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"iter"
 	"log"
 	"log/slog"
@@ -31,8 +29,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
-	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -42,14 +38,15 @@ import (
 )
 
 var (
-	date                bool
-	wgets               []string
-	uploads             []string
-	uploadDir           string
-	downloads           []string
-	ownerDeviceCertPath string
-	ownerPrivateKeyPath string
-	reuseCred           bool
+	externalAddress   string
+	date              bool
+	wgets             []string
+	uploads           []string
+	uploadDir         string
+	downloads         []string
+	ownerDeviceCACert string
+	ownerPrivateKey   string
+	reuseCred         bool
 )
 
 // serveCmd represents the serve command
@@ -162,32 +159,41 @@ func (s *OwnerServer) Start() error {
 }
 
 type OwnerServerState struct {
-	DB           *sqlite.DB
-	ownerKey     crypto.Signer
-	ownerKeyType protocol.KeyType
-	chain        []*x509.Certificate
+	DB       *sqlite.DB
+	ownerKey crypto.Signer
+	chain    []*x509.Certificate
+}
+
+func getOwnerServerState(db *sqlite.DB) (*OwnerServerState, error) {
+	ownerKey, err := parsePrivateKey(ownerPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	deviceCA, err := os.ReadFile(ownerDeviceCACert)
+	if err != nil {
+		return nil, err
+	}
+	blk, _ := pem.Decode(deviceCA)
+	if blk == nil {
+		return nil, fmt.Errorf("unable to decode device CA")
+	}
+	parsedDeviceCACert, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OwnerServerState{
+		DB:       db,
+		chain:    []*x509.Certificate{parsedDeviceCACert},
+		ownerKey: ownerKey,
+	}, nil
 }
 
 func serveOwner(db *sqlite.DB, useTLS bool) error {
-	state := &OwnerServerState{
-		DB: db,
-	}
-	okey, keyType, err := parsePrivateKey(ownerPrivateKeyPath)
+	state, err := getOwnerServerState(db)
 	if err != nil {
 		return err
 	}
-	state.ownerKey = okey
-	state.ownerKeyType = keyType
-	c, err := os.ReadFile(ownerDeviceCertPath)
-	if err != nil {
-		return err
-	}
-	blk, _ := pem.Decode(c)
-	cert, err := x509.ParseCertificate(blk.Bytes)
-	if err != nil {
-		return err
-	}
-	state.chain = []*x509.Certificate{cert}
 
 	to2Server := &fdo.TO2Server{
 		Session:         state.DB,
@@ -205,10 +211,14 @@ func serveOwner(db *sqlite.DB, useTLS bool) error {
 
 	// Handle messages
 	apiRouter := http.NewServeMux()
-	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(db, state, useTLS))
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{okey.Public()}))
+	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&handlers.To0HandlerState{
+		VoucherState: state.DB,
+		KeyState:     state,
+		UseTLS:       useTLS,
+	}))
+	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("POST /owner/resell/{guid}", resellHandler(to2Server))
+	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
 	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
@@ -216,69 +226,6 @@ func serveOwner(db *sqlite.DB, useTLS bool) error {
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
-}
-
-// TODO: move this to handlers
-func resellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		guidHex := r.PathValue("guid")
-
-		if !utils.IsValidGUID(guidHex) {
-			http.Error(w, "GUID is not a valid GUID", http.StatusBadRequest)
-			return
-		}
-
-		guidBytes, err := hex.DecodeString(guidHex)
-		if err != nil {
-			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
-			slog.Debug(err.Error())
-			return
-		}
-
-		var guid protocol.GUID
-		copy(guid[:], guidBytes)
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-		blk, _ := pem.Decode(body)
-		if blk == nil {
-			http.Error(w, "Invalid PEM content", http.StatusInternalServerError)
-			return
-		}
-		nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
-		if err != nil {
-			http.Error(w, "Error parsing x.509 public key", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-
-		extended, err := to2Server.Resell(context.TODO(), guid, nextOwner, nil)
-		if err != nil {
-			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-		ovBytes, err := cbor.Marshal(extended)
-		if err != nil {
-			http.Error(w, "Error marshaling voucher", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/x-pem-file")
-		if err := pem.Encode(w, &pem.Block{
-			Type:  "OWNERSHIP VOUCHER",
-			Bytes: ovBytes,
-		}); err != nil {
-			slog.Debug("Error encoding voucher", "error", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
 }
 
 func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
@@ -417,6 +364,8 @@ func init() {
 	ownerCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
 	ownerCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
 	ownerCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
-	ownerCmd.Flags().StringVar(&ownerDeviceCertPath, "device-cert", "", "t3")
-	ownerCmd.Flags().StringVar(&ownerPrivateKeyPath, "owner-key", "", "t4")
+	ownerCmd.Flags().StringVar(&ownerDeviceCACert, "device-ca-cert", "", "Device CA certificate path")
+	ownerCmd.Flags().StringVar(&ownerPrivateKey, "owner-key", "", "Owner private key path")
+	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+
 }

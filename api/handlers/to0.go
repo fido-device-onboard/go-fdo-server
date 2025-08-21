@@ -14,7 +14,13 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
-func To0Handler(voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, useTLS bool) http.HandlerFunc {
+type To0HandlerState struct {
+	VoucherState fdo.OwnerVoucherPersistentState
+	KeyState     fdo.OwnerKeyPersistentState
+	UseTLS       bool
+}
+
+func To0Handler(state *To0HandlerState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		to0Guid := r.PathValue("guid")
 
@@ -38,7 +44,7 @@ func To0Handler(voucherState fdo.OwnerVoucherPersistentState, keyState fdo.Owner
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := to0.RegisterRvBlob(rvInfo, to0Guid, voucherState, keyState, useTLS); err != nil {
+		if err := to0.RegisterRvBlob(rvInfo, to0Guid, state.VoucherState, state.KeyState, state.UseTLS); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

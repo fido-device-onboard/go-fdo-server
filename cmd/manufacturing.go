@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -34,13 +33,11 @@ import (
 )
 
 var (
-	address              string
-	externalAddress      string
-	manufacturingKey     string
-	manufacturingKeyType string
-	deviceCert           string
-	ownerKey             string
-	rsaPss               bool
+	address          string
+	manufacturingKey string
+	deviceCACert     string
+	deviceCAKey      string
+	ownerPKey        string
 )
 
 // serveCmd represents the serve command
@@ -80,14 +77,13 @@ var manufacturingCmd = &cobra.Command{
 // Server represents the HTTP server
 type ManufacturingServer struct {
 	addr    string
-	extAddr string
 	handler http.Handler
 	useTLS  bool
 }
 
 // NewServer creates a new Server
-func NewManufacturingServer(addr string, extAddr string, handler http.Handler, useTLS bool) *ManufacturingServer {
-	return &ManufacturingServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
+func NewManufacturingServer(addr string, handler http.Handler, useTLS bool) *ManufacturingServer {
+	return &ManufacturingServer{addr: addr, handler: handler, useTLS: useTLS}
 }
 
 // Start starts the HTTP server
@@ -120,7 +116,7 @@ func (s *ManufacturingServer) Start() error {
 		return err
 	}
 	defer func() { _ = lis.Close() }()
-	slog.Info("Listening", "local", lis.Addr().String(), "external", s.extAddr)
+	slog.Info("Listening", "local", lis.Addr().String())
 
 	if s.useTLS {
 		preferredCipherSuites := []uint16{
@@ -143,35 +139,50 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
-	key, keyType, err := parsePrivateKey(manufacturingKey)
+func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
+	mfgKey, err := parsePrivateKey(manufacturingKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c, err := os.ReadFile(deviceCert)
+	deviceKey, err := parsePrivateKey(deviceCAKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	blk, _ := pem.Decode(c)
-	cert, err := x509.ParseCertificate(blk.Bytes)
+	deviceCA, err := os.ReadFile(deviceCACert)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	o, err := os.ReadFile(ownerKey)
+	blk, _ := pem.Decode(deviceCA)
+	parsedDeviceCACert, err := x509.ParseCertificate(blk.Bytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	block, _ := pem.Decode([]byte(o))
+	ownerPublicKey, err := os.ReadFile(ownerPKey)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode([]byte(ownerPublicKey))
 	if block == nil {
-		return fmt.Errorf("unable to decode owner public key")
+		return nil, fmt.Errorf("unable to decode owner public key")
 	}
+	// in the future we need to also accept owner public keys directly
 	var ownerCert *x509.Certificate
-	ownerCert, _ = x509.ParseCertificate(block.Bytes)
-	state := &SingleOwnerManufacturer{
-		nextOwner: ownerCert.PublicKey.(crypto.PublicKey),
-		chain:     []*x509.Certificate{cert},
-		mfgKey:    key,
-		keyType:   keyType,
+	ownerCert, err = x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return &SingleOwnerManufacturer{
+		ownerKey:    ownerCert.PublicKey.(crypto.PublicKey),
+		chain:       []*x509.Certificate{parsedDeviceCACert},
+		mfgKey:      mfgKey,
+		deviceCAKey: deviceKey,
+	}, nil
+}
+
+func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
+	state, err := getSingleOwnerManufacturerState()
+	if err != nil {
+		return err
 	}
 
 	// Create FDO responder
@@ -196,41 +207,34 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	httpHandler := api.NewHTTPHandler(handler, db).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewManufacturingServer(address, externalAddress, httpHandler, useTLS)
+	server := NewManufacturingServer(address, httpHandler, useTLS)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
 }
 
 type SingleOwnerManufacturer struct {
-	nextOwner crypto.PublicKey
-	chain     []*x509.Certificate
-	mfgKey    crypto.Signer
-	keyType   protocol.KeyType
+	ownerKey    crypto.PublicKey
+	chain       []*x509.Certificate
+	mfgKey      crypto.Signer
+	deviceCAKey crypto.Signer
 }
 
-// ManufacturerKey returns the signer of a given key type and its certificate
-// chain (required). If key type is not RSAPKCS or RSAPSS then rsaBits is
-// ignored. Otherwise it must be either 2048 or 3072.
 func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
-	// TODO: check key types are the same as the one asked
-	return state.mfgKey, state.chain, nil
+	return state.deviceCAKey, state.chain, nil
 }
 
 func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
 	mfgKey := ov.Header.Val.ManufacturerKey
-	keyType, rsaBits := mfgKey.Type, mfgKey.RsaBits()
-	owner, _, err := state.ManufacturerKey(ctx, keyType, rsaBits)
-	if err != nil {
-		return fmt.Errorf("auto extend: error getting %s manufacturer key: %w", keyType, err)
-	}
-	switch state.nextOwner.(type) {
+	keyType := mfgKey.Type
+	switch state.ownerKey.(type) {
 	case *ecdsa.PublicKey:
-		nextOwner, ok := state.nextOwner.(*ecdsa.PublicKey)
+		nextOwner, ok := state.ownerKey.(*ecdsa.PublicKey)
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
-		extended, err := fdo.ExtendVoucher(ov, owner, nextOwner, nil)
+		// TODO: change this to use the mfg key instead of the device ca key
+		extended, err := fdo.ExtendVoucher(ov, state.deviceCAKey, nextOwner, nil)
 		if err != nil {
 			return err
 		}
@@ -238,11 +242,12 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		return nil
 
 	case *rsa.PublicKey:
-		nextOwner, ok := state.nextOwner.(*rsa.PublicKey)
+		nextOwner, ok := state.ownerKey.(*rsa.PublicKey)
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
-		extended, err := fdo.ExtendVoucher(ov, owner, nextOwner, nil)
+		// TODO: change this to use the mfg key instead of the device ca key
+		extended, err := fdo.ExtendVoucher(ov, state.deviceCAKey, nextOwner, nil)
 		if err != nil {
 			return err
 		}
@@ -250,81 +255,15 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		return nil
 
 	default:
-		return fmt.Errorf("auto extend: invalid key type %T", owner)
+		return fmt.Errorf("auto extend: invalid key type %T", state.mfgKey)
 	}
-}
-
-func getPrivateKeyType(key any) (protocol.KeyType, error) {
-	switch ktype := key.(type) {
-	case *rsa.PrivateKey:
-		switch ktype.N.BitLen() {
-		case 2048:
-			return protocol.Rsa2048RestrKeyType, nil
-		case 3072:
-			if rsaPss {
-				return protocol.RsaPssKeyType, nil
-			} else {
-				return protocol.RsaPkcsKeyType, nil
-			}
-		}
-	case *ecdsa.PrivateKey:
-		switch ktype.Curve.Params().BitSize {
-		case 256:
-			return protocol.Secp256r1KeyType, nil
-		case 384:
-			return protocol.Secp384r1KeyType, nil
-		}
-	}
-	return 0, fmt.Errorf("unsupported key provided")
-}
-
-// https://github.com/golang/go/issues/43780
-// TODO: this is shared between roles, move to a better place
-func parsePrivateKey(keyPath string) (crypto.Signer, protocol.KeyType, error) {
-	b, err := os.ReadFile(keyPath)
-	if err != nil {
-		return nil, 0, err
-	}
-	key, err := x509.ParsePKCS8PrivateKey(b)
-	if err == nil {
-		keyType, err := getPrivateKeyType(key)
-		if err != nil {
-			return nil, 0, err
-		}
-		return key.(crypto.Signer), keyType, nil
-	}
-	if strings.Contains(err.Error(), "ParseECPrivateKey") {
-		key, err = x509.ParseECPrivateKey(b)
-		if err != nil {
-			return nil, 0, err
-		}
-		keyType, err := getPrivateKeyType(key)
-		if err != nil {
-			return nil, 0, err
-		}
-		return key.(crypto.Signer), keyType, nil
-	}
-	if strings.Contains(err.Error(), "ParsePKCS1PrivateKey") {
-		key, err = x509.ParsePKCS1PrivateKey(b)
-		if err != nil {
-			return nil, 0, err
-		}
-		keyType, err := getPrivateKeyType(key)
-		if err != nil {
-			return nil, 0, err
-		}
-		return key.(crypto.Signer), keyType, nil
-	}
-	return nil, 0, fmt.Errorf("unable to parse private key %s", keyPath)
 }
 
 func init() {
 	rootCmd.AddCommand(manufacturingCmd)
 
-	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-	manufacturingCmd.Flags().StringVar(&manufacturingKey, "manufacturing-key", "", "test 1")
-	manufacturingCmd.Flags().StringVar(&manufacturingKeyType, "manufacturing-key-type", "", "test 2") // TODO: ???
-	manufacturingCmd.Flags().StringVar(&deviceCert, "device-cert", "", "t3")
-	manufacturingCmd.Flags().StringVar(&ownerKey, "owner-key", "", "t4")
-	manufacturingCmd.Flags().BoolVar(&rsaPss, "rsa-pss", false, "")
+	manufacturingCmd.Flags().StringVar(&manufacturingKey, "manufacturing-key", "", "Manufacturing private key path")
+	manufacturingCmd.Flags().StringVar(&deviceCACert, "device-ca-cert", "", "Device certificate path")
+	manufacturingCmd.Flags().StringVar(&ownerPKey, "owner-cert", "", "Owner certificate path")
+	manufacturingCmd.Flags().StringVar(&deviceCAKey, "device-ca-key", "", "Device CA private key path")
 }

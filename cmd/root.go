@@ -4,11 +4,14 @@
 package cmd
 
 import (
+	"crypto"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
@@ -104,4 +107,30 @@ func validatePassword(dbPass string) error {
 	}
 
 	return nil
+}
+
+func parsePrivateKey(keyPath string) (crypto.Signer, error) {
+	b, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	key, err := x509.ParsePKCS8PrivateKey(b)
+	if err == nil {
+		return key.(crypto.Signer), nil
+	}
+	if strings.Contains(err.Error(), "ParseECPrivateKey") {
+		key, err = x509.ParseECPrivateKey(b)
+		if err != nil {
+			return nil, err
+		}
+		return key.(crypto.Signer), nil
+	}
+	if strings.Contains(err.Error(), "ParsePKCS1PrivateKey") {
+		key, err = x509.ParsePKCS1PrivateKey(b)
+		if err != nil {
+			return nil, err
+		}
+		return key.(crypto.Signer), nil
+	}
+	return nil, fmt.Errorf("unable to parse private key %s: %v", keyPath, err)
 }

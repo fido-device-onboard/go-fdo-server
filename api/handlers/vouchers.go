@@ -5,7 +5,9 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"encoding/pem"
@@ -104,8 +106,8 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 			}
 			expectedKeyType := ov.Header.Val.ManufacturerKey.Type
 
-			// TODO: there's only one owner key when the server starts,
-			// fix this by allowing more key types for rsa mainly
+			// TODO: there's only one owner key when the server starts
+			// we don't need this as we're only using one key type for now
 			//
 			// var possibleOwnerKeys []db.OwnerKey
 			// for _, ownerKey := range ownerPKeys {
@@ -158,5 +160,67 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func ResellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		guidHex := r.PathValue("guid")
+
+		if !utils.IsValidGUID(guidHex) {
+			http.Error(w, "GUID is not a valid GUID", http.StatusBadRequest)
+			return
+		}
+
+		guidBytes, err := hex.DecodeString(guidHex)
+		if err != nil {
+			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
+			slog.Debug(err.Error())
+			return
+		}
+
+		var guid protocol.GUID
+		copy(guid[:], guidBytes)
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+		blk, _ := pem.Decode(body)
+		if blk == nil {
+			http.Error(w, "Invalid PEM content", http.StatusInternalServerError)
+			return
+		}
+		nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
+		if err != nil {
+			http.Error(w, "Error parsing x.509 public key", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+
+		extended, err := to2Server.Resell(context.TODO(), guid, nextOwner, nil)
+		if err != nil {
+			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+		ovBytes, err := cbor.Marshal(extended)
+		if err != nil {
+			http.Error(w, "Error marshaling voucher", http.StatusInternalServerError)
+			slog.Debug(err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-pem-file")
+		if err := pem.Encode(w, &pem.Block{
+			Type:  "OWNERSHIP VOUCHER",
+			Bytes: ovBytes,
+		}); err != nil {
+			slog.Debug("Error encoding voucher", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
