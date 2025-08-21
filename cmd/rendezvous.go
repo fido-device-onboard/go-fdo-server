@@ -26,9 +26,7 @@ import (
 // serveCmd represents the serve command
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
-	Short: "Serve an instance of the HTTP server for the role",
-	Long: `Serve runs the HTTP server for the FDO protocol. It can act as all the three
-	main servers in the FDO spec.`,
+	Short: "Serve an instance of the rendezvous server",
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 			return err
