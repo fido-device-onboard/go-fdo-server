@@ -20,7 +20,7 @@ func RetrieveOwnerInfo() ([]protocol.RvTO2Addr, error) {
 		return nil, fmt.Errorf("error parsing ownerData after POST: %v", ownerData.Value)
 	}
 
-	rvTO2Addrs, err := ParseRvTO2Addr(parsedData)
+	rvTO2Addrs, err := parseRvTO2Addr(parsedData)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
 	}
@@ -44,7 +44,7 @@ func FetchOwnerInfo() ([]protocol.RvTO2Addr, error) {
 	return ownerInfo, nil
 }
 
-func ParseRvTO2Addr(ownerData []interface{}) ([]protocol.RvTO2Addr, error) {
+func parseRvTO2Addr(ownerData []interface{}) ([]protocol.RvTO2Addr, error) {
 	var rvTO2Addrs []protocol.RvTO2Addr
 	for _, item := range ownerData {
 		itemSlice, ok := item.([]interface{})
