@@ -8,7 +8,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,16 +15,13 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
 )
 
 var (
-	dbType         string
-	dbDSN          string
-	debug          bool
-	logLevel       slog.LevelVar
-	serverCertPath string
-	serverKeyPath  string
+	debug    bool
+	logLevel slog.LevelVar
 )
 
 var rootCmd = &cobra.Command{
@@ -39,10 +35,23 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		configFilePath, err := cmd.Flags().GetString("config")
+		if err != nil {
+			return fmt.Errorf("failed to get config flag: %w", err)
+		}
+		if configFilePath != "" {
+			slog.Debug("Loading server configuration file", "path", configFilePath)
+			viper.SetConfigFile(configFilePath)
+			if err := viper.ReadInConfig(); err != nil {
+				return fmt.Errorf("configuration file read failed: %w", err)
+			}
+		}
+		debug = viper.GetBool("debug")
 		if debug {
 			logLevel.Set(slog.LevelDebug)
 		}
+		return nil
 	},
 }
 
@@ -55,36 +64,20 @@ func Execute() {
 	}
 }
 
+// Setup the root command line. Used by the unit tests to reset state between tests.
+func rootCmdInit() {
+	rootCmd.PersistentFlags().String("config", "", "Pathname of the configuration file")
+	rootCmd.PersistentFlags().Bool("debug", false, "Print debug contents")
+	if err := viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug")); err != nil {
+		panic(err)
+	}
+}
+
 func init() {
 	slog.SetDefault(slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
 		Level: &logLevel,
 	})))
-
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().StringVar(&dbType, "db-type", "sqlite", "Database type (sqlite or postgres)")
-	rootCmd.PersistentFlags().StringVar(&dbDSN, "db-dsn", "", "Database DSN (connection string)")
-	rootCmd.MarkPersistentFlagRequired("db-dsn")
-	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
-	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
-}
-
-// useTLS returns true if both server cert and key paths are provided
-func useTLS() bool {
-	return serverCertPath != "" && serverKeyPath != ""
-}
-
-func getDBConfig() (string, string, error) {
-	if dbDSN == "" {
-		return "", "", errors.New("db-dsn flag is required")
-	}
-
-	// Validate database type
-	normalizedType := strings.ToLower(dbType)
-	if normalizedType != "sqlite" && normalizedType != "postgres" {
-		return "", "", fmt.Errorf("unsupported database type: %s (must be 'sqlite' or 'postgres')", dbType)
-	}
-
-	return normalizedType, dbDSN, nil
+	rootCmdInit()
 }
 
 func parsePrivateKey(keyPath string) (crypto.Signer, error) {

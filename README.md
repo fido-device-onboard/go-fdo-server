@@ -170,6 +170,7 @@ Cleanup:
 rm -rf /tmp/fdo
 ```
 
+
 ## TLS configuration
 
 1. Generate key and certificate for the server
@@ -184,3 +185,13 @@ openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650 -subj 
 ```bash
 go-fdo-server --server-cert-path <cert-path> --server-key-path <key-path> ...
 ```
+
+
+## Configuration File Support
+
+The FDO server supports configuration files for all three subcommands: `manufacturing`, `owner`, and `rendezvous`. Configuration files can be used to specify all command-line options, making it easier to manage complex configurations.
+
+Each subcommand supports a `--config` flag that accepts a path to a TOML or YAML configuration file.
+
+For a complete reference of all available configuration options, see [CONFIG.md](CONFIG.md).
+
