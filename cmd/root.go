@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 	"hermannm.dev/devlog"
@@ -133,4 +136,23 @@ func parsePrivateKey(keyPath string) (crypto.Signer, error) {
 		return key.(crypto.Signer), nil
 	}
 	return nil, fmt.Errorf("unable to parse private key %s: %v", keyPath, err)
+}
+
+func getPrivateKeyType(key any) (protocol.KeyType, error) {
+	switch ktype := key.(type) {
+	case *rsa.PrivateKey:
+		switch ktype.N.BitLen() {
+		case 2048:
+			return protocol.Rsa2048RestrKeyType, nil
+			// case 3072: TODO: add support for 3072 bit keys
+		}
+	case *ecdsa.PrivateKey:
+		switch ktype.Curve.Params().BitSize {
+		case 256:
+			return protocol.Secp256r1KeyType, nil
+		case 384:
+			return protocol.Secp384r1KeyType, nil
+		}
+	}
+	return 0, fmt.Errorf("unsupported key provided")
 }

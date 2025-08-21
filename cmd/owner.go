@@ -159,13 +159,18 @@ func (s *OwnerServer) Start() error {
 }
 
 type OwnerServerState struct {
-	DB       *sqlite.DB
-	ownerKey crypto.Signer
-	chain    []*x509.Certificate
+	DB           *sqlite.DB
+	ownerKey     crypto.Signer
+	ownerKeyType protocol.KeyType
+	chain        []*x509.Certificate
 }
 
 func getOwnerServerState(db *sqlite.DB) (*OwnerServerState, error) {
 	ownerKey, err := parsePrivateKey(ownerPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	ownerKeyType, err := getPrivateKeyType(ownerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -183,9 +188,10 @@ func getOwnerServerState(db *sqlite.DB) (*OwnerServerState, error) {
 	}
 
 	return &OwnerServerState{
-		DB:       db,
-		chain:    []*x509.Certificate{parsedDeviceCACert},
-		ownerKey: ownerKey,
+		DB:           db,
+		chain:        []*x509.Certificate{parsedDeviceCACert},
+		ownerKey:     ownerKey,
+		ownerKeyType: ownerKeyType,
 	}, nil
 }
 

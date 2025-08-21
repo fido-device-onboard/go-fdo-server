@@ -144,7 +144,15 @@ func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
 	if err != nil {
 		return nil, err
 	}
+	mfgKeyType, err := getPrivateKeyType(mfgKey)
+	if err != nil {
+		return nil, err
+	}
 	deviceKey, err := parsePrivateKey(deviceCAKey)
+	if err != nil {
+		return nil, err
+	}
+	deviceCAKeyType, err := getPrivateKeyType(deviceKey)
 	if err != nil {
 		return nil, err
 	}
@@ -172,10 +180,12 @@ func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
 		return nil, err
 	}
 	return &SingleOwnerManufacturer{
-		ownerKey:    ownerCert.PublicKey.(crypto.PublicKey),
-		chain:       []*x509.Certificate{parsedDeviceCACert},
-		mfgKey:      mfgKey,
-		deviceCAKey: deviceKey,
+		ownerKey:        ownerCert.PublicKey.(crypto.PublicKey),
+		chain:           []*x509.Certificate{parsedDeviceCACert},
+		mfgKey:          mfgKey,
+		mfgKeyType:      mfgKeyType,
+		deviceCAKey:     deviceKey,
+		deviceCAKeyType: deviceCAKeyType,
 	}, nil
 }
 
@@ -214,10 +224,12 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 }
 
 type SingleOwnerManufacturer struct {
-	ownerKey    crypto.PublicKey
-	chain       []*x509.Certificate
-	mfgKey      crypto.Signer
-	deviceCAKey crypto.Signer
+	ownerKey        crypto.PublicKey
+	chain           []*x509.Certificate
+	mfgKey          crypto.Signer
+	mfgKeyType      protocol.KeyType
+	deviceCAKey     crypto.Signer
+	deviceCAKeyType protocol.KeyType
 }
 
 func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
@@ -226,7 +238,16 @@ func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyTy
 
 func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
 	mfgKey := ov.Header.Val.ManufacturerKey
-	keyType := mfgKey.Type
+	keyType, rsaBits := mfgKey.Type, mfgKey.RsaBits()
+	// TODO: change this to use the mfg key instead of the device ca key
+	if keyType != state.deviceCAKeyType {
+		return fmt.Errorf("auto extend: invalid key type %T", state.deviceCAKey)
+	}
+	if state.deviceCAKeyType == protocol.Rsa2048RestrKeyType {
+		if rsaBits != 2048 {
+			return fmt.Errorf("auto extend: invalid rsa bits %d", rsaBits)
+		}
+	}
 	switch state.ownerKey.(type) {
 	case *ecdsa.PublicKey:
 		nextOwner, ok := state.ownerKey.(*ecdsa.PublicKey)
@@ -240,7 +261,6 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		}
 		*ov = *extended
 		return nil
-
 	case *rsa.PublicKey:
 		nextOwner, ok := state.ownerKey.(*rsa.PublicKey)
 		if !ok {
@@ -253,7 +273,6 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		}
 		*ov = *extended
 		return nil
-
 	default:
 		return fmt.Errorf("auto extend: invalid key type %T", state.mfgKey)
 	}
