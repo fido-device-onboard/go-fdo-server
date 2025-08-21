@@ -181,6 +181,7 @@ func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
 	}
 	return &SingleOwnerManufacturer{
 		ownerKey:        ownerCert.PublicKey.(crypto.PublicKey),
+		// TODO: chain length >1 should be supported too
 		chain:           []*x509.Certificate{parsedDeviceCACert},
 		mfgKey:          mfgKey,
 		mfgKeyType:      mfgKeyType,
