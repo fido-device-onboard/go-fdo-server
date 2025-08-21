@@ -18,6 +18,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
 )
 
@@ -42,11 +43,6 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if debug {
-			logLevel.Set(slog.LevelDebug)
-		}
-	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -63,14 +59,40 @@ func init() {
 		Level: &logLevel,
 	})))
 
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "SQLite database file path")
-	rootCmd.PersistentFlags().StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
-	rootCmd.MarkPersistentFlagRequired("db")
-	rootCmd.MarkPersistentFlagRequired("db-pass")
-	rootCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
-	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
-	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
+	rootCmd.PersistentFlags().Bool("debug", false, "Print debug contents")
+	rootCmd.PersistentFlags().String("db", "", "SQLite database file path")
+	rootCmd.PersistentFlags().String("db-pass", "", "SQLite database encryption-at-rest passphrase")
+	rootCmd.PersistentFlags().Bool("insecure-tls", false, "Listen with a self-signed TLS certificate")
+	rootCmd.PersistentFlags().String("server-cert-path", "", "Path to server certificate")
+	rootCmd.PersistentFlags().String("server-key-path", "", "Path to server private key")
+}
+
+// Initialize configuration flags from viper's configuration. Enforce
+// required flags are present. This function is called by the
+// subcommands after the viper flags are bound and the configuration
+// file is loaded.
+func rootCmdLoadConfig() error {
+	if !viper.IsSet("db") {
+		return errors.New("missing required path to the database (--db)")
+	}
+	if !viper.IsSet("db-pass") {
+		return errors.New("missing database password (--db-pass)")
+	}
+	dbPath = viper.GetString("db")
+	dbPass = viper.GetString("db-pass")
+
+	err := validatePassword(dbPass)
+	if err != nil {
+		return err
+	}
+	debug = viper.GetBool("debug")
+	if debug {
+		logLevel.Set(slog.LevelDebug)
+	}
+	insecureTLS = viper.GetBool("insecure-tls")
+	serverCertPath = viper.GetString("server-cert-path")
+	serverKeyPath = viper.GetString("server-key-path")
+	return nil
 }
 
 const (
@@ -78,19 +100,6 @@ const (
 )
 
 func getState() (*sqlite.DB, error) {
-	if dbPath == "" {
-		return nil, errors.New("db flag is required")
-	}
-
-	if dbPass == "" {
-		return nil, errors.New("db password is empty")
-	}
-
-	err := validatePassword(dbPass)
-	if err != nil {
-		return nil, err
-	}
-
 	return sqlite.Open(dbPath, dbPass)
 }
 
