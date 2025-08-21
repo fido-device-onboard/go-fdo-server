@@ -20,6 +20,28 @@ Install the server binary:
 go install github.com/fido-device-onboard/go-fdo-server@latest
 ```
 
+## Configuration File Support
+
+The FDO server supports configuration files for all three subcommands: `manufacturing`, `owner`, and `rendezvous`. Configuration files can be used to specify all command-line options, making it easier to manage complex configurations.
+
+> **📖 Configuration Reference**: For a complete list of all available configuration options, see [CONFIG.md](CONFIG.md).
+
+### Using Configuration Files
+
+Each subcommand supports a `--config` flag that accepts a path to a configuration file. Multiple formats are supported (YAML, JSON, TOML, HCL, Java properties) and the format is automatically detected based on the file extension:
+
+```sh
+go-fdo-server manufacturing --config config.yaml 127.0.0.1:8080
+go-fdo-server owner --config config.json 127.0.0.1:8080  
+go-fdo-server rendezvous --config config.toml 127.0.0.1:8080
+```
+
+### Precedence
+
+Command-line arguments take precedence over configuration file values. The server address (http_address) can be specified either as a command-line argument or in the configuration file under the `address` key.
+
+For a complete reference of all available configuration options, see [CONFIG.md](CONFIG.md).
+
 Install the client binary:
 
 ```bash
