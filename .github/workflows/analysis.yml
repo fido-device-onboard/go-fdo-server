@@ -7,8 +7,41 @@ on:
     - cron: '19 20 * * 6'
 
 jobs:
+  check-spelling:
+    name: check spelling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check spelling
+        uses: codespell-project/actions-codespell@master
+        with:
+          builtin: clear,rare,usage,code,en-GB_to_en-US
+          check_filenames: true
+          check_hidden: true
+          ignore_words_file: .github/spellcheck-ignore
+          skip: "./docs/Gemfile.lock,./docs/_config.yml,./.github,./.git"
+
+  commitlint:
+    name: check commitlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'latest'
+      - name: Install commitlint dependencies
+        run: npm install commitlint
+      - uses: wagoid/commitlint-github-action@v6
+        env:
+          NODE_PATH: ${{ github.workspace }}/node_modules
+        with:
+          configFile: .github/commitlint.config.mjs
+          failOnWarnings: true
+
   analysis_devskim:
-    name: devskim
+    name: check devskim
     runs-on: ubuntu-latest
     permissions:
       actions: read
