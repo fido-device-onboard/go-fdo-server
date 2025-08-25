@@ -8,7 +8,7 @@
 
 ## Prerequisites
 
-- Go 1.23.0 or later
+- Go 1.25.0 or later
 - A Go module initialized with `go mod init`
 
 ## Building the Example Server Application

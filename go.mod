@@ -1,9 +1,9 @@
 module github.com/fido-device-onboard/go-fdo-server
 
-go 1.23.0
+go 1.25.0
 
 require (
-	github.com/fido-device-onboard/go-fdo v0.0.0-20250512135234-b46a4b0731f2
+	github.com/fido-device-onboard/go-fdo v0.0.0-20250825141114-d23bc758d277
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
 	github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250512135234-b46a4b0731f2
 	github.com/spf13/cobra v1.9.1

@@ -200,9 +200,13 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
 			Session:               db,
 			Vouchers:              db,
-			SignDeviceCertificate: custom.SignDeviceCertificate(state),
-			DeviceInfo: func(_ context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.KeyType, protocol.KeyEncoding, error) {
-				return info.DeviceInfo, info.KeyType, info.KeyEncoding, nil
+			SignDeviceCertificate: custom.SignDeviceCertificate(state.deviceCAKey, state.chain),
+			DeviceInfo: func(ctx context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.PublicKey, error) {
+				mfgPubKey, err := encodePublicKey(info.KeyType, info.KeyEncoding, state.mfgKey.Public(), state.chain)
+				if err != nil {
+					return "", protocol.PublicKey{}, err
+				}
+				return info.DeviceInfo, *mfgPubKey, nil
 			},
 			BeforeVoucherPersist: state.Extend,
 			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
@@ -222,6 +226,32 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	return server.Start()
 }
 
+func encodePublicKey(keyType protocol.KeyType, keyEncoding protocol.KeyEncoding, pub crypto.PublicKey, chain []*x509.Certificate) (*protocol.PublicKey, error) {
+	if pub == nil && len(chain) > 0 {
+		pub = chain[0].PublicKey
+	}
+	if pub == nil {
+		return nil, fmt.Errorf("no key to encode")
+	}
+
+	switch keyEncoding {
+	case protocol.X509KeyEnc, protocol.CoseKeyEnc:
+		// Intentionally panic if pub is not the correct key type
+		switch keyType {
+		case protocol.Secp256r1KeyType, protocol.Secp384r1KeyType:
+			return protocol.NewPublicKey(keyType, pub.(*ecdsa.PublicKey), keyEncoding == protocol.CoseKeyEnc)
+		case protocol.Rsa2048RestrKeyType, protocol.RsaPkcsKeyType, protocol.RsaPssKeyType:
+			return protocol.NewPublicKey(keyType, pub.(*rsa.PublicKey), keyEncoding == protocol.CoseKeyEnc)
+		default:
+			return nil, fmt.Errorf("unsupported key type: %s", keyType)
+		}
+	case protocol.X5ChainKeyEnc:
+		return protocol.NewPublicKey(keyType, chain, false)
+	default:
+		return nil, fmt.Errorf("unsupported key encoding: %s", keyEncoding)
+	}
+}
+
 type SingleOwnerManufacturer struct {
 	ownerKey        crypto.PublicKey
 	chain           []*x509.Certificate
@@ -238,8 +268,7 @@ func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyTy
 func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
 	mfgKey := ov.Header.Val.ManufacturerKey
 	keyType, rsaBits := mfgKey.Type, mfgKey.RsaBits()
-	// TODO: change this to use the mfg key instead of the device ca key
-	if keyType != state.deviceCAKeyType {
+	if keyType != state.mfgKeyType {
 		return fmt.Errorf("auto extend: invalid key type %T", state.deviceCAKey)
 	}
 	if state.deviceCAKeyType == protocol.Rsa2048RestrKeyType {
@@ -253,8 +282,7 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
-		// TODO: change this to use the mfg key instead of the device ca key
-		extended, err := fdo.ExtendVoucher(ov, state.deviceCAKey, nextOwner, nil)
+		extended, err := fdo.ExtendVoucher(ov, state.mfgKey, nextOwner, nil)
 		if err != nil {
 			return err
 		}
@@ -265,8 +293,7 @@ func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Vouche
 		if !ok {
 			return fmt.Errorf("auto extend: owner key must be %s", keyType)
 		}
-		// TODO: change this to use the mfg key instead of the device ca key
-		extended, err := fdo.ExtendVoucher(ov, state.deviceCAKey, nextOwner, nil)
+		extended, err := fdo.ExtendVoucher(ov, state.mfgKey, nextOwner, nil)
 		if err != nil {
 			return err
 		}
