@@ -9,102 +9,74 @@
 ## Prerequisites
 
 - Go 1.25.0 or later
-- A Go module initialized with `go mod init`
+- `openssl` and `curl` available
 
-## Building the Example Server Application
+## Quickstart: Run the three services locally (no TLS)
+This project exposes separate subcommands for each role: `rendezvous`, `manufacturing`, and `owner`.
 
-The example server application can be built with `go install` directly
+Install the server binary:
 
-```console
-$ go install .
-$ $(go env GOPATH)/bin/go-fdo-server
-
-Usage:
-  go-fdo-server [--] [options]
-
-Server options:
-  -command-date
-        Use fdo.command FSIM to have device run "date --utc"
-  -db string
-        SQLite database file path
-  -db-pass string
-        SQLite database encryption-at-rest passphrase
-  -debug
-        Print HTTP contents
-  -download file
-        Use fdo.download FSIM for each file (flag may be used multiple times)
-  -ext-http addr
-        External address devices should connect to (default "127.0.0.1:${LISTEN_PORT}")
-  -http addr
-        The address to listen on (default "localhost:8080")
-  -import-voucher path
-        Import a PEM encoded voucher file at path
-  -insecure-tls
-        Listen with a self-signed TLS certificate
-  -print-owner-public type
-        Print owner public key of type and exit
-  -resale-guid guid
-        Voucher guid to extend for resale
-  -resale-key path
-        The path to a PEM-encoded x.509 public key for the next owner
-  -reuse-cred
-        Perform the Credential Reuse Protocol in TO2
-  -upload file
-        Use fdo.upload FSIM for each file (flag may be used multiple times)
-  -upload-dir path
-        The directory path to put file uploads (default "uploads")
-  -wget url
-        Use fdo.wget FSIM for each url (flag may be used multiple times)
-
-Key types:
-  - RSA2048RESTR
-  - RSAPKCS
-  - RSAPSS
-  - SECP256R1
-  - SECP384R1
-
-Encryption suites:
-  - A128GCM
-  - A192GCM
-  - A256GCM
-  - AES-CCM-64-128-128 (not implemented)
-  - AES-CCM-64-128-256 (not implemented)
-  - COSEAES128CBC
-  - COSEAES128CTR
-  - COSEAES256CBC
-  - COSEAES256CTR
-
-Key exchange suites:
-  - DHKEXid14
-  - DHKEXid15
-  - ASYMKEX2048
-  - ASYMKEX3072
-  - ECDH256
-  - ECDH384
+```bash
+go install github.com/fido-device-onboard/go-fdo-server@latest
 ```
 
-## Starting the FDO Server
-This guide provides instructions to set up and run the FDO server and client instances for different roles: Manufacturer, Rendezvous (RV), and Owner.
-### Manufacturer Instance
-Start the FDO server with the test database:
-```sh
-go-fdo-server serve 127.0.0.1:8038 -db ./mfg.db -db-pass <db-password> -debug
-```
-This server instance acts as the Manufacturer.
+Install the client binary:
 
-### RV Instance
-Start another instance of the FDO server on a different port with a different database:
+```bash
+go install github.com/fido-device-onboard/go-fdo-client@latest
 ```
-go-fdo-server serve 127.0.0.1:8041 -db ./rv.db -db-pass <db-password> -debug
-```
-This server instance acts as the RV.
 
-### Owner Instance
-Start another instance of the FDO server on a different port with a different database:
+Generate test keys/certs (under /tmp/fdo/keys):
+
+```bash
+mkdir -p /tmp/fdo/keys
+
+# Manufacturer EC key + self-signed cert
+openssl ecparam -name prime256v1 -genkey -out /tmp/fdo/keys/manufacturer_key.der -outform der
+openssl req -x509 -key /tmp/fdo/keys/manufacturer_key.der -keyform der -out /tmp/fdo/keys/manufacturer_cert.pem -days 365 -subj "/C=US/O=Example/CN=Manufacturer"
+
+# Device CA EC key + self-signed cert
+openssl ecparam -name prime256v1 -genkey -out /tmp/fdo/keys/device_ca_key.der -outform der
+openssl req -x509 -key /tmp/fdo/keys/device_ca_key.der -keyform der -out /tmp/fdo/keys/device_ca_cert.pem -days 365 -subj "/C=US/O=Example/CN=Device"
+
+# Owner EC key + self-signed cert
+openssl ecparam -name prime256v1 -genkey -out /tmp/fdo/keys/owner_key.der -outform der
+openssl req -x509 -key /tmp/fdo/keys/owner_key.der -keyform der -out /tmp/fdo/keys/owner_cert.pem -days 365 -subj "/C=US/O=Example/CN=Owner"
+
 ```
-go-fdo-server serve 127.0.0.1:8043 -db ./own.db -db-pass <db-password> -debug
+
+Start the services in three terminals (or background them). Use distinct databases under /tmp/fdo/db and a strong DB passphrase.
+
+```bash
+DB_PASS='P@ssw0rd1!'
+mkdir -p /tmp/fdo/db /tmp/fdo/keys /tmp/fdo/ov
+
+# Rendezvous (127.0.0.1:8041)
+go-fdo-server --debug rendezvous 127.0.0.1:8041 \
+  --db /tmp/fdo/db/rv.db --db-pass "$DB_PASS"
+
+# Manufacturing (127.0.0.1:8038)
+go-fdo-server --debug manufacturing 127.0.0.1:8038 \
+  --db /tmp/fdo/db/mfg.db --db-pass "$DB_PASS" \
+  --manufacturing-key /tmp/fdo/keys/manufacturer_key.der \
+  --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
+  --device-ca-key  /tmp/fdo/keys/device_ca_key.der \
+  --owner-cert     /tmp/fdo/keys/owner_cert.pem
+
+# Owner (127.0.0.1:8043)
+go-fdo-server --debug owner 127.0.0.1:8043 \
+  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
+  --owner-key      /tmp/fdo/keys/owner_key.der
 ```
-This server instance acts as the Owner.
+
+Health checks:
+
+```bash
+curl -fsS http://127.0.0.1:8041/health
+curl -fsS http://127.0.0.1:8038/health
+curl -fsS http://127.0.0.1:8043/health
+```
 
 ## Managing RV Info Data
 ### Create New RV Info Data
@@ -118,7 +90,7 @@ To bypass the TO1 protocol set RVBypass using
 ```
 curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \
 --header 'Content-Type: text/plain' \
---data-raw '[[[5,"127.0.0.1"],[3,8041],[14],[12,1],[2,"127.0.0.1"],[4,8041]]]'
+--data-raw '[[[5,"127.0.0.1"],[3,8043],[14],[12,1],[2,"127.0.0.1"],[4,8043]]]'
 ```
 ### Fetch Current RV Info Data
 Send a GET request to fetch the current RV info data:
@@ -131,7 +103,7 @@ Send a PUT request to update the existing RV info data:
 ```
 curl --location --request PUT 'http://localhost:8038/api/v1/rvinfo' \
 --header 'Content-Type: text/plain' \
---data-raw '[[[5,"127.0.0.1"],[3,8041],[14,false],[12,1],[2,"127.0.0.1"],[4,8041]]]'
+--data-raw '[[[5,"127.0.0.1"],[3,8043],[14,false],[12,1],[2,"127.0.0.1"],[4,8043]]]'
 ```
 
 ## Managing Owner Redirect Data
@@ -147,26 +119,47 @@ curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \
 Use GET and PUT requests to view and update existing owner redirect data.
 
 
-## Fetch and Post Voucher
-Fetch a Voucher
+## Basic onboarding flow (device DI → voucher → TO0 → TO2)
 
-Fetch a voucher using curl and save it to a file named ownervoucher:
-```
-curl --location --request GET 'http://localhost:8038/api/v1/vouchers?guid=<guid>' -o ownervoucher
-```
-Post the Voucher to the Owner Server
+1. Device Initialization (DI) with `go-fdo-client` (stores `/tmp/fdo/cred.bin`):
 
-Post the fetched voucher to the Owner server using curl:
+```bash
+go-fdo-client device-init 'http://127.0.0.1:8038' \
+  --device-info gotest \
+  --key ec256 \
+  --debug \
+  --blob /tmp/fdo/cred.bin
 ```
-curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' --data-binary @ownervoucher
+
+2. Extract the device GUID:
+
+```bash
+GUID=$(go-fdo-client print --blob /tmp/fdo/cred.bin | grep -oE '[0-9a-fA-F]{32}' | head -n1)
+echo "GUID=${GUID}"
 ```
-## Execute DI from the FDO GO Client.
-For Running the FDO GO Client setup, please refer to the FDO Go Client README.
-## Execute TO0
-Execute the TO0 by providing DI GUID from FDO GO Client:
+
+3. Download voucher from Manufacturing and upload to Owner:
+
+```bash
+curl -v "http://127.0.0.1:8038/api/v1/vouchers?guid=${GUID}" > /tmp/fdo/ov/ownervoucher
+curl -X POST 'http://127.0.0.1:8043/api/v1/owner/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
 ```
-curl --location --request GET 'http://localhost:8043/api/v1/to0/<guid>'
+
+4. Trigger TO0 on Owner server:
+
+```bash
+curl --location --request GET "http://127.0.0.1:8043/api/v1/to0/${GUID}"
 ```
-TO0 will be completed in the respective Owner and RV.
-## Execute TO1 and TO2 from the FDO GO Client.
-## Building and Running the Example Server Application using Containers
+
+5. Run onboarding (TO2) and verify success:
+
+```bash
+go-fdo-client onboard --key ec256 --kex ECDH256 --debug --blob /tmp/fdo/cred.bin | tee /tmp/fdo/client-onboard.log
+grep -F 'FIDO Device Onboard Complete' /tmp/fdo/client-onboard.log >/dev/null && echo 'Onboarding OK'
+```
+
+Cleanup:
+
+```bash
+rm -rf /tmp/fdo
+```
