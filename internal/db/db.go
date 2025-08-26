@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 )
@@ -51,10 +52,85 @@ func createOwnerInfoTable() error {
 	return nil
 }
 
-func FetchVoucher(guid []byte) (Voucher, error) {
-	var voucher Voucher
-	err := db.QueryRow("SELECT guid, cbor FROM owner_vouchers WHERE guid = ?", guid).Scan(&voucher.GUID, &voucher.CBOR)
-	return voucher, err
+// FetchVoucher doesn't take into account mfg_voucher where go-fdo stores vouchers that have not been extended yet
+// we don't need it right now, but for use cases where manufacturers just initializes empty devices (tpm) this is going to be needed.
+//
+// FetchVoucher returns a single voucher filtered by provided fields.
+// Supported filters (keys):
+// - "guid" (expects []byte)
+// - "device_info" (expects string)
+// If more than one voucher matches, an error is returned.
+// Note: This does not query mfg_voucher (unextended vouchers).
+func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
+	if len(filters) == 0 {
+		return nil, fmt.Errorf("no filters provided")
+	}
+	list, err := QueryVouchers(filters, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	if len(list) > 1 {
+		return nil, fmt.Errorf("multiple vouchers matched filters")
+	}
+	return &list[0], nil
+}
+
+// QueryVouchers returns owner vouchers matching optional filters.
+// If includeCBOR is true, the CBOR column is selected and populated.
+// Results are ordered by updated_at DESC.
+func QueryVouchers(filters map[string]interface{}, includeCBOR bool) ([]Voucher, error) {
+	var query, fields string
+	fields = "guid, device_info, created_at, updated_at"
+	if includeCBOR {
+		fields += ", cbor"
+	}
+	query = fmt.Sprintf("SELECT %s FROM owner_vouchers WHERE 1=1", fields)
+	args := make([]interface{}, 0, 2)
+	if v, ok := filters["guid"]; ok {
+		b, ok := v.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for guid filter; want []byte")
+		}
+		query += " AND guid = ?"
+		args = append(args, b)
+	}
+	if v, ok := filters["device_info"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for device_info filter; want string")
+		}
+		query += " AND device_info = ?"
+		args = append(args, s)
+	}
+	query += " ORDER BY updated_at DESC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []Voucher
+	for rows.Next() {
+		var v Voucher
+		var createdAt, updatedAt int64
+		if includeCBOR {
+			if err := rows.Scan(&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt, &v.CBOR); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := rows.Scan(&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt); err != nil {
+				return nil, err
+			}
+		}
+		v.CreatedAt = time.UnixMicro(createdAt)
+		v.UpdatedAt = time.UnixMicro(updatedAt)
+		list = append(list, v)
+	}
+	return list, nil
 }
 
 func FetchOwnerKeys() ([]OwnerKey, error) {
@@ -76,7 +152,14 @@ func FetchOwnerKeys() ([]OwnerKey, error) {
 }
 
 func InsertVoucher(voucher Voucher) error {
-	_, err := db.Exec("INSERT INTO owner_vouchers (guid, cbor) VALUES (?, ?)", voucher.GUID, voucher.CBOR)
+	_, err := db.Exec(
+		"INSERT INTO owner_vouchers (guid, device_info, cbor, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		voucher.GUID,
+		voucher.DeviceInfo,
+		voucher.CBOR,
+		voucher.CreatedAt.UnixMicro(),
+		voucher.UpdatedAt.UnixMicro(),
+	)
 	return err
 }
 

@@ -216,6 +216,7 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	// Handle messages
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
+	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
 	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&rvInfo))
 	httpHandler := api.NewHTTPHandler(handler, db).RegisterRoutes(apiRouter)
 
