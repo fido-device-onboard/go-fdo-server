@@ -3,13 +3,18 @@
 
 package db
 
+import "time"
+
 type Data struct {
 	Value interface{} `json:"value"`
 }
 
 type Voucher struct {
-	GUID []byte `json:"guid"`
-	CBOR []byte `json:"cbor"`
+	GUID       []byte    `json:"guid"`
+	CBOR       []byte    `json:"cbor"`
+	DeviceInfo string    `json:"device_info"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type OwnerKey struct {

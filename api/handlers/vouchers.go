@@ -8,12 +8,13 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
-	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
 
@@ -29,40 +30,104 @@ import (
 
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 	guidHex := r.URL.Query().Get("guid")
-	if guidHex == "" {
-		http.Error(w, "GUID is required", http.StatusBadRequest)
-		return
+	deviceInfo := r.URL.Query().Get("device_info")
+
+	filters := make(map[string]interface{})
+
+	if guidHex != "" {
+		if !utils.IsValidGUID(guidHex) {
+			http.Error(w, fmt.Sprintf("Invalid GUID: %s", guidHex), http.StatusBadRequest)
+			return
+		}
+
+		guid, err := hex.DecodeString(guidHex)
+		if err != nil {
+			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
+			return
+		}
+		filters["guid"] = guid
 	}
 
-	if !utils.IsValidGUID(guidHex) {
-		http.Error(w, fmt.Sprintf("Invalid GUID: %s", guidHex), http.StatusBadRequest)
-		return
+	if deviceInfo != "" {
+		filters["device_info"] = deviceInfo
 	}
 
-	guid, err := hex.DecodeString(guidHex)
-	if err != nil {
-		http.Error(w, "Invalid GUID format", http.StatusBadRequest)
-		return
-	}
-
-	voucher, err := db.FetchVoucher(guid)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			slog.Debug("Voucher not found", "GUID", guidHex)
-			http.Error(w, "Voucher not found", http.StatusNotFound)
-		} else {
-			slog.Debug("Error querying database", "error", err)
+	// No filters: list all vouchers (without CBOR) as JSON
+	if len(filters) == 0 {
+		vouchers, err := db.ListVouchers()
+		if err != nil {
+			slog.Debug("Error querying vouchers", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		type voucherView struct {
+			GUID       string `json:"guid"`
+			DeviceInfo string `json:"device_info"`
+			CreatedAt  int64  `json:"created_at"`
+			UpdatedAt  int64  `json:"updated_at"`
+		}
+		out := make([]voucherView, 0, len(vouchers))
+		for _, v := range vouchers {
+			out = append(out, voucherView{
+				GUID:       fmt.Sprintf("%x", v.GUID),
+				DeviceInfo: v.DeviceInfo,
+				CreatedAt:  v.CreatedAt.UnixMicro(),
+				UpdatedAt:  v.UpdatedAt.UnixMicro(),
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(out); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
+	// Filters provided: return JSON list (may contain 0..n entries) without CBOR
+	vouchers, err := db.QueryVouchers(filters)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type voucherView struct {
+		GUID       string `json:"guid"`
+		DeviceInfo string `json:"device_info"`
+		CreatedAt  int64  `json:"created_at"`
+		UpdatedAt  int64  `json:"updated_at"`
+	}
+	out := make([]voucherView, 0, len(vouchers))
+	for _, v := range vouchers {
+		out = append(out, voucherView{
+			GUID:       fmt.Sprintf("%x", v.GUID),
+			DeviceInfo: v.DeviceInfo,
+			CreatedAt:  v.CreatedAt.UnixMicro(),
+			UpdatedAt:  v.UpdatedAt.UnixMicro(),
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(out); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GetVoucherByGUIDHandler returns a PEM-encoded voucher by path GUID.
+func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
+	guidHex := r.PathValue("guid")
+	if !utils.IsValidGUID(guidHex) {
+		http.Error(w, "Invalid GUID", http.StatusBadRequest)
+		return
+	}
+	guid, err := hex.DecodeString(guidHex)
+	if err != nil {
+		http.Error(w, "Invalid GUID format", http.StatusBadRequest)
+		return
+	}
+	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guid})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/x-pem-file")
-	if err := pem.Encode(w, &pem.Block{
-		Type:  "OWNERSHIP VOUCHER",
-		Bytes: voucher.CBOR,
-	}); err != nil {
-		slog.Debug("Error encoding voucher", "error", err)
+	if err := pem.Encode(w, &pem.Block{Type: "OWNERSHIP VOUCHER", Bytes: voucher.CBOR}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -89,7 +154,7 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 				return
 			}
 
-			if dbOv, err := db.FetchVoucher(ov.Header.Val.GUID[:]); err == nil {
+			if dbOv, err := db.FetchVoucher(map[string]interface{}{"guid": ov.Header.Val.GUID[:]}); err == nil {
 				if bytes.Equal(block.Bytes, dbOv.CBOR) {
 					slog.Debug("Voucher already exists", "guid", ov.Header.Val.GUID[:])
 					continue
@@ -146,7 +211,7 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 			// TODO: https://github.com/fido-device-onboard/go-fdo-server/issues/18
 			slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
 
-			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes}); err != nil {
+			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes, DeviceInfo: ov.Header.Val.DeviceInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
 				slog.Debug("Error inserting into database", "error", err.Error())
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return

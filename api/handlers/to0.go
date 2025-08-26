@@ -34,7 +34,7 @@ func To0Handler(state *To0HandlerState) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		ov, err := db.FetchVoucher(guid)
+		ov, err := db.FetchVoucher(map[string]interface{}{"guid": guid})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
