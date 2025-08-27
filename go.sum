@@ -9,8 +9,8 @@ github.com/fido-device-onboard/go-fdo v0.0.0-20250827140410-b3da78b7cfa0 h1:BSSC
 github.com/fido-device-onboard/go-fdo v0.0.0-20250827140410-b3da78b7cfa0/go.mod h1:01JaWYOQtO5PP2MjiddBMzfAXmx9WPILx+IHwWXszAA=
 github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2 h1:Gg+lhFrrGf/fMxdY5koO2UrSaOmpEpiZ1Wv+Ylrvcfw=
 github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2/go.mod h1:OlL5PQ2GtOUf05qzWFj9cCCCS9rR2hFAvYGvseabOTI=
-github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250512135234-b46a4b0731f2 h1:OvNQ9cceLmFPObHS/bA9tgvXJe3r8Q7+PWwJyfrcP78=
-github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250512135234-b46a4b0731f2/go.mod h1:ByF22+mkncB+eVA7+FCmSuyin8DzzO7pc9O390CMQ8s=
+github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250827140410-b3da78b7cfa0 h1:/D9DlmBzLCwse4x65SiGBBlwkqLmAmqG18g3xVB6zdU=
+github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250827140410-b3da78b7cfa0/go.mod h1:lBAbH31BOMrk7aPNTahPJpOSPOfsV+GVI3FFdlgSbUI=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/mattn/go-colorable v0.1.4/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
