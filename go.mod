@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/fido-device-onboard/go-fdo v0.0.0-20250827140410-b3da78b7cfa0
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
-	github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250512135234-b46a4b0731f2
+	github.com/fido-device-onboard/go-fdo/sqlite v0.0.0-20250827140410-b3da78b7cfa0
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/time v0.11.0
 	hermannm.dev/devlog v0.5.0

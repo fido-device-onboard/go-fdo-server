@@ -18,6 +18,7 @@ import (
 )
 
 func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, useTLS bool) error {
+	// TODO: use protocol.ParseOwnerRvInfo()
 	to0Addr1, to0Addr2, err := rvinfo.GetRVIPAddress(RvInfo)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -44,6 +45,7 @@ func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	refresh, err := (&fdo.TO0Client{
 		Vouchers:  voucherState,
 		OwnerKeys: keyState,
+		TTL:       600, // this should be configurable via flags too, below too
 	}).RegisterBlob(context.Background(), tls.TlsTransport(to0Addr1, nil, useTLS), guid, to2Addrs)
 	if err != nil {
 		slog.Debug("failed to", "connect", to0Addr1)
@@ -51,6 +53,7 @@ func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 		refresh, err = (&fdo.TO0Client{
 			Vouchers:  voucherState,
 			OwnerKeys: keyState,
+			TTL:       600,
 		}).RegisterBlob(context.Background(), tls.TlsTransport(to0Addr2, nil, useTLS), guid, to2Addrs)
 		if err != nil {
 			return fmt.Errorf("error performing to0: %w", err)
