@@ -21,23 +21,24 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+
+	"github.com/fido-device-onboard/go-fdo-server/api"
+	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 )
 
 var (
-	address          string
-	manufacturingKey string
-	deviceCACert     string
-	deviceCAKey      string
-	ownerPKey        string
+	address             string
+	manufacturerKeyPath string
+	deviceCACertPath    string
+	deviceCAKeyPath     string
+	ownerPublicKeyPath  string
 )
 
 // serveCmd represents the serve command
@@ -137,59 +138,40 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func getSingleOwnerManufacturerState() (*SingleOwnerManufacturer, error) {
-	mfgKey, err := parsePrivateKey(manufacturingKey)
+func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
+	mfgKey, err := parsePrivateKey(manufacturerKeyPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	mfgKeyType, err := getPrivateKeyType(mfgKey)
+	deviceKey, err := parsePrivateKey(deviceCAKeyPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	deviceKey, err := parsePrivateKey(deviceCAKey)
+	deviceCA, err := os.ReadFile(deviceCACertPath)
 	if err != nil {
-		return nil, err
-	}
-	deviceCAKeyType, err := getPrivateKeyType(deviceKey)
-	if err != nil {
-		return nil, err
-	}
-	deviceCA, err := os.ReadFile(deviceCACert)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	blk, _ := pem.Decode(deviceCA)
 	parsedDeviceCACert, err := x509.ParseCertificate(blk.Bytes)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	ownerPublicKey, err := os.ReadFile(ownerPKey)
+	// TODO: chain length >1 should be supported too
+	deviceCAChain := []*x509.Certificate{parsedDeviceCACert}
+
+	// Parse
+	ownerPublicKey, err := os.ReadFile(ownerPublicKeyPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	block, _ := pem.Decode([]byte(ownerPublicKey))
 	if block == nil {
-		return nil, fmt.Errorf("unable to decode owner public key")
+		return fmt.Errorf("unable to decode owner public key")
 	}
-	// in the future we need to also accept owner public keys directly
+	// TODO: Support PKIX public keys
+	// TODO: Support certificate chains > 1
 	var ownerCert *x509.Certificate
 	ownerCert, err = x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	return &SingleOwnerManufacturer{
-		ownerKey: ownerCert.PublicKey,
-		// TODO: chain length >1 should be supported too
-		chain:           []*x509.Certificate{parsedDeviceCACert},
-		mfgKey:          mfgKey,
-		mfgKeyType:      mfgKeyType,
-		deviceCAKey:     deviceKey,
-		deviceCAKeyType: deviceCAKeyType,
-	}, nil
-}
-
-func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
-	state, err := getSingleOwnerManufacturerState()
 	if err != nil {
 		return err
 	}
@@ -200,16 +182,24 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
 			Session:               db,
 			Vouchers:              db,
-			SignDeviceCertificate: custom.SignDeviceCertificate(state.deviceCAKey, state.chain),
+			SignDeviceCertificate: custom.SignDeviceCertificate(deviceKey, deviceCAChain),
 			DeviceInfo: func(ctx context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.PublicKey, error) {
-				mfgPubKey, err := encodePublicKey(info.KeyType, info.KeyEncoding, state.mfgKey.Public(), state.chain)
+				// TODO: Parse manufacturer key chain (different than device CA chain)
+				mfgPubKey, err := encodePublicKey(info.KeyType, info.KeyEncoding, mfgKey.Public(), nil)
 				if err != nil {
 					return "", protocol.PublicKey{}, err
 				}
 				return info.DeviceInfo, *mfgPubKey, nil
 			},
-			BeforeVoucherPersist: state.Extend,
-			RvInfo:               func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
+			BeforeVoucherPersist: func(ctx context.Context, ov *fdo.Voucher) error {
+				extended, err := fdo.ExtendVoucher(ov, mfgKey, []*x509.Certificate{ownerCert}, nil)
+				if err != nil {
+					return err
+				}
+				*ov = *extended
+				return nil
+			},
+			RvInfo: func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
 		},
 	}
 
@@ -252,63 +242,11 @@ func encodePublicKey(keyType protocol.KeyType, keyEncoding protocol.KeyEncoding,
 	}
 }
 
-type SingleOwnerManufacturer struct {
-	ownerKey        crypto.PublicKey
-	chain           []*x509.Certificate
-	mfgKey          crypto.Signer
-	mfgKeyType      protocol.KeyType
-	deviceCAKey     crypto.Signer
-	deviceCAKeyType protocol.KeyType
-}
-
-func (state *SingleOwnerManufacturer) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
-	return state.deviceCAKey, state.chain, nil
-}
-
-func (state *SingleOwnerManufacturer) Extend(ctx context.Context, ov *fdo.Voucher) error {
-	mfgKey := ov.Header.Val.ManufacturerKey
-	keyType, rsaBits := mfgKey.Type, mfgKey.RsaBits()
-	if keyType != state.mfgKeyType {
-		return fmt.Errorf("auto extend: invalid key type %T", state.deviceCAKey)
-	}
-	if state.deviceCAKeyType == protocol.Rsa2048RestrKeyType {
-		if rsaBits != 2048 {
-			return fmt.Errorf("auto extend: invalid rsa bits %d", rsaBits)
-		}
-	}
-	switch state.ownerKey.(type) {
-	case *ecdsa.PublicKey:
-		nextOwner, ok := state.ownerKey.(*ecdsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("auto extend: owner key must be %s", keyType)
-		}
-		extended, err := fdo.ExtendVoucher(ov, state.mfgKey, nextOwner, nil)
-		if err != nil {
-			return err
-		}
-		*ov = *extended
-		return nil
-	case *rsa.PublicKey:
-		nextOwner, ok := state.ownerKey.(*rsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("auto extend: owner key must be %s", keyType)
-		}
-		extended, err := fdo.ExtendVoucher(ov, state.mfgKey, nextOwner, nil)
-		if err != nil {
-			return err
-		}
-		*ov = *extended
-		return nil
-	default:
-		return fmt.Errorf("auto extend: invalid key type %T", state.mfgKey)
-	}
-}
-
 func init() {
 	rootCmd.AddCommand(manufacturingCmd)
 
-	manufacturingCmd.Flags().StringVar(&manufacturingKey, "manufacturing-key", "", "Manufacturing private key path")
-	manufacturingCmd.Flags().StringVar(&deviceCACert, "device-ca-cert", "", "Device certificate path")
-	manufacturingCmd.Flags().StringVar(&ownerPKey, "owner-cert", "", "Owner certificate path")
-	manufacturingCmd.Flags().StringVar(&deviceCAKey, "device-ca-key", "", "Device CA private key path")
+	manufacturingCmd.Flags().StringVar(&manufacturerKeyPath, "manufacturing-key", "", "Manufacturing private key path")
+	manufacturingCmd.Flags().StringVar(&deviceCACertPath, "device-ca-cert", "", "Device certificate path")
+	manufacturingCmd.Flags().StringVar(&ownerPublicKeyPath, "owner-cert", "", "Owner certificate path")
+	manufacturingCmd.Flags().StringVar(&deviceCAKeyPath, "device-ca-key", "", "Device CA private key path")
 }
