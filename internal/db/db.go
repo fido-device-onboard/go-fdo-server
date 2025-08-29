@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/fido-device-onboard/go-fdo/cbor"
+	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 )
 
@@ -221,4 +223,54 @@ func FetchData(tableName string) (Data, error) {
 	}
 
 	return data, nil
+}
+
+// FetchRvData reads the rvinfo JSON (stored as text) and converts it into
+// [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
+// Expected JSON format: [[[var, value], [var, value], ...], ...]
+func FetchRvData() ([][]protocol.RvInstruction, error) {
+	var value string
+	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
+		return nil, err
+	}
+
+	var raw any
+	if err := json.Unmarshal([]byte(value), &raw); err != nil {
+		return nil, fmt.Errorf("error unmarshalling rvInfo: %w", err)
+	}
+
+	outer, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid rvinfo format: outer not array")
+	}
+
+	out := make([][]protocol.RvInstruction, 0, len(outer))
+	for _, groupVal := range outer {
+		groupArr, ok := groupVal.([]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid rvinfo format: group not array")
+		}
+		group := make([]protocol.RvInstruction, 0, len(groupArr))
+		for _, pairVal := range groupArr {
+			pair, ok := pairVal.([]any)
+			if !ok || len(pair) != 2 {
+				return nil, fmt.Errorf("invalid rvinfo format: pair not [var,value]")
+			}
+			// Variable code
+			varNum, ok := pair[0].(uint8)
+			if !ok {
+				return nil, fmt.Errorf("invalid rv var type: %T", pair[0])
+			}
+			rvVar := protocol.RvVar(varNum)
+
+			// Value CBOR-encoding by variable type
+			enc, err := cbor.Marshal(pair[1])
+			if err != nil {
+				return nil, fmt.Errorf("error CBOR-encoding rv value: %w", err)
+			}
+			group = append(group, protocol.RvInstruction{Variable: rvVar, Value: enc})
+		}
+		out = append(out, group)
+	}
+	return out, nil
 }

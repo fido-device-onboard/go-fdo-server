@@ -28,7 +28,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -200,10 +199,12 @@ func serveOwner(db *sqlite.DB, useTLS bool) error {
 	}
 
 	to2Server := &fdo.TO2Server{
-		Session:         state.DB,
-		Vouchers:        state.DB,
-		OwnerKeys:       state,
-		RvInfo:          func(context.Context, fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
+		Session:   state.DB,
+		Vouchers:  state.DB,
+		OwnerKeys: state,
+		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
+			return voucher.Header.Val.RvInfo, nil
+		},
 		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil },
 	}

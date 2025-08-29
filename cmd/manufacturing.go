@@ -21,16 +21,14 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
+	"github.com/fido-device-onboard/go-fdo-server/api"
+	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
-
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 )
 
 var (
@@ -63,13 +61,7 @@ var manufacturingCmd = &cobra.Command{
 			return err
 		}
 
-		// Retrieve RV info from DB
-		rvInfo, err := rvinfo.FetchRvInfo()
-		if err != nil {
-			return err
-		}
-
-		return serveManufacturing(rvInfo, state, insecureTLS)
+		return serveManufacturing(state, insecureTLS)
 	},
 }
 
@@ -138,7 +130,7 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS bool) error {
+func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
 	mfgKey, err := parsePrivateKey(manufacturerKeyPath)
 	if err != nil {
 		return err
@@ -178,10 +170,10 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 
 	// Create FDO responder
 	handler := &transport.Handler{
-		Tokens: db,
+		Tokens: dbState,
 		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
-			Session:               db,
-			Vouchers:              db,
+			Session:               dbState,
+			Vouchers:              dbState,
 			SignDeviceCertificate: custom.SignDeviceCertificate(deviceKey, deviceCAChain),
 			DeviceInfo: func(ctx context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.PublicKey, error) {
 				// TODO: Parse manufacturer key chain (different than device CA chain)
@@ -199,7 +191,9 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 				*ov = *extended
 				return nil
 			},
-			RvInfo: func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) { return rvinfo.FetchRvInfo() },
+			RvInfo: func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) {
+				return db.FetchRvData()
+			},
 		},
 	}
 
@@ -207,8 +201,8 @@ func serveManufacturing(rvInfo [][]protocol.RvInstruction, db *sqlite.DB, useTLS
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
 	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler(&rvInfo))
-	httpHandler := api.NewHTTPHandler(handler, db).RegisterRoutes(apiRouter)
+	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
+	httpHandler := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewManufacturingServer(address, httpHandler, useTLS)

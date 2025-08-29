@@ -12,20 +12,11 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/ownerinfo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/tls"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 )
 
-func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, useTLS bool) error {
-	// TODO: use protocol.ParseOwnerRvInfo()
-	to0Addr1, to0Addr2, err := rvinfo.GetRVIPAddress(RvInfo)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return fmt.Errorf("error parsing TO0 Address from RV Info: %w", err)
-	}
-
-	// Parse to0-guid flag
+func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, useTLS bool) error { // Parse to0-guid flag
 	guidBytes, err := hex.DecodeString(to0Guid)
 	if err != nil {
 		return fmt.Errorf("error parsing hex GUID of device to register RV blob: %w", err)
@@ -42,25 +33,27 @@ func RegisterRvBlob(RvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 		return fmt.Errorf("error fetching ownerinfo: %w", err)
 	}
 
-	refresh, err := (&fdo.TO0Client{
-		Vouchers:  voucherState,
-		OwnerKeys: keyState,
-		TTL:       600, // this should be configurable via flags too, below too
-	}).RegisterBlob(context.Background(), tls.TlsTransport(to0Addr1, nil, useTLS), guid, to2Addrs)
-	if err != nil {
-		slog.Debug("failed to", "connect", to0Addr1)
-		slog.Debug("trying to", "connect", to0Addr2)
-		refresh, err = (&fdo.TO0Client{
-			Vouchers:  voucherState,
-			OwnerKeys: keyState,
-			TTL:       600,
-		}).RegisterBlob(context.Background(), tls.TlsTransport(to0Addr2, nil, useTLS), guid, to2Addrs)
-		if err != nil {
-			return fmt.Errorf("error performing to0: %w", err)
+	ownerRvInfo := protocol.ParseOwnerRvInfo(rvInfo)
+	if len(ownerRvInfo) == 0 {
+		return fmt.Errorf("no RV info found that is usable for the owner")
+	}
+	for _, rv := range ownerRvInfo {
+		if len(rv.URLs) == 0 {
+			slog.Error("no usable rendezvous URLs were found for RV directive", "rv", rv)
+			continue
+		}
+		for _, url := range rv.URLs {
+			refresh, err := (&fdo.TO0Client{
+				Vouchers:  voucherState,
+				OwnerKeys: keyState,
+			}).RegisterBlob(context.Background(), tls.TlsTransport(url.String(), nil, useTLS), guid, to2Addrs)
+			if err != nil {
+				slog.Error("failed to", "connect", url.String())
+				continue
+			}
+			slog.Info("to0 refresh", "duration", time.Duration(refresh)*time.Second)
+			break
 		}
 	}
-
-	slog.Debug("to0 refresh", "duration", time.Duration(refresh)*time.Second)
-
 	return nil
 }
