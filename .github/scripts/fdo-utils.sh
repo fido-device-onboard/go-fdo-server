@@ -158,7 +158,7 @@ get_ov_from_manufacturer () {
   local manufacturer_service=$1
   local guid=$2
   local output=$3
-  curl --fail --verbose --silent "http://${manufacturer_service}/api/v1/vouchers?guid=${guid}" -o "${output}"
+  curl --fail --verbose --silent "http://${manufacturer_service}/api/v1/vouchers/${guid}" -o "${output}"
 }
 
 send_ov_to_owner () {
