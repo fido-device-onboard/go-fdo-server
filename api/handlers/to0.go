@@ -9,9 +9,9 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 )
 
 type To0HandlerState struct {
@@ -39,12 +39,13 @@ func To0Handler(state *To0HandlerState) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rvInfo, err := rvinfo.GetRvInfoFromVoucher(ov.CBOR)
-		if err != nil {
+		var voucher fdo.Voucher
+		if err := cbor.Unmarshal(ov.CBOR, &voucher); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := to0.RegisterRvBlob(rvInfo, to0Guid, state.VoucherState, state.KeyState, state.UseTLS); err != nil {
+
+		if err := to0.RegisterRvBlob(voucher.Header.Val.RvInfo, to0Guid, state.VoucherState, state.KeyState, state.UseTLS); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
