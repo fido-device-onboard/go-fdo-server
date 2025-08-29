@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
@@ -134,24 +135,6 @@ func QueryVouchers(filters map[string]interface{}, includeCBOR bool) ([]Voucher,
 	return list, nil
 }
 
-func FetchOwnerKeys() ([]OwnerKey, error) {
-	rows, err := db.Query("SELECT type, pkcs8, x509_chain FROM owner_keys")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ownerKeys []OwnerKey
-	for rows.Next() {
-		var ownerKey OwnerKey
-		if err := rows.Scan(&ownerKey.Type, &ownerKey.PKCS8, &ownerKey.X509Chain); err != nil {
-			return nil, err
-		}
-		ownerKeys = append(ownerKeys, ownerKey)
-	}
-	return ownerKeys, nil
-}
-
 func InsertVoucher(voucher Voucher) error {
 	_, err := db.Exec(
 		"INSERT INTO owner_vouchers (guid, device_info, cbor, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -162,16 +145,6 @@ func InsertVoucher(voucher Voucher) error {
 		voucher.UpdatedAt.UnixMicro(),
 	)
 	return err
-}
-
-func UpdateOwnerKeys(ownerKeys []OwnerKey) error {
-	for _, ownerKey := range ownerKeys {
-		_, err := db.Exec("UPDATE owner_keys SET pkcs8 = ?, x509_chain = ? WHERE type = ?", ownerKey.PKCS8, ownerKey.X509Chain, ownerKey.Type)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func CheckDataExists(tableName string) (bool, error) {
@@ -228,75 +201,12 @@ func FetchData(tableName string) (Data, error) {
 
 // FetchRvData reads the rvinfo JSON (stored as text) and converts it into
 // [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
-// Expected JSON format: [[[var, value], [var, value], ...], ...]
 func FetchRvData() ([][]protocol.RvInstruction, error) {
 	var value string
 	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
 		return nil, err
 	}
-
-	var raw any
-	if err := json.Unmarshal([]byte(value), &raw); err != nil {
-		return nil, fmt.Errorf("error unmarshalling rvInfo: %w", err)
-	}
-
-	outer, ok := raw.([]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid rvinfo format: outer not array")
-	}
-
-	out := make([][]protocol.RvInstruction, 0, len(outer))
-	for _, groupVal := range outer {
-		groupArr, ok := groupVal.([]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid rvinfo format: group not array")
-		}
-		group := make([]protocol.RvInstruction, 0, len(groupArr))
-		for _, pairVal := range groupArr {
-			var (
-				rvVar protocol.RvVar
-				val   any
-			)
-			typed, ok := pairVal.([]any)
-			if !ok || len(typed) != 2 {
-				return nil, fmt.Errorf("invalid rvinfo format: pair not [var,value]")
-			}
-			fvar, ok := typed[0].(float64)
-			if !ok {
-				return nil, fmt.Errorf("invalid rv var type: %T", typed[0])
-			}
-			rvVar = protocol.RvVar(uint8(fvar))
-			val = typed[1]
-
-			// Value CBOR-encoding by variable type
-			enc, err := encodeRvValue(rvVar, val)
-			if err != nil {
-				return nil, err
-			}
-			// Bucketize to ensure ports override protocol defaults
-			instr := protocol.RvInstruction{Variable: rvVar, Value: enc}
-			group = append(group, instr)
-		}
-		// Reorder: others -> protocol -> ports
-		var others, protocols, ports []protocol.RvInstruction
-		for _, instr := range group {
-			switch instr.Variable {
-			case protocol.RVDevPort, protocol.RVOwnerPort:
-				ports = append(ports, instr)
-			case protocol.RVProtocol:
-				protocols = append(protocols, instr)
-			default:
-				others = append(others, instr)
-			}
-		}
-		reordered := make([]protocol.RvInstruction, 0, len(group))
-		reordered = append(reordered, others...)
-		reordered = append(reordered, protocols...)
-		reordered = append(reordered, ports...)
-		out = append(out, reordered)
-	}
-
-	return out, nil
+	return parseHumanReadableRvJSON([]byte(value))
 }
 
 func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
@@ -310,6 +220,8 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 		default:
 			return cbor.Marshal(v)
 		}
+	case bool:
+		return cbor.Marshal(v)
 	case float64:
 		// JSON numbers -> coerce by variable semantics
 		switch rvVar {
@@ -327,65 +239,254 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 	}
 }
 
+// parseHumanReadableRvJSON parses a JSON like
+// [{"dns":"fdo.example.com","device_port":"8082","owner_port":"8082","protocol":"http","ip":"127.0.0.1"}]
+// into [][]protocol.RvInstruction. It maps human-readable keys to RV variables
+// and converts protocol strings to the appropriate numeric code.
+func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error) {
+	type rvHuman struct {
+		DNS        string `json:"dns"`
+		IP         string `json:"ip"`
+		Protocol   string `json:"protocol"`
+		Medium     string `json:"medium"`
+		DevicePort string `json:"device_port"`
+		OwnerPort  string `json:"owner_port"`
+		WifiSSID   string `json:"wifi_ssid"`
+		WifiPW     string `json:"wifi_pw"`
+		DevOnly    bool   `json:"dev_only"`
+		OwnerOnly  bool   `json:"owner_only"`
+		RvBypass   bool   `json:"rv_bypass"`
+	}
+	var items []rvHuman
+	if err := json.Unmarshal(rawJSON, &items); err != nil {
+		return nil, fmt.Errorf("invalid rvinfo JSON: %w", err)
+	}
+
+	out := make([][]protocol.RvInstruction, 0, len(items))
+	for _, item := range items {
+		var (
+			others    []protocol.RvInstruction
+			protocols []protocol.RvInstruction
+			ports     []protocol.RvInstruction
+		)
+
+		if item.DNS != "" {
+			enc, err := encodeRvValue(protocol.RVDns, item.DNS)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVDns, Value: enc})
+		}
+		if item.IP != "" {
+			enc, err := encodeRvValue(protocol.RVIPAddress, item.IP)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: enc})
+		}
+		if item.Protocol != "" {
+			code, err := protocolCodeFromString(item.Protocol)
+			if err != nil {
+				return nil, err
+			}
+			enc, err := encodeRvValue(protocol.RVProtocol, uint8(code))
+			if err != nil {
+				return nil, err
+			}
+			protocols = append(protocols, protocol.RvInstruction{Variable: protocol.RVProtocol, Value: enc})
+		}
+		if item.Medium != "" {
+			m, err := parseMediumValue(item.Medium)
+			if err != nil {
+				return nil, fmt.Errorf("medium: %w", err)
+			}
+			enc, err := encodeRvValue(protocol.RVMedium, uint8(m))
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVMedium, Value: enc})
+		}
+		if item.DevicePort != "" {
+			num, err := parsePortValue(item.DevicePort)
+			if err != nil {
+				return nil, fmt.Errorf("device_port: %w", err)
+			}
+			enc, err := encodeRvValue(protocol.RVDevPort, num)
+			if err != nil {
+				return nil, err
+			}
+			ports = append(ports, protocol.RvInstruction{Variable: protocol.RVDevPort, Value: enc})
+		}
+		if item.OwnerPort != "" {
+			num, err := parsePortValue(item.OwnerPort)
+			if err != nil {
+				return nil, fmt.Errorf("owner_port: %w", err)
+			}
+			enc, err := encodeRvValue(protocol.RVOwnerPort, num)
+			if err != nil {
+				return nil, err
+			}
+			ports = append(ports, protocol.RvInstruction{Variable: protocol.RVOwnerPort, Value: enc})
+		}
+		if item.WifiSSID != "" {
+			enc, err := encodeRvValue(protocol.RVWifiSsid, item.WifiSSID)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiSsid, Value: enc})
+		}
+		if item.WifiPW != "" {
+			enc, err := encodeRvValue(protocol.RVWifiPw, item.WifiPW)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiPw, Value: enc})
+		}
+		if item.DevOnly {
+			enc, err := encodeRvValue(protocol.RVDevOnly, true)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVDevOnly, Value: enc})
+		}
+		if item.OwnerOnly {
+			enc, err := encodeRvValue(protocol.RVOwnerOnly, true)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVOwnerOnly, Value: enc})
+		}
+		if item.RvBypass {
+			enc, err := encodeRvValue(protocol.RVBypass, true)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVBypass, Value: enc})
+		}
+
+		group := make([]protocol.RvInstruction, 0, len(others)+len(protocols)+len(ports))
+		group = append(group, others...)
+		group = append(group, protocols...)
+		group = append(group, ports...)
+		out = append(out, group)
+	}
+	return out, nil
+}
+
+func parsePortValue(v any) (uint16, error) {
+	switch t := v.(type) {
+	case float64:
+		return uint16(t), nil
+	case string:
+		if t == "" {
+			return 0, fmt.Errorf("empty")
+		}
+		i, err := strconv.Atoi(t)
+		if err != nil {
+			return 0, err
+		}
+		return uint16(i), nil
+	default:
+		return 0, fmt.Errorf("unsupported type %T", v)
+	}
+}
+
+func protocolCodeFromString(s string) (uint8, error) {
+	switch s {
+	case "rest":
+		return uint8(protocol.RVProtRest), nil
+	case "http":
+		return uint8(protocol.RVProtHTTP), nil
+	case "https":
+		return uint8(protocol.RVProtHTTPS), nil
+	case "tcp":
+		return uint8(protocol.RVProtTCP), nil
+	case "tls":
+		return uint8(protocol.RVProtTLS), nil
+	case "coap+tcp":
+		return uint8(protocol.RVProtCoapTCP), nil
+	case "coap":
+		return uint8(protocol.RVProtCoapUDP), nil
+	default:
+		return 0, fmt.Errorf("unsupported protocol %q", s)
+	}
+}
+
+func parseMediumValue(v any) (uint8, error) {
+	switch t := v.(type) {
+	case float64:
+		return uint8(t), nil
+	case string:
+		switch t {
+		case "eth_all":
+			return protocol.RVMedEthAll, nil
+		case "wifi_all":
+			return protocol.RVMedWifiAll, nil
+		default:
+			return 0, fmt.Errorf("unsupported medium %q", t)
+		}
+	default:
+		return 0, fmt.Errorf("unsupported medium type %T", v)
+	}
+}
+
 // FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
-// into []protocol.RvTO2Addr. Expected JSON format:
-// [[ipOrNull, dnsOrNull, port, proto], ...]
+// into []protocol.RvTO2Addr.
 func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
 	var value string
 	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
 		return nil, err
 	}
+	return parseHumanToTO2AddrsJSON([]byte(value))
+}
 
-	var raw any
-	if err := json.Unmarshal([]byte(value), &raw); err != nil {
-		return nil, fmt.Errorf("error unmarshalling owner_info: %w", err)
+// ParseHumanToTO2AddrsJSON parses a JSON like
+// [{"dns":"fdo.example.com","port":"8082","protocol":"http","ip":"127.0.0.1"}]
+// into []protocol.RvTO2Addr.
+func parseHumanToTO2AddrsJSON(rawJSON []byte) ([]protocol.RvTO2Addr, error) {
+	// Strongly-typed JSON for validation
+	type to2Human struct {
+		DNS      string `json:"dns"`
+		IP       string `json:"ip"`
+		Port     string `json:"port"`
+		Protocol string `json:"protocol"`
 	}
-	items, ok := raw.([]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid owner_info format: outer not array")
+	var items []to2Human
+	if err := json.Unmarshal(rawJSON, &items); err != nil {
+		return nil, fmt.Errorf("invalid TO2 addrs JSON: %w", err)
 	}
 
 	out := make([]protocol.RvTO2Addr, 0, len(items))
-	for _, it := range items {
-		arr, ok := it.([]any)
-		if !ok || len(arr) != 4 {
-			return nil, fmt.Errorf("invalid owner_info item: expected 4 elements")
-		}
+	for _, item := range items {
+		var (
+			ipPtr  *net.IP
+			dnsPtr *string
+			port   uint16
+			proto  protocol.TransportProtocol
+		)
 
-		// ip (string or null)
-		var ipPtr *net.IP
-		if arr[0] != nil {
-			if s, ok := arr[0].(string); ok {
-				ip := net.ParseIP(s)
-				ipPtr = &ip
-			} else {
-				return nil, fmt.Errorf("invalid ip element type: %T", arr[0])
+		if item.IP != "" {
+			ip := net.ParseIP(item.IP)
+			ipPtr = &ip
+		}
+		if item.DNS != "" {
+			dns := item.DNS
+			dnsPtr = &dns
+		}
+		if item.Port != "" {
+			p, err := parsePortValue(item.Port)
+			if err != nil {
+				return nil, fmt.Errorf("port: %w", err)
 			}
+			port = p
 		}
-
-		// dns (string or null)
-		var dnsPtr *string
-		if arr[1] != nil {
-			if s, ok := arr[1].(string); ok {
-				dnsPtr = &s
-			} else {
-				return nil, fmt.Errorf("invalid dns element type: %T", arr[1])
+		if item.Protocol != "" {
+			tp, err := transportProtocolFromString(item.Protocol)
+			if err != nil {
+				return nil, err
 			}
+			proto = tp
 		}
-
-		// port (number)
-		fport, ok := arr[2].(float64)
-		if !ok {
-			return nil, fmt.Errorf("invalid port element type: %T", arr[2])
-		}
-		port := uint16(fport)
-
-		// proto (number)
-		fproto, ok := arr[3].(float64)
-		if !ok {
-			return nil, fmt.Errorf("invalid proto element type: %T", arr[3])
-		}
-		proto := protocol.TransportProtocol(fproto)
 
 		out = append(out, protocol.RvTO2Addr{
 			IPAddress:         ipPtr,
@@ -395,4 +496,23 @@ func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
 		})
 	}
 	return out, nil
+}
+
+func transportProtocolFromString(s string) (protocol.TransportProtocol, error) {
+	switch s {
+	case "tcp":
+		return protocol.TCPTransport, nil
+	case "tls":
+		return protocol.TLSTransport, nil
+	case "http":
+		return protocol.HTTPTransport, nil
+	case "coap":
+		return protocol.CoAPTransport, nil
+	case "https":
+		return protocol.HTTPSTransport, nil
+	case "coaps":
+		return protocol.CoAPSTransport, nil
+	default:
+		return 0, fmt.Errorf("unsupported transport protocol %q", s)
+	}
 }
