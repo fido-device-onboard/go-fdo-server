@@ -15,11 +15,9 @@ import (
 	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/rvinfo"
-	"github.com/fido-device-onboard/go-fdo/protocol"
 )
 
-func RvInfoHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
+func RvInfoHandler() http.HandlerFunc {
 	var mu sync.Mutex
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
@@ -27,9 +25,9 @@ func RvInfoHandler(rvInfo *[][]protocol.RvInstruction) http.HandlerFunc {
 		case http.MethodGet:
 			getRvData(w, r)
 		case http.MethodPost:
-			createRvData(w, r, rvInfo, &mu)
+			createRvData(w, r, &mu)
 		case http.MethodPut:
-			updateRvData(w, r, rvInfo, &mu)
+			updateRvData(w, r, &mu)
 		default:
 			slog.Debug("Method not allowed", "method", r.Method, "path", r.URL.Path)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -55,7 +53,7 @@ func getRvData(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(rvData)
 }
 
-func createRvData(w http.ResponseWriter, r *http.Request, rvInfo *[][]protocol.RvInstruction, mu *sync.Mutex) {
+func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -84,18 +82,12 @@ func createRvData(w http.ResponseWriter, r *http.Request, rvInfo *[][]protocol.R
 
 	slog.Debug("rvData created")
 
-	if err := rvinfo.RetrieveRvInfo(rvInfo); err != nil {
-		slog.Debug("Error updating RVInfo", "error", err)
-		http.Error(w, "Error updating RVInfo", http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(rvData)
 }
 
-func updateRvData(w http.ResponseWriter, r *http.Request, rvInfo *[][]protocol.RvInstruction, mu *sync.Mutex) {
+func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -123,12 +115,6 @@ func updateRvData(w http.ResponseWriter, r *http.Request, rvInfo *[][]protocol.R
 	}
 
 	slog.Debug("rvData updated")
-
-	if err := rvinfo.RetrieveRvInfo(rvInfo); err != nil {
-		slog.Debug("Error updating RVInfo", "error", err)
-		http.Error(w, "Error updating RVInfo", http.StatusInternalServerError)
-		return
-	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rvData)
