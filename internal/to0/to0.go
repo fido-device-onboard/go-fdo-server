@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/ownerinfo"
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/tls"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 )
@@ -28,7 +28,7 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	copy(guid[:], guidBytes)
 
 	// Retrieve owner info from DB
-	to2Addrs, err := ownerinfo.FetchOwnerInfo()
+	to2Addrs, err := db.FetchOwnerInfoData()
 	if err != nil {
 		return fmt.Errorf("error fetching ownerinfo: %w", err)
 	}

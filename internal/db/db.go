@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
@@ -252,25 +253,146 @@ func FetchRvData() ([][]protocol.RvInstruction, error) {
 		}
 		group := make([]protocol.RvInstruction, 0, len(groupArr))
 		for _, pairVal := range groupArr {
-			pair, ok := pairVal.([]any)
-			if !ok || len(pair) != 2 {
+			var (
+				rvVar protocol.RvVar
+				val   any
+			)
+			typed, ok := pairVal.([]any)
+			if !ok || len(typed) != 2 {
 				return nil, fmt.Errorf("invalid rvinfo format: pair not [var,value]")
 			}
-			// Variable code
-			varNum, ok := pair[0].(uint8)
+			fvar, ok := typed[0].(float64)
 			if !ok {
-				return nil, fmt.Errorf("invalid rv var type: %T", pair[0])
+				return nil, fmt.Errorf("invalid rv var type: %T", typed[0])
 			}
-			rvVar := protocol.RvVar(varNum)
+			rvVar = protocol.RvVar(uint8(fvar))
+			val = typed[1]
 
 			// Value CBOR-encoding by variable type
-			enc, err := cbor.Marshal(pair[1])
+			enc, err := encodeRvValue(rvVar, val)
 			if err != nil {
-				return nil, fmt.Errorf("error CBOR-encoding rv value: %w", err)
+				return nil, err
 			}
-			group = append(group, protocol.RvInstruction{Variable: rvVar, Value: enc})
+			// Bucketize to ensure ports override protocol defaults
+			instr := protocol.RvInstruction{Variable: rvVar, Value: enc}
+			group = append(group, instr)
 		}
-		out = append(out, group)
+		// Reorder: others -> protocol -> ports
+		var others, protocols, ports []protocol.RvInstruction
+		for _, instr := range group {
+			switch instr.Variable {
+			case protocol.RVDevPort, protocol.RVOwnerPort:
+				ports = append(ports, instr)
+			case protocol.RVProtocol:
+				protocols = append(protocols, instr)
+			default:
+				others = append(others, instr)
+			}
+		}
+		reordered := make([]protocol.RvInstruction, 0, len(group))
+		reordered = append(reordered, others...)
+		reordered = append(reordered, protocols...)
+		reordered = append(reordered, ports...)
+		out = append(out, reordered)
+	}
+
+	return out, nil
+}
+
+func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
+	switch v := val.(type) {
+	case string:
+		switch rvVar {
+		case protocol.RVDns:
+			return cbor.Marshal(v)
+		case protocol.RVIPAddress:
+			return cbor.Marshal(net.ParseIP(v))
+		default:
+			return cbor.Marshal(v)
+		}
+	case float64:
+		// JSON numbers -> coerce by variable semantics
+		switch rvVar {
+		case protocol.RVDevPort, protocol.RVOwnerPort:
+			return cbor.Marshal(uint16(v))
+		case protocol.RVProtocol, protocol.RVMedium:
+			return cbor.Marshal(uint8(v))
+		case protocol.RVDelaysec:
+			return cbor.Marshal(uint64(v))
+		default:
+			return cbor.Marshal(int64(v))
+		}
+	default:
+		return cbor.Marshal(v)
+	}
+}
+
+// FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
+// into []protocol.RvTO2Addr. Expected JSON format:
+// [[ipOrNull, dnsOrNull, port, proto], ...]
+func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
+	var value string
+	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
+		return nil, err
+	}
+
+	var raw any
+	if err := json.Unmarshal([]byte(value), &raw); err != nil {
+		return nil, fmt.Errorf("error unmarshalling owner_info: %w", err)
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid owner_info format: outer not array")
+	}
+
+	out := make([]protocol.RvTO2Addr, 0, len(items))
+	for _, it := range items {
+		arr, ok := it.([]any)
+		if !ok || len(arr) != 4 {
+			return nil, fmt.Errorf("invalid owner_info item: expected 4 elements")
+		}
+
+		// ip (string or null)
+		var ipPtr *net.IP
+		if arr[0] != nil {
+			if s, ok := arr[0].(string); ok {
+				ip := net.ParseIP(s)
+				ipPtr = &ip
+			} else {
+				return nil, fmt.Errorf("invalid ip element type: %T", arr[0])
+			}
+		}
+
+		// dns (string or null)
+		var dnsPtr *string
+		if arr[1] != nil {
+			if s, ok := arr[1].(string); ok {
+				dnsPtr = &s
+			} else {
+				return nil, fmt.Errorf("invalid dns element type: %T", arr[1])
+			}
+		}
+
+		// port (number)
+		fport, ok := arr[2].(float64)
+		if !ok {
+			return nil, fmt.Errorf("invalid port element type: %T", arr[2])
+		}
+		port := uint16(fport)
+
+		// proto (number)
+		fproto, ok := arr[3].(float64)
+		if !ok {
+			return nil, fmt.Errorf("invalid proto element type: %T", arr[3])
+		}
+		proto := protocol.TransportProtocol(fproto)
+
+		out = append(out, protocol.RvTO2Addr{
+			IPAddress:         ipPtr,
+			DNSAddress:        dnsPtr,
+			Port:              port,
+			TransportProtocol: proto,
+		})
 	}
 	return out, nil
 }
