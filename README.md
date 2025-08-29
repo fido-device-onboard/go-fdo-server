@@ -82,15 +82,15 @@ curl -fsS http://127.0.0.1:8043/health
 ### Create New RV Info Data
 Send a POST request to create new RV info data, which is stored in the Manufacturer’s database:
 ```
-curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \
+curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \                      
 --header 'Content-Type: text/plain' \
---data-raw '[[[5,"127.0.0.1"],[3,8041],[12,1],[2,"127.0.0.1"],[4,8041]]]'
+--data-raw '[{"dns":"fdo.example.com","device_port":"8041","owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
 ```
 To bypass the TO1 protocol set RVBypass using
 ```
-curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \
+curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \                      
 --header 'Content-Type: text/plain' \
---data-raw '[[[5,"127.0.0.1"],[3,8043],[14],[12,1],[2,"127.0.0.1"],[4,8043]]]'
+--data-raw '[{"dns":"fdo.example.com","device_port":"8043","rv_bypass": "true", "owner_port":"8043","protocol":"http","ip":"127.0.0.1"}]'
 ```
 ### Fetch Current RV Info Data
 Send a GET request to fetch the current RV info data:
@@ -101,18 +101,18 @@ curl --location --request GET 'http://localhost:8038/api/v1/rvinfo'
 ### Update Existing RV Info Data
 Send a PUT request to update the existing RV info data:
 ```
-curl --location --request PUT 'http://localhost:8038/api/v1/rvinfo' \
+curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \                      
 --header 'Content-Type: text/plain' \
---data-raw '[[[5,"127.0.0.1"],[3,8043],[14,false],[12,1],[2,"127.0.0.1"],[4,8043]]]'
+--data-raw '[{"dns":"fdo.example.com","device_port":"8041","rv_bypass": "false", "owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
 ```
 
 ## Managing Owner Redirect Data
 ### Create New Owner Redirect Data
 Send a POST request to create new owner redirect data, which is stored in the Owner’s database:
 ```
-curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \
+curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \               
 --header 'Content-Type: text/plain' \
---data-raw '[["127.0.0.1","127.0.0.1",8043,3]]'
+--data-raw '[{"dns":"fdo.example.com","port":"8043","protocol":"http","ip":"127.0.0.1"}]'
 ```
 
 ### View and Update Existing Owner Redirect Data
