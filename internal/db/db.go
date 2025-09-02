@@ -117,14 +117,12 @@ func QueryVouchers(filters map[string]interface{}, includeCBOR bool) ([]Voucher,
 	for rows.Next() {
 		var v Voucher
 		var createdAt, updatedAt int64
+		dest := []any{&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt}
 		if includeCBOR {
-			if err := rows.Scan(&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt, &v.CBOR); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := rows.Scan(&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt); err != nil {
-				return nil, err
-			}
+			dest = append(dest, &v.CBOR)
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
 		}
 		v.CreatedAt = time.UnixMicro(createdAt)
 		v.UpdatedAt = time.UnixMicro(updatedAt)
