@@ -6,10 +6,8 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 
 	"log/slog"
@@ -57,13 +55,12 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	rvData, err := parseRequestBody(r)
+	rvData, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error parsing request body", "error", err)
-		http.Error(w, "Invalid input", http.StatusBadRequest)
+		slog.Debug("Error reading body", "error", err)
+		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
-
 	if exists, err := db.CheckDataExists("rvinfo"); err != nil {
 		slog.Debug("Error checking rvData existence", "error", err)
 		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
@@ -74,7 +71,7 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.InsertData(rvData, "rvinfo"); err != nil {
+	if err := db.InsertRvData(rvData); err != nil {
 		slog.Debug("Error inserting rvData", "error", err)
 		http.Error(w, "Error inserting rvData", http.StatusInternalServerError)
 		return
@@ -91,10 +88,10 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	rvData, err := parseRequestBody(r)
+	rvData, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error parsing request body", "error", err)
-		http.Error(w, "Invalid input", http.StatusBadRequest)
+		slog.Debug("Error reading body", "error", err)
+		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
 
@@ -108,7 +105,7 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.UpdateDataInDB(rvData, "rvinfo"); err != nil {
+	if err := db.UpdateRvData(rvData); err != nil {
 		slog.Debug("Error updating rvData", "error", err)
 		http.Error(w, "Error updating rvData", http.StatusInternalServerError)
 		return
@@ -118,31 +115,4 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rvData)
-}
-
-func parseRequestBody(r *http.Request) (db.Data, error) {
-	var rvData db.Data
-	contentType := r.Header.Get("Content-Type")
-
-	if !strings.HasPrefix(contentType, "application/json") && !strings.HasPrefix(contentType, "text/plain") {
-		return rvData, fmt.Errorf("unsupported content type: %s", contentType)
-	}
-	defer r.Body.Close()
-
-	if contentType == "text/plain" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return rvData, fmt.Errorf("error reading body: %w", err)
-		}
-		var rawData interface{}
-		if err := json.Unmarshal(body, &rawData); err != nil {
-			return rvData, fmt.Errorf("error unmarshalling body: %w", err)
-		}
-		rvData.Value = rawData
-	} else {
-		if err := json.NewDecoder(r.Body).Decode(&rvData); err != nil {
-			return rvData, fmt.Errorf("error decoding JSON: %w", err)
-		}
-	}
-	return rvData, nil
 }

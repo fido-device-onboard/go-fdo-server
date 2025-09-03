@@ -6,6 +6,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"sync"
 
@@ -52,10 +53,10 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	ownerData, err := parseRequestBody(r)
+	ownerData, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error parsing request body", "error", err)
-		http.Error(w, "Invalid input", http.StatusBadRequest)
+		slog.Debug("Error reading body", "error", err)
+		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
 
@@ -69,7 +70,7 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.InsertData(ownerData, "owner_info"); err != nil {
+	if err := db.InsertOwnerData(ownerData); err != nil {
 		slog.Debug("Error inserting ownerData", "error", err)
 		http.Error(w, "Error inserting ownerData", http.StatusInternalServerError)
 		return
@@ -86,10 +87,10 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	ownerData, err := parseRequestBody(r)
+	ownerData, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error parsing request body", "error", err)
-		http.Error(w, "Invalid input", http.StatusBadRequest)
+		slog.Debug("Error reading body", "error", err)
+		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
 
@@ -103,7 +104,7 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.UpdateDataInDB(ownerData, "owner_info"); err != nil {
+	if err := db.UpdateOwnerData(ownerData); err != nil {
 		slog.Debug("Error updating ownerData", "error", err)
 		http.Error(w, "Error updating ownerData", http.StatusInternalServerError)
 		return

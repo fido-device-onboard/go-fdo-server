@@ -157,27 +157,49 @@ func CheckDataExists(tableName string) (bool, error) {
 	return count > 0, nil
 }
 
-func InsertData(data Data, tableName string) error {
-	value, err := json.Marshal(data.Value)
-	if err != nil {
-		return fmt.Errorf("error marshalling value: %w", err)
-	}
+func InsertData(data []byte, tableName string) error {
 	query := fmt.Sprintf("INSERT INTO %s (id, value) VALUES (1, ?)", tableName)
-	_, err = db.Exec(query, string(value))
-	if err != nil {
+	if _, err := db.Exec(query, data); err != nil {
 		return fmt.Errorf("error inserting data: %w", err)
 	}
 	return nil
 }
 
-func UpdateDataInDB(data Data, tableName string) error {
-	value, err := json.Marshal(data.Value)
-	if err != nil {
-		return fmt.Errorf("error marshalling value: %w", err)
+func InsertOwnerData(data []byte) error {
+	// check the data can be parsed into []protocol.RvTO2Addr
+	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
+		return fmt.Errorf("error parsing ownerinfo data: %w", err)
 	}
+	return InsertData(data, "owner_info")
+}
+
+func UpdateOwnerData(data []byte) error {
+	// check the data can be parsed into []protocol.RvTO2Addr
+	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
+		return fmt.Errorf("error parsing ownerinfo data: %w", err)
+	}
+	return UpdateDataInDB(data, "owner_info")
+}
+
+func InsertRvData(data []byte) error {
+	// check the data can be parsed into [][]protocol.RvInstruction
+	if _, err := parseHumanReadableRvJSON(data); err != nil {
+		return fmt.Errorf("error parsing rvinfo data: %w", err)
+	}
+	return InsertData(data, "rvinfo")
+}
+
+func UpdateRvData(data []byte) error {
+	// check the data can be parsed into [][]protocol.RvInstruction
+	if _, err := parseHumanReadableRvJSON(data); err != nil {
+		return fmt.Errorf("error parsing rvinfo data: %w", err)
+	}
+	return UpdateDataInDB(data, "rvinfo")
+}
+
+func UpdateDataInDB(data []byte, tableName string) error {
 	query := fmt.Sprintf("UPDATE %s SET value = ? WHERE id = 1", tableName)
-	_, err = db.Exec(query, string(value))
-	if err != nil {
+	if _, err := db.Exec(query, data); err != nil {
 		return fmt.Errorf("error updating data: %w", err)
 	}
 	return nil
@@ -342,6 +364,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			}
 			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiPw, Value: enc})
 		}
+		// devonly, owneronly, rvbypass don't need an encoded value
 		if item.DevOnly {
 			enc, err := encodeRvValue(protocol.RVDevOnly, true)
 			if err != nil {
