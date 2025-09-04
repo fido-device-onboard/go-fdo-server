@@ -147,20 +147,18 @@ func InsertVoucher(voucher Voucher) error {
 	return err
 }
 
-func CheckDataExists(tableName string) (bool, error) {
-	var count int
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = 1", tableName)
-	err := db.QueryRow(query).Scan(&count)
-	if err != nil {
-		return false, fmt.Errorf("error counting rows: %w", err)
-	}
-	return count > 0, nil
-}
-
-func InsertData(data []byte, tableName string) error {
+func insertData(data []byte, tableName string) error {
 	query := fmt.Sprintf("INSERT INTO %s (id, value) VALUES (1, ?)", tableName)
 	if _, err := db.Exec(query, data); err != nil {
 		return fmt.Errorf("error inserting data: %w", err)
+	}
+	return nil
+}
+
+func updateData(data []byte, tableName string) error {
+	query := fmt.Sprintf("UPDATE %s SET value = ? WHERE id = 1", tableName)
+	if _, err := db.Exec(query, data); err != nil {
+		return fmt.Errorf("error updating data: %w", err)
 	}
 	return nil
 }
@@ -170,7 +168,7 @@ func InsertOwnerData(data []byte) error {
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
 	}
-	return InsertData(data, "owner_info")
+	return insertData(data, "owner_info")
 }
 
 func UpdateOwnerData(data []byte) error {
@@ -178,7 +176,25 @@ func UpdateOwnerData(data []byte) error {
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
 	}
-	return UpdateDataInDB(data, "owner_info")
+	return updateData(data, "owner_info")
+}
+
+func FetchOwnerInfoDataJSON() ([]byte, error) {
+	var value []byte
+	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
+// into []protocol.RvTO2Addr.
+func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
+	ownerInfoData, err := FetchOwnerInfoDataJSON()
+	if err != nil {
+		return nil, err
+	}
+	return parseHumanToTO2AddrsJSON(ownerInfoData)
 }
 
 func InsertRvData(data []byte) error {
@@ -186,7 +202,7 @@ func InsertRvData(data []byte) error {
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
 	}
-	return InsertData(data, "rvinfo")
+	return insertData(data, "rvinfo")
 }
 
 func UpdateRvData(data []byte) error {
@@ -194,41 +210,25 @@ func UpdateRvData(data []byte) error {
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
 	}
-	return UpdateDataInDB(data, "rvinfo")
+	return updateData(data, "rvinfo")
 }
 
-func UpdateDataInDB(data []byte, tableName string) error {
-	query := fmt.Sprintf("UPDATE %s SET value = ? WHERE id = 1", tableName)
-	if _, err := db.Exec(query, data); err != nil {
-		return fmt.Errorf("error updating data: %w", err)
+func FetchRvDataJSON() ([]byte, error) {
+	var value []byte
+	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
+		return nil, err
 	}
-	return nil
-}
-
-func FetchData(tableName string) (Data, error) {
-	var data Data
-	var value string
-	query := fmt.Sprintf("SELECT value FROM %s WHERE id = 1", tableName)
-	err := db.QueryRow(query).Scan(&value)
-	if err != nil {
-		return data, err
-	}
-
-	if err := json.Unmarshal([]byte(value), &data.Value); err != nil {
-		return data, err
-	}
-
-	return data, nil
+	return value, nil
 }
 
 // FetchRvData reads the rvinfo JSON (stored as text) and converts it into
 // [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
 func FetchRvData() ([][]protocol.RvInstruction, error) {
-	var value string
-	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
+	rvInfoData, err := FetchRvDataJSON()
+	if err != nil {
 		return nil, err
 	}
-	return parseHumanReadableRvJSON([]byte(value))
+	return parseHumanReadableRvJSON(rvInfoData)
 }
 
 func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
@@ -364,29 +364,17 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			}
 			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiPw, Value: enc})
 		}
-		// devonly, owneronly, rvbypass don't need an encoded value
 		if item.DevOnly {
-			enc, err := encodeRvValue(protocol.RVDevOnly, true)
-			if err != nil {
-				return nil, err
-			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVDevOnly, Value: enc})
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVDevOnly})
 		}
 		if item.OwnerOnly {
-			enc, err := encodeRvValue(protocol.RVOwnerOnly, true)
-			if err != nil {
-				return nil, err
-			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVOwnerOnly, Value: enc})
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVOwnerOnly})
 		}
 		if item.RvBypass {
-			enc, err := encodeRvValue(protocol.RVBypass, true)
-			if err != nil {
-				return nil, err
-			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVBypass, Value: enc})
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVBypass})
 		}
 
+		// grouping is here because of a bug https://github.com/fido-device-onboard/go-fdo/issues/145
 		group := make([]protocol.RvInstruction, 0, len(others)+len(protocols)+len(ports))
 		group = append(group, others...)
 		group = append(group, protocols...)
@@ -451,16 +439,6 @@ func parseMediumValue(v any) (uint8, error) {
 	default:
 		return 0, fmt.Errorf("unsupported medium type %T", v)
 	}
-}
-
-// FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
-// into []protocol.RvTO2Addr.
-func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
-	var value string
-	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
-		return nil, err
-	}
-	return parseHumanToTO2AddrsJSON([]byte(value))
 }
 
 // ParseHumanToTO2AddrsJSON parses a JSON like

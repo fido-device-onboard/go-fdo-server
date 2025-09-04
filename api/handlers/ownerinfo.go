@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"io"
 	"net/http"
 	"sync"
@@ -33,7 +32,7 @@ func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 func getOwnerData(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching ownerinfo data")
-	ownerData, err := db.FetchData("owner_info")
+	ownerDataJSON, err := db.FetchOwnerInfoDataJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("No ownerData found")
@@ -46,7 +45,7 @@ func getOwnerData(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ownerData)
+	w.Write(ownerDataJSON)
 }
 
 func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
@@ -60,13 +59,13 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if exists, err := db.CheckDataExists("owner_info"); err != nil {
-		slog.Debug("Error checking ownerData existence", "error", err)
-		http.Error(w, "Error processing ownerData", http.StatusInternalServerError)
-		return
-	} else if exists {
+	if _, err := db.FetchOwnerInfoDataJSON(); err == nil {
 		slog.Debug("ownerData already exists, cannot create new entry")
 		http.Error(w, "ownerData already exists", http.StatusConflict)
+		return
+	} else if err != sql.ErrNoRows {
+		slog.Debug("Error checking ownerData existence", "error", err)
+		http.Error(w, "Error processing ownerData", http.StatusInternalServerError)
 		return
 	}
 
@@ -80,7 +79,7 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(ownerData)
+	w.Write(ownerData)
 }
 
 func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
@@ -93,14 +92,13 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
-
-	if exists, err := db.CheckDataExists("owner_info"); err != nil {
+	if _, err := db.FetchOwnerInfoDataJSON(); err == sql.ErrNoRows {
+		slog.Debug("ownerData does not exist, cannot update")
+		http.Error(w, "ownerData does not exist", http.StatusNotFound)
+		return
+	} else if err != nil {
 		slog.Debug("Error checking ownerData existence", "error", err)
 		http.Error(w, "Error processing ownerData", http.StatusInternalServerError)
-		return
-	} else if !exists {
-		slog.Debug("No ownerData found to update")
-		http.Error(w, "No ownerData found", http.StatusNotFound)
 		return
 	}
 
@@ -113,5 +111,5 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	slog.Debug("ownerData updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ownerData)
+	w.Write(ownerData)
 }

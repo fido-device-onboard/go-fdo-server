@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"io"
 	"net/http"
 	"sync"
@@ -35,7 +34,7 @@ func RvInfoHandler() http.HandlerFunc {
 
 func getRvData(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching rvData")
-	rvData, err := db.FetchData("rvinfo")
+	rvDataJSON, err := db.FetchRvDataJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("No rvData found")
@@ -48,7 +47,7 @@ func getRvData(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rvData)
+	w.Write(rvDataJSON)
 }
 
 func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
@@ -61,13 +60,14 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
-	if exists, err := db.CheckDataExists("rvinfo"); err != nil {
-		slog.Debug("Error checking rvData existence", "error", err)
-		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
-		return
-	} else if exists {
+
+	if _, err := db.FetchRvDataJSON(); err == nil {
 		slog.Debug("rvData already exists, cannot create new entry")
 		http.Error(w, "rvData already exists", http.StatusConflict)
+		return
+	} else if err != sql.ErrNoRows {
+		slog.Debug("Error checking rvData existence", "error", err)
+		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
 		return
 	}
 
@@ -81,7 +81,7 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rvData)
+	w.Write(rvData)
 }
 
 func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
@@ -95,13 +95,13 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if exists, err := db.CheckDataExists("rvinfo"); err != nil {
+	if _, err := db.FetchRvDataJSON(); err == sql.ErrNoRows {
+		slog.Debug("rvData does not exist, cannot update")
+		http.Error(w, "rvData does not exist", http.StatusNotFound)
+		return
+	} else if err != nil {
 		slog.Debug("Error checking rvData existence", "error", err)
 		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
-		return
-	} else if !exists {
-		slog.Debug("No rvData found to update")
-		http.Error(w, "No rvData found", http.StatusNotFound)
 		return
 	}
 
@@ -114,5 +114,5 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	slog.Debug("rvData updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rvData)
+	w.Write(rvData)
 }
