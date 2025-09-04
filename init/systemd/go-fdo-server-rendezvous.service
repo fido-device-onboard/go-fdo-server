@@ -1,0 +1,16 @@
+[Unit]
+Description=Go FDO rendezvous server
+After=network.target
+
+[Service]
+Type=simple
+PrivateDevices=yes
+CacheDirectory=go-fdo-server-rendezvous
+StateDirectory=go-fdo-server-rendezvous
+ExecStart=/usr/bin/go-fdo-server --db ${DATABASE_DSN} --db-pass ${DATABASE_PASSWORD} rendezvous ${LISTEN_IP}:${LISTEN_PORT}
+User=go-fdo-server-rendezvous
+
+EnvironmentFile=-/etc/sysconfig/go-fdo-server-rendezvous
+
+[Install]
+WantedBy=multi-user.target
