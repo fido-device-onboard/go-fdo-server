@@ -3,3 +3,5 @@ go.work
 go.work.sum
 *.db
 go-fdo-server
+go-fdo-server-*.tar.gz
+rpmbuild
