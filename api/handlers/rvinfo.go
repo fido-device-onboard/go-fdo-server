@@ -33,28 +33,28 @@ func RvInfoHandler() http.HandlerFunc {
 }
 
 func getRvInfo(w http.ResponseWriter, _ *http.Request) {
-	slog.Debug("Fetching rvData")
-	rvDataJSON, err := db.FetchRvInfoJSON()
+	slog.Debug("Fetching rvInfo")
+	rvInfoJSON, err := db.FetchRvInfoJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
-			slog.Debug("No rvData found")
-			http.Error(w, "No rvData found", http.StatusNotFound)
+			slog.Debug("No rvInfo found")
+			http.Error(w, "No rvInfo found", http.StatusNotFound)
 		} else {
-			slog.Debug("Error fetching rvData", "error", err)
-			http.Error(w, "Error fetching rvData", http.StatusInternalServerError)
+			slog.Debug("Error fetching rvInfo", "error", err)
+			http.Error(w, "Error fetching rvInfo", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(rvDataJSON)
+	w.Write(rvInfoJSON)
 }
 
 func createRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	rvData, err := io.ReadAll(r.Body)
+	rvInfo, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Debug("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
@@ -62,33 +62,33 @@ func createRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	}
 
 	if _, err := db.FetchRvInfoJSON(); err == nil {
-		slog.Debug("rvData already exists, cannot create new entry")
-		http.Error(w, "rvData already exists", http.StatusConflict)
+		slog.Debug("rvInfo already exists, cannot create new entry")
+		http.Error(w, "rvInfo already exists", http.StatusConflict)
 		return
 	} else if err != sql.ErrNoRows {
-		slog.Debug("Error checking rvData existence", "error", err)
-		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
+		slog.Debug("Error checking rvInfo existence", "error", err)
+		http.Error(w, "Error processing rvInfo", http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.InsertRvInfo(rvData); err != nil {
-		slog.Debug("Error inserting rvData", "error", err)
-		http.Error(w, "Error inserting rvData", http.StatusInternalServerError)
+	if err := db.InsertRvInfo(rvInfo); err != nil {
+		slog.Debug("Error inserting rvInfo", "error", err)
+		http.Error(w, "Error inserting rvInfo", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Debug("rvData created")
+	slog.Debug("rvInfo created")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(rvData)
+	w.Write(rvInfo)
 }
 
 func updateRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	rvData, err := io.ReadAll(r.Body)
+	rvInfo, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Debug("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
@@ -96,23 +96,23 @@ func updateRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	}
 
 	if _, err := db.FetchRvInfoJSON(); err == sql.ErrNoRows {
-		slog.Debug("rvData does not exist, cannot update")
-		http.Error(w, "rvData does not exist", http.StatusNotFound)
+		slog.Debug("rvInfo does not exist, cannot update")
+		http.Error(w, "rvInfo does not exist", http.StatusNotFound)
 		return
 	} else if err != nil {
-		slog.Debug("Error checking rvData existence", "error", err)
-		http.Error(w, "Error processing rvData", http.StatusInternalServerError)
+		slog.Debug("Error checking rvInfo existence", "error", err)
+		http.Error(w, "Error processing rvInfo", http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.UpdateRvInfo(rvData); err != nil {
-		slog.Debug("Error updating rvData", "error", err)
-		http.Error(w, "Error updating rvData", http.StatusInternalServerError)
+	if err := db.UpdateRvInfo(rvInfo); err != nil {
+		slog.Debug("Error updating rvInfo", "error", err)
+		http.Error(w, "Error updating rvInfo", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Debug("rvData updated")
+	slog.Debug("rvInfo updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(rvData)
+	w.Write(rvInfo)
 }

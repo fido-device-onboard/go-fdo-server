@@ -192,7 +192,7 @@ func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
 				return nil
 			},
 			RvInfo: func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) {
-				return db.FetchRvData()
+				return db.FetchRvInfo()
 			},
 		},
 	}

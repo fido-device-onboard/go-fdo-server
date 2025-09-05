@@ -222,14 +222,14 @@ func FetchRvInfoJSON() ([]byte, error) {
 	return value, nil
 }
 
-// FetchRvData reads the rvinfo JSON (stored as text) and converts it into
+// FetchRvInfo reads the rvinfo JSON (stored as text) and converts it into
 // [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
-func FetchRvData() ([][]protocol.RvInstruction, error) {
-	rvInfoData, err := FetchRvInfoJSON()
+func FetchRvInfo() ([][]protocol.RvInstruction, error) {
+	rvInfo, err := FetchRvInfoJSON()
 	if err != nil {
 		return nil, err
 	}
-	return parseHumanReadableRvJSON(rvInfoData)
+	return parseHumanReadableRvJSON(rvInfo)
 }
 
 func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {

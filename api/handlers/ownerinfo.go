@@ -31,28 +31,28 @@ func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
-	slog.Debug("Fetching ownerinfo data")
-	ownerDataJSON, err := db.FetchOwnerInfoJSON()
+	slog.Debug("Fetching ownerInfo")
+	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
-			slog.Debug("No ownerData found")
-			http.Error(w, "No ownerData found", http.StatusNotFound)
+			slog.Debug("No ownerInfo found")
+			http.Error(w, "No ownerInfo found", http.StatusNotFound)
 		} else {
-			slog.Debug("Error fetching ownerData", "error", err)
-			http.Error(w, "Error fetching ownerData", http.StatusInternalServerError)
+			slog.Debug("Error fetching ownerInfo", "error", err)
+			http.Error(w, "Error fetching ownerInfo", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(ownerDataJSON)
+	w.Write(ownerInfoJSON)
 }
 
 func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	ownerData, err := io.ReadAll(r.Body)
+	ownerInfo, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Debug("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
@@ -60,56 +60,56 @@ func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	}
 
 	if _, err := db.FetchOwnerInfoJSON(); err == nil {
-		slog.Debug("ownerData already exists, cannot create new entry")
-		http.Error(w, "ownerData already exists", http.StatusConflict)
+		slog.Debug("ownerInfo already exists, cannot create new entry")
+		http.Error(w, "ownerInfo already exists", http.StatusConflict)
 		return
 	} else if err != sql.ErrNoRows {
-		slog.Debug("Error checking ownerData existence", "error", err)
-		http.Error(w, "Error processing ownerData", http.StatusInternalServerError)
+		slog.Debug("Error checking ownerInfo existence", "error", err)
+		http.Error(w, "Error processing ownerInfo", http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.InsertOwnerInfo(ownerData); err != nil {
-		slog.Debug("Error inserting ownerData", "error", err)
-		http.Error(w, "Error inserting ownerData", http.StatusInternalServerError)
+	if err := db.InsertOwnerInfo(ownerInfo); err != nil {
+		slog.Debug("Error inserting ownerInfo", "error", err)
+		http.Error(w, "Error inserting ownerInfo", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Debug("ownerData created")
+	slog.Debug("ownerInfo created")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(ownerData)
+	w.Write(ownerInfo)
 }
 
 func updateOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	ownerData, err := io.ReadAll(r.Body)
+	ownerInfo, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Debug("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
 	if _, err := db.FetchOwnerInfoJSON(); err == sql.ErrNoRows {
-		slog.Debug("ownerData does not exist, cannot update")
-		http.Error(w, "ownerData does not exist", http.StatusNotFound)
+		slog.Debug("ownerInfo does not exist, cannot update")
+		http.Error(w, "ownerInfo does not exist", http.StatusNotFound)
 		return
 	} else if err != nil {
-		slog.Debug("Error checking ownerData existence", "error", err)
-		http.Error(w, "Error processing ownerData", http.StatusInternalServerError)
+		slog.Debug("Error checking ownerInfo existence", "error", err)
+		http.Error(w, "Error processing ownerInfo", http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.UpdateOwnerInfo(ownerData); err != nil {
-		slog.Debug("Error updating ownerData", "error", err)
-		http.Error(w, "Error updating ownerData", http.StatusInternalServerError)
+	if err := db.UpdateOwnerInfo(ownerInfo); err != nil {
+		slog.Debug("Error updating ownerInfo", "error", err)
+		http.Error(w, "Error updating ownerInfo", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Debug("ownerData updated")
+	slog.Debug("ownerInfo updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(ownerData)
+	w.Write(ownerInfo)
 }
