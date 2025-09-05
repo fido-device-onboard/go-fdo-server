@@ -1,0 +1,4 @@
+LISTEN_IP="0.0.0.0"
+LISTEN_PORT="8041"
+DATABASE_DSN="/var/lib/go-fdo-server-rendezvous/db.sqlite"
+DATABASE_PASSWORD="@PassW0rD$"
