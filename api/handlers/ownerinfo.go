@@ -19,20 +19,20 @@ func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Received OwnerInfo request", "method", r.Method, "path", r.URL.Path)
 	switch r.Method {
 	case http.MethodGet:
-		getOwnerData(w, r)
+		getOwnerInfo(w, r)
 	case http.MethodPost:
-		createOwnerData(w, r, &mu)
+		createOwnerInfo(w, r, &mu)
 	case http.MethodPut:
-		updateOwnerData(w, r, &mu)
+		updateOwnerInfo(w, r, &mu)
 	default:
 		slog.Debug("Method not allowed", "method", r.Method, "path", r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func getOwnerData(w http.ResponseWriter, _ *http.Request) {
+func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching ownerinfo data")
-	ownerDataJSON, err := db.FetchOwnerInfoDataJSON()
+	ownerDataJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("No ownerData found")
@@ -48,7 +48,7 @@ func getOwnerData(w http.ResponseWriter, _ *http.Request) {
 	w.Write(ownerDataJSON)
 }
 
-func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
+func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -59,7 +59,7 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if _, err := db.FetchOwnerInfoDataJSON(); err == nil {
+	if _, err := db.FetchOwnerInfoJSON(); err == nil {
 		slog.Debug("ownerData already exists, cannot create new entry")
 		http.Error(w, "ownerData already exists", http.StatusConflict)
 		return
@@ -69,7 +69,7 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.InsertOwnerData(ownerData); err != nil {
+	if err := db.InsertOwnerInfo(ownerData); err != nil {
 		slog.Debug("Error inserting ownerData", "error", err)
 		http.Error(w, "Error inserting ownerData", http.StatusInternalServerError)
 		return
@@ -82,7 +82,7 @@ func createOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	w.Write(ownerData)
 }
 
-func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
+func updateOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -92,7 +92,7 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
-	if _, err := db.FetchOwnerInfoDataJSON(); err == sql.ErrNoRows {
+	if _, err := db.FetchOwnerInfoJSON(); err == sql.ErrNoRows {
 		slog.Debug("ownerData does not exist, cannot update")
 		http.Error(w, "ownerData does not exist", http.StatusNotFound)
 		return
@@ -102,7 +102,7 @@ func updateOwnerData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.UpdateOwnerData(ownerData); err != nil {
+	if err := db.UpdateOwnerInfo(ownerData); err != nil {
 		slog.Debug("Error updating ownerData", "error", err)
 		http.Error(w, "Error updating ownerData", http.StatusInternalServerError)
 		return

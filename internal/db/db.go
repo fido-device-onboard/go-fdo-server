@@ -5,6 +5,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -21,7 +22,7 @@ var db *sql.DB
 
 func InitDb(state *sqlite.DB) error {
 	db = state.DB()
-	if err := createRvTable(); err != nil {
+	if err := createRvInfoTable(); err != nil {
 		slog.Error("Failed to create table")
 		return err
 	}
@@ -32,7 +33,7 @@ func InitDb(state *sqlite.DB) error {
 	return nil
 }
 
-func createRvTable() error {
+func createRvInfoTable() error {
 	query := `CREATE TABLE IF NOT EXISTS rvinfo (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
 		value TEXT
@@ -163,7 +164,7 @@ func updateData(data []byte, tableName string) error {
 	return nil
 }
 
-func InsertOwnerData(data []byte) error {
+func InsertOwnerInfo(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
@@ -171,7 +172,7 @@ func InsertOwnerData(data []byte) error {
 	return insertData(data, "owner_info")
 }
 
-func UpdateOwnerData(data []byte) error {
+func UpdateOwnerInfo(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
@@ -179,7 +180,7 @@ func UpdateOwnerData(data []byte) error {
 	return updateData(data, "owner_info")
 }
 
-func FetchOwnerInfoDataJSON() ([]byte, error) {
+func FetchOwnerInfoJSON() ([]byte, error) {
 	var value []byte
 	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
 		return nil, err
@@ -189,15 +190,15 @@ func FetchOwnerInfoDataJSON() ([]byte, error) {
 
 // FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
 // into []protocol.RvTO2Addr.
-func FetchOwnerInfoData() ([]protocol.RvTO2Addr, error) {
-	ownerInfoData, err := FetchOwnerInfoDataJSON()
+func FetchOwnerInfo() ([]protocol.RvTO2Addr, error) {
+	ownerInfoData, err := FetchOwnerInfoJSON()
 	if err != nil {
 		return nil, err
 	}
 	return parseHumanToTO2AddrsJSON(ownerInfoData)
 }
 
-func InsertRvData(data []byte) error {
+func InsertRvInfo(data []byte) error {
 	// check the data can be parsed into [][]protocol.RvInstruction
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
@@ -205,7 +206,7 @@ func InsertRvData(data []byte) error {
 	return insertData(data, "rvinfo")
 }
 
-func UpdateRvData(data []byte) error {
+func UpdateRvInfo(data []byte) error {
 	// check the data can be parsed into [][]protocol.RvInstruction
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
@@ -213,7 +214,7 @@ func UpdateRvData(data []byte) error {
 	return updateData(data, "rvinfo")
 }
 
-func FetchRvDataJSON() ([]byte, error) {
+func FetchRvInfoJSON() ([]byte, error) {
 	var value []byte
 	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
 		return nil, err
@@ -224,7 +225,7 @@ func FetchRvDataJSON() ([]byte, error) {
 // FetchRvData reads the rvinfo JSON (stored as text) and converts it into
 // [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
 func FetchRvData() ([][]protocol.RvInstruction, error) {
-	rvInfoData, err := FetchRvDataJSON()
+	rvInfoData, err := FetchRvInfoJSON()
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 		case protocol.RVProtocol, protocol.RVMedium:
 			return cbor.Marshal(uint8(v))
 		case protocol.RVDelaysec:
-			return cbor.Marshal(uint64(v))
+			return cbor.Marshal(uint32(v))
 		default:
 			return cbor.Marshal(int64(v))
 		}
@@ -267,17 +268,22 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 // and converts protocol strings to the appropriate numeric code.
 func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error) {
 	type rvHuman struct {
-		DNS        string `json:"dns"`
-		IP         string `json:"ip"`
-		Protocol   string `json:"protocol"`
-		Medium     string `json:"medium"`
-		DevicePort string `json:"device_port"`
-		OwnerPort  string `json:"owner_port"`
-		WifiSSID   string `json:"wifi_ssid"`
-		WifiPW     string `json:"wifi_pw"`
-		DevOnly    bool   `json:"dev_only"`
-		OwnerOnly  bool   `json:"owner_only"`
-		RvBypass   bool   `json:"rv_bypass"`
+		DNS          string  `json:"dns"`
+		IP           string  `json:"ip"`
+		Protocol     string  `json:"protocol"`
+		Medium       string  `json:"medium"`
+		DevicePort   string  `json:"device_port"`
+		OwnerPort    string  `json:"owner_port"`
+		WifiSSID     string  `json:"wifi_ssid"`
+		WifiPW       string  `json:"wifi_pw"`
+		DevOnly      bool    `json:"dev_only"`
+		OwnerOnly    bool    `json:"owner_only"`
+		RvBypass     bool    `json:"rv_bypass"`
+		DelaySeconds *uint32 `json:"delay_seconds"`
+		SvCertHash   string  `json:"sv_cert_hash"`
+		ClCertHash   string  `json:"cl_cert_hash"`
+		UserInput    string  `json:"user_input"`
+		ExtRV        string  `json:"ext_rv"`
 	}
 	var items []rvHuman
 	if err := json.Unmarshal(rawJSON, &items); err != nil {
@@ -285,12 +291,17 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 	}
 
 	out := make([][]protocol.RvInstruction, 0, len(items))
-	for _, item := range items {
+	for i, item := range items {
 		var (
 			others    []protocol.RvInstruction
 			protocols []protocol.RvInstruction
 			ports     []protocol.RvInstruction
 		)
+
+		// Spec requires at least one of DNS or IP to be present for an RV entry
+		if item.DNS == "" && item.IP == "" {
+			return nil, fmt.Errorf("rvinfo[%d]: at least one of dns or ip must be specified", i)
+		}
 
 		if item.DNS != "" {
 			enc, err := encodeRvValue(protocol.RVDns, item.DNS)
@@ -372,6 +383,50 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 		}
 		if item.RvBypass {
 			others = append(others, protocol.RvInstruction{Variable: protocol.RVBypass})
+		}
+		if item.DelaySeconds != nil {
+			secs := uint64(*item.DelaySeconds)
+			enc, err := encodeRvValue(protocol.RVDelaysec, secs)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVDelaysec, Value: enc})
+		}
+		if item.SvCertHash != "" {
+			b, err := hex.DecodeString(item.SvCertHash)
+			if err != nil {
+				return nil, fmt.Errorf("sv_cert_hash: %w", err)
+			}
+			enc, err := cbor.Marshal(b)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVSvCertHash, Value: enc})
+		}
+		if item.ClCertHash != "" {
+			b, err := hex.DecodeString(item.ClCertHash)
+			if err != nil {
+				return nil, fmt.Errorf("cl_cert_hash: %w", err)
+			}
+			enc, err := cbor.Marshal(b)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVClCertHash, Value: enc})
+		}
+		if item.UserInput != "" {
+			enc, err := encodeRvValue(protocol.RVUserInput, item.UserInput)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVUserInput, Value: enc})
+		}
+		if item.ExtRV != "" {
+			enc, err := encodeRvValue(protocol.RVExtRV, item.ExtRV)
+			if err != nil {
+				return nil, err
+			}
+			others = append(others, protocol.RvInstruction{Variable: protocol.RVExtRV, Value: enc})
 		}
 
 		// grouping is here because of a bug https://github.com/fido-device-onboard/go-fdo/issues/145
@@ -458,7 +513,7 @@ func parseHumanToTO2AddrsJSON(rawJSON []byte) ([]protocol.RvTO2Addr, error) {
 	}
 
 	out := make([]protocol.RvTO2Addr, 0, len(items))
-	for _, item := range items {
+	for i, item := range items {
 		var (
 			ipPtr  *net.IP
 			dnsPtr *string
@@ -473,6 +528,10 @@ func parseHumanToTO2AddrsJSON(rawJSON []byte) ([]protocol.RvTO2Addr, error) {
 		if item.DNS != "" {
 			dns := item.DNS
 			dnsPtr = &dns
+		}
+		// Spec: A given RVTO2Addr must have at least one of RVIP or RVDNS
+		if ipPtr == nil && dnsPtr == nil {
+			return nil, fmt.Errorf("to2[%d]: at least one of dns or ip must be specified", i)
 		}
 		if item.Port != "" {
 			p, err := parsePortValue(item.Port)

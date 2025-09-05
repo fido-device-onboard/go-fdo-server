@@ -28,7 +28,7 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	copy(guid[:], guidBytes)
 
 	// Retrieve owner info from DB
-	to2Addrs, err := db.FetchOwnerInfoData()
+	to2Addrs, err := db.FetchOwnerInfo()
 	if err != nil {
 		return fmt.Errorf("error fetching ownerinfo: %w", err)
 	}

@@ -20,11 +20,11 @@ func RvInfoHandler() http.HandlerFunc {
 		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
 		switch r.Method {
 		case http.MethodGet:
-			getRvData(w, r)
+			getRvInfo(w, r)
 		case http.MethodPost:
-			createRvData(w, r, &mu)
+			createRvInfo(w, r, &mu)
 		case http.MethodPut:
-			updateRvData(w, r, &mu)
+			updateRvInfo(w, r, &mu)
 		default:
 			slog.Debug("Method not allowed", "method", r.Method, "path", r.URL.Path)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -32,9 +32,9 @@ func RvInfoHandler() http.HandlerFunc {
 	}
 }
 
-func getRvData(w http.ResponseWriter, _ *http.Request) {
+func getRvInfo(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching rvData")
-	rvDataJSON, err := db.FetchRvDataJSON()
+	rvDataJSON, err := db.FetchRvInfoJSON()
 	if err != nil {
 		if err == sql.ErrNoRows {
 			slog.Debug("No rvData found")
@@ -50,7 +50,7 @@ func getRvData(w http.ResponseWriter, _ *http.Request) {
 	w.Write(rvDataJSON)
 }
 
-func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
+func createRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -61,7 +61,7 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if _, err := db.FetchRvDataJSON(); err == nil {
+	if _, err := db.FetchRvInfoJSON(); err == nil {
 		slog.Debug("rvData already exists, cannot create new entry")
 		http.Error(w, "rvData already exists", http.StatusConflict)
 		return
@@ -71,7 +71,7 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.InsertRvData(rvData); err != nil {
+	if err := db.InsertRvInfo(rvData); err != nil {
 		slog.Debug("Error inserting rvData", "error", err)
 		http.Error(w, "Error inserting rvData", http.StatusInternalServerError)
 		return
@@ -84,7 +84,7 @@ func createRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	w.Write(rvData)
 }
 
-func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
+func updateRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -95,7 +95,7 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if _, err := db.FetchRvDataJSON(); err == sql.ErrNoRows {
+	if _, err := db.FetchRvInfoJSON(); err == sql.ErrNoRows {
 		slog.Debug("rvData does not exist, cannot update")
 		http.Error(w, "rvData does not exist", http.StatusNotFound)
 		return
@@ -105,7 +105,7 @@ func updateRvData(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if err := db.UpdateRvData(rvData); err != nil {
+	if err := db.UpdateRvInfo(rvData); err != nil {
 		slog.Debug("Error updating rvData", "error", err)
 		http.Error(w, "Error updating rvData", http.StatusInternalServerError)
 		return
