@@ -1,0 +1,131 @@
+---
+# https://packit.dev/docs/configuration/
+
+
+files_to_sync:
+  - src:
+      - ".packit.yaml"
+      - "build/package/rpm/go-fdo-server.spec"
+      - "build/package/rpm/go-vendor-tools.toml"
+      - "build/package/rpm/go-fdo-server-*-vendor.tar.gz"
+    dest: .
+
+upstream_package_name: go-fdo-server
+downstream_package_name: go-fdo-server
+
+upstream_tag_template: v{version}
+copy_upstream_release_description: true
+
+srpm_build_deps:
+  - curl
+  - git
+  - make
+  - bison
+  - gcc
+  - glibc-devel
+  - golang
+  - go-vendor-tools
+  - python3-tomlkit
+
+packages:
+  go-fdo-server-fedora:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+    specfile_path: build/package/rpm/go-fdo-server.spec
+  go-fdo-server-centos:
+    downstream_package_name: go-fdo-server
+    upstream_package_name: go-fdo-server
+    pkg_tool: centpkg
+    specfile_path: build/package/rpm/go-fdo-server.spec
+
+actions:
+  post-upstream-clone:
+    - |
+      bash -c "
+      #! /bin/bash
+      set -x
+      go_version=$(go version | cut -f 3 -d ' ')
+      if [ "${go_version}" != "go1.25.0" ]; then
+        command -v gvm &>/dev/null || { curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/refs/tags/1.0.22/binscripts/gvm-installer -o /tmp/gvm-installer && bash /tmp/gvm-installer; }
+        source ${HOME}/.gvm/scripts/gvm
+        gvm install go1.25.0
+        gvm use go1.25.0 --default
+      fi
+      "
+  # for the propose-downstream CLI command
+  pre-sync:
+    - bash -c ". ${HOME}/.gvm/scripts/gvm; make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}"
+  # for the srpm and copr builds
+  create-archive:
+    - bash -c ". ${HOME}/.gvm/scripts/gvm; make packit-create-archive VERSION=${PACKIT_PROJECT_VERSION}"
+
+jobs:
+
+  # Fedora jobs
+
+  - &fdo_copr_build_fedora
+    job: copr_build
+    packages: [go-fdo-server-fedora]
+    trigger: pull_request
+    targets:
+      fedora-branched:
+        additional_repos:
+          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/fedora-$releasever-$basearch/
+        additional_packages:
+          - golang
+      fedora-rawhide:
+        additional_repos:
+          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/fedora-rawhide-$basearch/
+        additional_packages:
+          - golang
+
+
+  - <<: *fdo_copr_build_fedora
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+
+
+  - job: sync_from_downstream
+    trigger: commit
+
+  - job: propose_downstream
+    trigger: release
+    packages: [go-fdo-server-fedora]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  - job: koji_build
+    trigger: commit
+    allowed_pr_authors: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  - job: bodhi_update
+    trigger: commit
+    allowed_builders: [all_committers]
+    dist_git_branches: ["fedora-development", "fedora-stable"]
+
+  # CentOS jobs
+
+  - &fdo_copr_build_centos
+    job: copr_build
+    packages: [go-fdo-server-centos]
+    trigger: pull_request
+    targets:
+      epel-9:
+        additional_repos:
+          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-9-$basearch/
+        additional_packages:
+          - golang
+      epel-10:
+        additional_repos:
+          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-10-$basearch/
+        additional_packages:
+          - golang
+
+  - <<: *fdo_copr_build_centos
+    trigger: commit
+    branch: main
+    owner: "@fedora-iot"
+    project: fedora-iot
+

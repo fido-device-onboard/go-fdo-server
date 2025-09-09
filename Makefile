@@ -48,7 +48,7 @@ VENDOR_TARBALL=$(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
 
 $(VENDOR_TARBALL):
 	rm -rf vendor; \
-	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools ; \
+	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit; \
 	go_vendor_archive create --compression gz --config $(GO_VENDOR_TOOLS_FILE) --write-config --output $(VENDOR_TARBALL) .; \
 	rm -rf vendor;
 
