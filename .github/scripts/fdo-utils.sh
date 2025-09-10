@@ -58,8 +58,8 @@ setup_hostname() {
   local ip
   dns=$1
   ip=$2
-  if grep -q "${dns}" /etc/hosts ; then
-    sudo sed -ie "s/.*${dns}/$ip $dns/" /etc/hosts
+  if grep -q " ${dns}" /etc/hosts ; then
+    sudo sed -i "s/.* ${dns}/$ip $dns/" /etc/hosts
   else
     sudo echo "${ip} ${dns}" | sudo tee -a /etc/hosts;
   fi
