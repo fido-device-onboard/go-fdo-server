@@ -123,3 +123,32 @@ jobs:
         run: |
           source test/test-container.sh
           cleanup
+
+  test-rpms:
+    name: build srpm and rpms
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install dependencies
+        run: dnf install -y git make node
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Build SRPM
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make srpm
+
+      - name: Build RPM
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make rpm
+
+      - name: Fail if the source code has changes after build
+        uses: NathanielHill/fail-if-changes@master
