@@ -182,9 +182,9 @@ generate_certs() {
 }
 
 setup_env() {
-  setup_hostnames
   mkdir -p ${base_dir}
   run_services
+  setup_hostnames
   wait_for_fdo_servers_ready
   set_rendezvous_info ${manufacturer_service} ${rendezvous_dns} ${rendezvous_ip} ${rendezvous_port}
 }
@@ -209,8 +209,8 @@ test_resale() {
   get_ov_from_manufacturer ${manufacturer_service} "${guid}" ${owner_ov}
   send_ov_to_owner ${owner_service} ${owner_ov}
   resell ${owner_service} "${guid}" "${new_owner_pub}" ${new_owner_ov}
-  send_ov_to_owner ${new_owner_service} ${new_owner_ov}
   set_owner_redirect_info ${new_owner_service} ${new_owner_ip} ${new_owner_port}
+  send_ov_to_owner ${new_owner_service} ${new_owner_ov}
   run_to0 ${new_owner_service} "${guid}"
   run_fido_device_onboard ${new_owner_onboard_log}
 }
