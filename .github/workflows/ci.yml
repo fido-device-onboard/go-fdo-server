@@ -21,12 +21,12 @@ jobs:
 
       - name: Generate certs
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           generate_certs
 
       - name: Build and install the binary
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           install_server
 
       - name: Fail if the source code has changes after build
@@ -34,28 +34,29 @@ jobs:
 
       - name: Build and install 'go-fdo-client'
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           install_client
 
       - name: Setup the environment
+        id: setup_env
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           setup_env
 
       - name: Test FIDO Device Onboarding
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           test_onboarding
 
       - name: Test FIDO Resale Protocol
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           test_resale
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure()
+        if: failure() && steps.setup_env.outcome == 'success'
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-makefile.sh
           get_server_logs
 
   test-container:
@@ -73,7 +74,7 @@ jobs:
 
       - name: Generate certs
         run: |
-          source .github/scripts/fdo-utils.sh
+          source test/test-container.sh
           generate_certs
 
       - name: Build and spawn FDO server containers
@@ -95,22 +96,23 @@ jobs:
           up-flags: "--build --no-start"
 
       - name: Setup the environment
+        id: setup_env
         run: |
-          source .github/scripts/container-utils.sh
+          source test/test-container.sh
           setup_env
 
       - name: Test FIDO Device Onboarding
         run: |
-          source .github/scripts/container-utils.sh
+          source test/test-container.sh
           test_onboarding
 
       - name: Test FIDO Resale Protocol
         run: |
-          source .github/scripts/container-utils.sh
+          source test/test-container.sh
           test_resale
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure() && steps.build-and-run-servers.outcome == 'success'
+        if: failure() && steps.setup_env.outcome == 'success'
         run: |
-          source .github/scripts/container-utils.sh
+          source test/test-container.sh
           get_server_logs

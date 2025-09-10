@@ -2,8 +2,8 @@
 
 set -xeuo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/cert-utils.sh"
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/fdo-utils.sh"
+source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../scripts/cert-utils.sh"
+source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../scripts/fdo-utils.sh"
 
 base_dir=/tmp/go-fdo
 bin_dir=${base_dir}/bin
