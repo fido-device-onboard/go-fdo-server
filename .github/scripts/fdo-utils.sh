@@ -72,6 +72,12 @@ setup_hostnames () {
   setup_hostname ${new_owner_dns} ${new_owner_ip}
 }
 
+update_ips() {
+  # Only needed for container tests
+  echo "Not needed"
+  return
+}
+
 wait_for_service() {
     local status
     local retry=0
@@ -185,6 +191,7 @@ setup_env() {
 }
 
 test_onboarding () {
+  update_ips
   update_rendezvous_info ${manufacturer_service} ${rendezvous_dns} ${rendezvous_ip} ${rendezvous_port}
   run_device_initialization
   guid=$(get_device_guid ${device_credentials})
@@ -196,6 +203,7 @@ test_onboarding () {
 }
 
 test_resale() {
+  update_ips
   update_rendezvous_info ${manufacturer_service} ${rendezvous_dns} ${rendezvous_ip} ${rendezvous_port}
   run_device_initialization
   guid=$(get_device_guid ${device_credentials})

@@ -9,9 +9,11 @@ alias go-fdo-client="docker run --rm --volume '${creds_dir}:${creds_dir}' --netw
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/fdo-utils.sh"
 
 
-rendezvous_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "rendezvous" | jq -r '.[]|.IPAddress')"
-owner_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "owner" | jq -r '.[]|.IPAddress')"
-new_owner_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "new-owner" | jq -r '.[]|.IPAddress')"
+update_ips() {
+  rendezvous_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "rendezvous" | jq -r '.[]|.IPAddress')"
+  owner_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "owner" | jq -r '.[]|.IPAddress')"
+  new_owner_ip="$(docker inspect --format='{{json .NetworkSettings.Networks}}' "new-owner" | jq -r '.[]|.IPAddress')"
+}
 
 get_server_logs() {
   docker logs manufacturer
