@@ -103,9 +103,9 @@ wait_for_fdo_servers_ready () {
 }
 
 run_device_initialization() {
-  rm -rf "${creds_dir}"
   mkdir -p "${creds_dir}"
   cd ${creds_dir}
+  rm -f "${device_credentials}"
   go-fdo-client --blob "${device_credentials}" --debug device-init "http://${manufacturer_service}" --device-info=gotest --key ec256
   cd -
 }
