@@ -26,7 +26,8 @@ jobs:
 
       - name: Build and install the binary
         run: |
-           make && sudo install -D -m 755 go-fdo-server /usr/bin/
+          source .github/scripts/fdo-utils.sh
+          install_server
 
       - name: Fail if the source code has changes after build
         uses: NathanielHill/fail-if-changes@master

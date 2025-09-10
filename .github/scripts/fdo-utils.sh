@@ -134,7 +134,7 @@ run_service () {
   local address_port=$2
   local db=$3
   local log=$4
-  nohup go-fdo-server "${role}" "${address_port}" --db "/tmp/${db}.sqlite" --db-pass '2=,%95QF<uTLLHt' --debug "${@:5}" &> "${log}" &
+  nohup ${bin_dir}/go-fdo-server "${role}" "${address_port}" --db "${base_dir}/${db}.sqlite" --db-pass '2=,%95QF<uTLLHt' --debug "${@:5}" &> "${log}" &
 }
 
 run_services () {
@@ -161,6 +161,9 @@ install_client() {
   cd -
 }
 
+install_server() {
+  mkdir -p ${bin_dir}
+  make && install -D -m 755 -t ${bin_dir} go-fdo-server  && rm -f go-fdo-server
 }
 
 generate_certs() {
