@@ -4,6 +4,7 @@ set -xeuo pipefail
 
 creds_dir=/tmp/device-credentials
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/cert-utils.sh"
+source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/fdo-utils.sh"
 device_credentials=${creds_dir}/creds.bin
 
 certs_dir=/tmp/certs
@@ -98,39 +99,6 @@ wait_for_fdo_servers_ready () {
   wait_for_service "${new_owner_service}"
 }
 
-set_rendezvous_info () {
-  local manufacturer_service=$1
-  local rendezvous_dns=$2
-  local rendezvous_ip=$3
-  local rendezvous_port=$4
-  curl --fail --verbose --silent \
-       --header 'Content-Type: text/plain' \
-       --request POST \
-       --data-raw "[[[5,\"${rendezvous_dns}\"],[3,${rendezvous_port}],[12,1],[2,\"${rendezvous_ip}\"],[4,${rendezvous_port}]]]" \
-       "http://${manufacturer_service}/api/v1/rvinfo"
-}
-
-update_rendezvous_info () {
-  local manufacturer_service=$1
-  local rendezvous_dns=$2
-  local rendezvous_ip=$3
-  local rendezvous_ip=$4
-  curl --fail --verbose --silent \
-       --request PUT \
-       --header 'Content-Type: text/plain' \
-       --data-raw "[[[5,\"${rendezvous_dns}\"],[3,${rendezvous_port}],[12,1],[2,\"${rendezvous_ip}\"],[4,${rendezvous_port}]]]" \
-       "http://${manufacturer_service}/api/v1/rvinfo"
-}
-
-set_owner_redirect_info () {
-  local service=$1
-  local ip=$2
-  local port=$3
-  curl --location --request POST "http://${service}/api/v1/owner/redirect" \
-       --header 'Content-Type: text/plain' \
-       --data-raw "[[\"${ip}\",\"${ip}\",${port},3]]"
-}
-
 run_device_initialization() {
   rm -rf "${creds_dir}"
   mkdir -p "${creds_dir}"
@@ -149,33 +117,6 @@ run_fido_device_onboard () {
   go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 | tee "${log}"
   cd -
   grep 'FIDO Device Onboard Complete' "${log}"
-}
-
-get_ov_from_manufacturer () {
-  local manufacturer_service=$1
-  local guid=$2
-  local output=$3
-  curl --fail --verbose --silent "http://${manufacturer_service}/api/v1/vouchers/${guid}" -o "${output}"
-}
-
-send_ov_to_owner () {
-  local owner_service=$1
-  local output=$2
-  curl --fail --verbose --silent "http://${owner_service}/api/v1/owner/vouchers" --data-binary "@${output}"
-}
-
-run_to0 () {
-  local owner_service=$1
-  local guid=$2
-  curl --fail --verbose --silent "http://${owner_service}/api/v1/to0/${guid}"
-}
-
-resell() {
-  local owner_service=$1
-  local guid=$2
-  local new_owner_pubkey=$3
-  local output=$4
-  curl --fail --verbose --silent "http://${owner_service}/api/v1/owner/resell/${guid}" --data-binary @"${new_owner_pubkey}" -o "${output}"
 }
 
 get_server_logs() {
