@@ -80,7 +80,7 @@ wait_for_service() {
     local service=$1
     echo "Waiting for ${service} to be healthy"
     while true; do
-        test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://${service}/health")" = "200" && break
+        [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://${service}/health")" = "200" ]] && break
         status=$?
         ((retry+=1))
         if [ $retry -gt $max_retries ]; then
