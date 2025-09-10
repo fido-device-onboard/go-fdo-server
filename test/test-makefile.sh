@@ -245,3 +245,22 @@ cleanup() {
   unset_hostnames
   rm -rf ${base_dir}
 }
+
+test_all () {
+  echo "======================== Make sure the env is clean ========================================="
+  cleanup
+  echo "======================== Generating service certificates ===================================="
+  generate_certs
+  echo "======================== Install 'go-fdo-client' binary ====================================="
+  install_client
+  echo "======================== Install 'go-fdo-server' binary ====================================="
+  install_server
+  echo "======================== Configure the environment  ========================================="
+  setup_env
+  echo "======================== Testing FDO Onboarding  ============================================"
+  test_onboarding
+  echo "======================== Testing FDO Resale protocol ========================================"
+  test_resale
+  echo "======================== Clean the environment =============================================="
+  cleanup
+}
