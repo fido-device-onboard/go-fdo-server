@@ -3,6 +3,7 @@
 set -xeuo pipefail
 
 creds_dir=/tmp/device-credentials
+source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/cert-utils.sh"
 device_credentials=${creds_dir}/creds.bin
 
 certs_dir=/tmp/certs
@@ -12,11 +13,9 @@ manufacturer_ip=127.0.0.1
 manufacturer_port=8038
 manufacturer_log="/tmp/${manufacturer_dns}.log"
 manufacturer_key="${certs_dir}/manufacturer.key"
-manufacturer_pkcs8="${manufacturer_key/\.key/.pkcs8}"
 manufacturer_crt="${manufacturer_key/\.key/.crt}"
 manufacturer_pub="${manufacturer_key/\.key/.pub}"
 device_ca_key="${certs_dir}/device-ca.key"
-device_ca_pkcs8="${device_ca_key/\.key/.pkcs8}"
 device_ca_crt="${device_ca_key/\.key/.crt}"
 device_ca_pub="${device_ca_key/\.key/.pub}"
 
@@ -32,7 +31,6 @@ owner_log="/tmp/${owner_dns}.log"
 owner_onboard_log="/tmp/onboarding-${owner_dns}.log"
 owner_ov="/tmp/owner.ov"
 owner_key="${certs_dir}/owner.key"
-owner_pkcs8="${owner_key/\.key/.pkcs8}"
 owner_crt="${owner_key/\.key/.crt}"
 owner_pub="${owner_key/\.key/.pub}"
 
@@ -43,7 +41,6 @@ new_owner_log="/tmp/${new_owner_dns}.log"
 new_owner_onboard_log="/tmp/onboarding-${owner_dns}.log"
 new_owner_ov="/tmp/new-owner.ov"
 new_owner_key="${certs_dir}/new-owner.key"
-new_owner_pkcs8="${new_owner_key/\.key/.pkcs8}"
 new_owner_crt="${new_owner_key/\.key/.crt}"
 new_owner_pub="${new_owner_key/\.key/.pub}"
 
@@ -220,26 +217,16 @@ install_client() {
   cd -
 }
 
-generate_cert() {
-  local key=$1
-  local pkcs8=$2
-  local crt=$3
-  local pub=$4
-  local subj=$5
-  openssl ecparam -name prime256v1 -genkey -outform der -out "${key}"
-  openssl pkcs8 -topk8 -nocrypt -inform der -outform der -in "${key}" -out "${pkcs8}"
-  openssl req -x509 -key "${key}" -keyform der -subj "${subj}" -days 365 -out "${crt}"
-  openssl x509 -in "${crt}" -pubkey -noout -out "${pub}"
 }
 
 generate_certs() {
   mkdir -p "${certs_dir}"
-  generate_cert "${manufacturer_key}" "${manufacturer_pkcs8}" "${manufacturer_crt}" "${manufacturer_pub}" "/C=US/O=FDO/CN=Manufacturer"
-  generate_cert "${device_ca_key}" "${device_ca_pkcs8}" "${device_ca_crt}" "${device_ca_pub}" "/C=US/O=FDO/CN=Device CA"
-  generate_cert "${owner_key}" "${owner_pkcs8}" "${owner_crt}" "${owner_pub}" "/C=US/O=FDO/CN=Owner"
-  generate_cert "${new_owner_key}" "${new_owner_pkcs8}" "${new_owner_crt}" "${new_owner_pub}" "/C=US/O=FDO/CN=New Owner"
-  ls -l "${certs_dir}"
+  generate_cert "${manufacturer_key}" "${manufacturer_crt}" "${manufacturer_pub}" "/C=US/O=FDO/CN=Manufacturer"
+  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_pub}" "/C=US/O=FDO/CN=Device CA"
+  generate_cert "${owner_key}" "${owner_crt}" "${owner_pub}" "/C=US/O=FDO/CN=Owner"
+  generate_cert "${new_owner_key}" "${new_owner_crt}" "${new_owner_pub}" "/C=US/O=FDO/CN=New Owner"
   chmod a+r "${certs_dir}"/*
+  ls -l "${certs_dir}"
 }
 
 setup_env() {
