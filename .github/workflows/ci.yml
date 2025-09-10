@@ -59,6 +59,12 @@ jobs:
           source test/test-makefile.sh
           get_server_logs
 
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/test-makefile.sh
+          cleanup
+
   test-container:
     name: build and test containers
     runs-on: ubuntu-latest
@@ -111,3 +117,9 @@ jobs:
         run: |
           source test/test-container.sh
           get_server_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/test-container.sh
+          cleanup

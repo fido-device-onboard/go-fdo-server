@@ -65,11 +65,26 @@ setup_hostname() {
   fi
 }
 
+unset_hostname() {
+  local dns
+  local ip
+  dns=$1
+  ip=$2
+  ! grep -q " ${dns}" /etc/hosts || sudo sed -ie "/.* ${dns}/d" /etc/hosts
+}
+
 setup_hostnames () {
   setup_hostname ${manufacturer_dns} ${manufacturer_ip}
   setup_hostname ${rendezvous_dns} ${rendezvous_ip}
   setup_hostname ${owner_dns} ${owner_ip}
   setup_hostname ${new_owner_dns} ${new_owner_ip}
+}
+
+unset_hostnames () {
+  unset_hostname ${manufacturer_dns} ${manufacturer_ip}
+  unset_hostname ${rendezvous_dns} ${rendezvous_ip}
+  unset_hostname ${owner_dns} ${owner_ip}
+  unset_hostname ${new_owner_dns} ${new_owner_ip}
 }
 
 update_ips() {
@@ -158,6 +173,10 @@ run_services () {
     --device-ca-cert="${device_ca_crt}"
 }
 
+stop_services () {
+  killall -q go-fdo-server || :
+}
+
 install_client() {
   go install github.com/fido-device-onboard/go-fdo-client@latest
 }
@@ -169,6 +188,10 @@ uninstall_client() {
 install_server() {
   mkdir -p ${bin_dir}
   make && install -D -m 755 -t ${bin_dir} go-fdo-server  && rm -f go-fdo-server
+}
+
+uninstall_server() {
+  rm -f ${bin_dir}/go-fdo-server
 }
 
 generate_certs() {
@@ -213,4 +236,12 @@ test_resale() {
   send_ov_to_owner ${new_owner_service} ${new_owner_ov}
   run_to0 ${new_owner_service} "${guid}"
   run_fido_device_onboard ${new_owner_onboard_log}
+}
+
+cleanup() {
+  stop_services
+  uninstall_server
+  uninstall_client
+  unset_hostnames
+  rm -rf ${base_dir}
 }

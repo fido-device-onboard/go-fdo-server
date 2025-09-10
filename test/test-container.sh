@@ -26,10 +26,22 @@ run_services () {
   docker compose -f deployments/compose/servers.yaml up -d
 }
 
+stop_services () {
+  docker compose -f deployments/compose/servers.yaml stop
+}
+
 install_server () {
   docker compose -f deployments/compose/servers.yaml build
 }
 
+uninstall_server() {
+  docker compose -f deployments/compose/servers.yaml down
+}
+
 install_client() {
   docker compose -f deployments/compose/client.yaml build
+}
+
+uninstall_client() {
+  docker compose -f deployments/compose/client.yaml down
 }
