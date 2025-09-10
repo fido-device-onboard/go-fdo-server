@@ -159,12 +159,11 @@ run_services () {
 }
 
 install_client() {
-  git clone https://github.com/fido-device-onboard/go-fdo-client.git /tmp/go-fdo-client
-  cd /tmp/go-fdo-client
-  go build
-  sudo install -D -m 755 go-fdo-client /usr/bin/
-  rm -rf /tmp/go-fdo-client
-  cd -
+  go install github.com/fido-device-onboard/go-fdo-client@latest
+}
+
+uninstall_client() {
+  rm -rf "$(go env GOPATH)/bin/go-fdo-client"
 }
 
 install_server() {
