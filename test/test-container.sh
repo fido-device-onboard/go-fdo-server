@@ -23,9 +23,13 @@ get_server_logs() {
 }
 
 run_services () {
-  return
+  docker compose -f deployments/compose/servers.yaml up -d
+}
+
+install_server () {
+  docker compose -f deployments/compose/servers.yaml build
 }
 
 install_client() {
-  return
+  docker compose -f deployments/compose/client.yaml build
 }

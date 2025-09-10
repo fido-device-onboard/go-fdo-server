@@ -77,23 +77,18 @@ jobs:
           source test/test-container.sh
           generate_certs
 
-      - name: Build and spawn FDO server containers
-        id: build-and-run-servers
-        uses: hoverkraft-tech/compose-action@v2.3.0
-        with:
-          compose-file: "deployments/compose/servers.yaml"
-          services-log-level: debug
-          up-flags: "--build"
+      - name: Build and install the binary
+        run: |
+          source test/test-container.sh
+          install_server
 
       - name: Make sure there are no changes after build
         uses: NathanielHill/fail-if-changes@master
 
       - name: Build and install 'go-fdo-client'
-        uses: hoverkraft-tech/compose-action@v2.3.0
-        with:
-          compose-file: "deployments/compose/client.yaml"
-          services-log-level: debug
-          up-flags: "--build --no-start"
+        run: |
+          source test/test-container.sh
+          install_client
 
       - name: Setup the environment
         id: setup_env
