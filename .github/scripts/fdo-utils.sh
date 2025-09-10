@@ -2,17 +2,20 @@
 
 set -xeuo pipefail
 
-creds_dir=/tmp/device-credentials
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/cert-utils.sh"
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/fdo-utils.sh"
+
+base_dir=/tmp/go-fdo
+bin_dir=${base_dir}/bin
+creds_dir=${base_dir}/device-credentials
 device_credentials=${creds_dir}/creds.bin
 
-certs_dir=/tmp/certs
+certs_dir=${base_dir}/certs
 
 manufacturer_dns=manufacturer
 manufacturer_ip=127.0.0.1
 manufacturer_port=8038
-manufacturer_log="/tmp/${manufacturer_dns}.log"
+manufacturer_log="${base_dir}/${manufacturer_dns}.log"
 manufacturer_key="${certs_dir}/manufacturer.key"
 manufacturer_crt="${manufacturer_key/\.key/.crt}"
 manufacturer_pub="${manufacturer_key/\.key/.pub}"
@@ -23,14 +26,14 @@ device_ca_pub="${device_ca_key/\.key/.pub}"
 rendezvous_dns=rendezvous
 rendezvous_ip=127.0.0.1
 rendezvous_port=8041
-rendezvous_log="/tmp/${rendezvous_dns}.log"
+rendezvous_log="${base_dir}/${rendezvous_dns}.log"
 
 owner_dns=owner
 owner_ip=127.0.0.1
 owner_port=8043
-owner_log="/tmp/${owner_dns}.log"
-owner_onboard_log="/tmp/onboarding-${owner_dns}.log"
-owner_ov="/tmp/owner.ov"
+owner_log="${base_dir}/${owner_dns}.log"
+owner_onboard_log="${base_dir}/onboarding-${owner_dns}.log"
+owner_ov="${base_dir}/owner.ov"
 owner_key="${certs_dir}/owner.key"
 owner_crt="${owner_key/\.key/.crt}"
 owner_pub="${owner_key/\.key/.pub}"
@@ -38,9 +41,9 @@ owner_pub="${owner_key/\.key/.pub}"
 new_owner_dns=new-owner
 new_owner_ip=127.0.0.1
 new_owner_port=8045
-new_owner_log="/tmp/${new_owner_dns}.log"
-new_owner_onboard_log="/tmp/onboarding-${owner_dns}.log"
-new_owner_ov="/tmp/new-owner.ov"
+new_owner_log="${base_dir}/${new_owner_dns}.log"
+new_owner_onboard_log="${base_dir}/onboarding-${owner_dns}.log"
+new_owner_ov="${base_dir}/new-owner.ov"
 new_owner_key="${certs_dir}/new-owner.key"
 new_owner_crt="${new_owner_key/\.key/.crt}"
 new_owner_pub="${new_owner_key/\.key/.pub}"
@@ -172,6 +175,7 @@ generate_certs() {
 
 setup_env() {
   setup_hostnames
+  mkdir -p ${base_dir}
   run_services
   wait_for_fdo_servers_ready
   set_rendezvous_info ${manufacturer_service} ${rendezvous_dns} ${rendezvous_ip} ${rendezvous_port}

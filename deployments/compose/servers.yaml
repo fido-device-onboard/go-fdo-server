@@ -16,12 +16,12 @@ services:
      - --debug
      - manufacturing
      - manufacturer:8038
-     - --manufacturing-key=/tmp/certs/manufacturer.key
-     - --owner-cert=/tmp/certs/owner.crt
-     - --device-ca-cert=/tmp/certs/device-ca.crt
-     - --device-ca-key=/tmp/certs/device-ca.key
+     - --manufacturing-key=/tmp/go-fdo/certs/manufacturer.key
+     - --owner-cert=/tmp/go-fdo/certs/owner.crt
+     - --device-ca-cert=/tmp/go-fdo/certs/device-ca.crt
+     - --device-ca-key=/tmp/go-fdo/certs/device-ca.key
     volumes:
-      - /tmp/certs:/tmp/certs
+      - /tmp/go-fdo:/tmp/go-fdo
     networks:
       - fdo
     restart: unless-stopped
@@ -47,6 +47,8 @@ services:
       - --debug
       - rendezvous
       - rendezvous:8041
+    volumes:
+      - /tmp/go-fdo:/tmp/go-fdo
     networks:
       - fdo
     restart: unless-stopped
@@ -72,10 +74,10 @@ services:
       - --debug
       - owner
       - owner:8043
-      - --owner-key=/tmp/certs/owner.key
-      - --device-ca-cert=/tmp/certs/device-ca.crt
+      - --owner-key=/tmp/go-fdo/certs/owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device-ca.crt
     volumes:
-      - /tmp/certs:/tmp/certs
+      - /tmp/go-fdo:/tmp/go-fdo
     networks:
       - fdo
     restart: unless-stopped
@@ -101,10 +103,10 @@ services:
       - --debug
       - owner
       - new-owner:8045
-      - --owner-key=/tmp/certs/new-owner.key
-      - --device-ca-cert=/tmp/certs/device-ca.crt
+      - --owner-key=/tmp/go-fdo/certs/new-owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device-ca.crt
     volumes:
-      - /tmp/certs:/tmp/certs
+      - /tmp/go-fdo:/tmp/go-fdo
     networks:
       - fdo
     restart: unless-stopped

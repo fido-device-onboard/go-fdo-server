@@ -3,8 +3,8 @@
 set -xeuo pipefail
 shopt -s expand_aliases
 
-creds_dir="/tmp/device-credentials"
-alias go-fdo-client="docker run --rm --volume "${creds_dir}:${creds_dir}" --network fdo --workdir ${creds_dir} go-fdo-client"
+creds_dir="/tmp/go-fdo/device-credentials"
+alias go-fdo-client="docker run --rm --volume '${creds_dir}:${creds_dir}' --network fdo --workdir '${creds_dir}' go-fdo-client"
 
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/fdo-utils.sh"
 
