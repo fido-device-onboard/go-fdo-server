@@ -79,7 +79,7 @@ jobs:
         id: build-and-run-servers
         uses: hoverkraft-tech/compose-action@v2.3.0
         with:
-          compose-file: ".github/compose/servers.yaml"
+          compose-file: "deployments/compose/servers.yaml"
           services-log-level: debug
           up-flags: "--build"
 
@@ -89,7 +89,7 @@ jobs:
       - name: Build and install 'go-fdo-client'
         uses: hoverkraft-tech/compose-action@v2.3.0
         with:
-          compose-file: ".github/compose/client.yaml"
+          compose-file: "deployments/compose/client.yaml"
           services-log-level: debug
           up-flags: "--build --no-start"
 
