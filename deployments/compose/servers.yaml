@@ -12,7 +12,7 @@ services:
       - 8038:8038
     command:
      - --db=/tmp/sqlite.db
-     - --db-pass='2=,%95QF<uTLLHt' \
+     - --db-pass='2=,%95QF<uTLLHt'
      - --debug
      - manufacturing
      - manufacturer:8038
