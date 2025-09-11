@@ -2,6 +2,21 @@
 
 This document describes all configuration options available for the FDO server. Configuration files can use any format supported by Viper (YAML, JSON, TOML, HCL, Java properties) and the format is automatically detected based on the file extension.
 
+Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the `address` key.
+
+Configuration files are loaded using the `--config` flag, for example:
+
+```bash
+# Using YAML
+go-fdo-server manufacturing --config config.yaml
+
+# Using JSON, over ride address given in configuration file
+go-fdo-server owner --config config.json 127.0.0.1:8080
+
+# Using TOML, enable debug logging
+go-fdo-server rendezvous  --debug --config config.toml
+```
+
 ## Global Configuration Options
 
 These options are available for all server types (manufacturing, owner, rendezvous):
@@ -156,22 +171,6 @@ owner-key = "/path/to/owner.key"
 
 ## Usage
 
-Configuration files are loaded using the `--config` flag:
-
-```bash
-# Using YAML
-go-fdo-server manufacturing --config config.yaml 127.0.0.1:8080
-
-# Using JSON
-go-fdo-server owner --config config.json 127.0.0.1:8080
-
-# Using TOML
-go-fdo-server rendezvous --config config.toml 127.0.0.1:8080
-```
-
-## Precedence
-
-Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the `address` key.
 
 ## Notes
 
