@@ -131,6 +131,10 @@ rpm: $(RPMBUILD_SPECFILE) $(RPMBUILD_TARBALL) $(RPMBUILD_GOLANG_VENDOR_TOOLS_FIL
 packit-create-archive: $(SOURCE_TARBALL) $(VENDOR_TARBALL)
 	ls -1 $(SOURCE_TARBALL)
 
+.PHONY: clean
+clean:
+	rm -rf $(RPMBUILD_TOP_DIR)
+	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.gz
 
 # Default target
 all: build test
