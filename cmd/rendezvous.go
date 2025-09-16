@@ -21,17 +21,18 @@ import (
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-// serveCmd represents the serve command
+// rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
-	Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Load configuration first
+		if err := rendezvousCmdLoadConfig(cmd, args); err != nil {
 			return err
 		}
-		address = args[0]
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -146,4 +147,49 @@ func serveRendezvous(db *sqlite.DB, useTLS bool) error {
 
 func init() {
 	rootCmd.AddCommand(rendezvousCmd)
+
+	rendezvousCmd.Flags().String("config", "", "Pathname of the configuration file")
+}
+
+// Load configuration from viper
+func rendezvousCmdLoadConfig(cmd *cobra.Command, args []string) error {
+	err := viper.BindPFlags(cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	// If the http_address has been provided on the command line it
+	// will take precedence over the content of the configuration
+	// file. Yet viper has no visibility of the command line so we
+	// force it here:
+	if len(args) > 0 {
+		viper.Set("address", args[0])
+	}
+
+	// Get the config flag directly from the command
+	configFilePath, err := cmd.Flags().GetString("config")
+	if err != nil {
+		return fmt.Errorf("failed to get config flag: %w", err)
+	}
+
+	if configFilePath != "" {
+		slog.Debug("Loading rendezvous server configuration file", "path", configFilePath)
+		viper.SetConfigFile(configFilePath)
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("configuration file read failed: %w", err)
+		}
+	}
+
+	// Load root configuration after reading config file
+	if err := rootCmdLoadConfig(); err != nil {
+		return err
+	}
+
+	address = viper.GetString("address")
+
+	if address == "" {
+		return fmt.Errorf("the rendezvous command requires the 'http_address' argument")
+	}
+
+	return nil
 }

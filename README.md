@@ -163,3 +163,11 @@ Cleanup:
 ```bash
 rm -rf /tmp/fdo
 ```
+
+## Configuration File Support
+
+The FDO server supports configuration files for all three subcommands: `manufacturing`, `owner`, and `rendezvous`. Configuration files can be used to specify all command-line options, making it easier to manage complex configurations.
+
+Each subcommand supports a `--config` flag that accepts a path to a configuration file. Multiple file formats are supported (YAML, JSON, TOML, HCL, Java properties) and the format is automatically detected based on the file extension.
+
+For a complete reference of all available configuration options, see [CONFIG.md](CONFIG.md).
