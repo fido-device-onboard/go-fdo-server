@@ -8,7 +8,7 @@ set_rendezvous_info () {
   curl --fail --verbose --silent \
        --header 'Content-Type: text/plain' \
        --request POST \
-       --data-raw "[[[5,\"${rendezvous_dns}\"],[3,${rendezvous_port}],[12,1],[2,\"${rendezvous_ip}\"],[4,${rendezvous_port}]]]" \
+       --data-raw "[{\"dns\":\"${rendezvous_dns}\",\"device_port\":\"${rendezvous_port}\",\"owner_port\":\"${rendezvous_port}\",\"protocol\":\"http\",\"ip\":\"${rendezvous_ip}\"}]" \
        "http://${manufacturer_service}/api/v1/rvinfo"
 }
 
@@ -20,7 +20,7 @@ update_rendezvous_info () {
   curl --fail --verbose --silent \
        --request PUT \
        --header 'Content-Type: text/plain' \
-       --data-raw "[[[5,\"${rendezvous_dns}\"],[3,${rendezvous_port}],[12,1],[2,\"${rendezvous_ip}\"],[4,${rendezvous_port}]]]" \
+       --data-raw "[{\"dns\":\"${rendezvous_dns}\",\"device_port\":\"${rendezvous_port}\",\"owner_port\":\"${rendezvous_port}\",\"protocol\":\"http\",\"ip\":\"${rendezvous_ip}\"}]" \
        "http://${manufacturer_service}/api/v1/rvinfo"
 }
 
@@ -30,7 +30,7 @@ set_owner_redirect_info () {
   local port=$3
   curl --location --request POST "http://${service}/api/v1/owner/redirect" \
        --header 'Content-Type: text/plain' \
-       --data-raw "[[\"${ip}\",\"${ip}\",${port},3]]"
+       --data-raw "[{\"dns\":\"${ip}\",\"port\":\"${port}\",\"protocol\":\"http\",\"ip\":\"${ip}\"}]"
 }
 
 get_ov_from_manufacturer () {

@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-type Data struct {
-	Value interface{} `json:"value"`
-}
-
 type GUID []byte
 
 func (t *GUID) UnmarshalJSON(b []byte) (err error) {
