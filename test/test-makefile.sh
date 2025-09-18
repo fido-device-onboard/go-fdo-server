@@ -206,8 +206,8 @@ generate_certs() {
 
 setup_env() {
   mkdir -p ${base_dir}
-  run_services
   setup_hostnames
+  run_services
   wait_for_fdo_servers_ready
   set_rendezvous_info ${manufacturer_service} ${rendezvous_dns} ${rendezvous_ip} ${rendezvous_port}
 }
