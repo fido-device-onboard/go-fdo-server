@@ -1,0 +1,31 @@
+name: E2E FSIM Upload Test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  fsim-upload-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (optional for buildx)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and run e2e test
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq curl
+          bash test/e2e-fsim-upload.sh
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdo-logs
+          path: /tmp/go-fdo/*.log 

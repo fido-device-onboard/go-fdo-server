@@ -137,8 +137,22 @@ get_device_guid () {
 
 run_fido_device_onboard () {
   local log=$1
+  local additional_params=$2
   cd ${creds_dir}
-  go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 | tee "${log}"
+  
+  # Build the client command
+  local client_cmd="go-fdo-client --blob \"${device_credentials}\" --debug onboard --key ec256 --kex ECDH256"
+  
+  # Add upload flag if upload is specified
+  if [[ "${additional_params}" == "upload" ]]; then
+    echo "sample uploaded content" > "uploaded.txt"
+    chmod 644 uploaded.txt
+    client_cmd="${client_cmd} --upload \"/\""
+  fi
+  
+  # Run the client command
+  eval "${client_cmd}" | tee "${log}"
+    
   cd -
   grep 'FIDO Device Onboard Complete' "${log}"
 }
