@@ -1,0 +1,4 @@
+Hello from FDO Download FSIM!
+This is a simple test file.
+Content: Basic download functionality test
+Size: Small text file
