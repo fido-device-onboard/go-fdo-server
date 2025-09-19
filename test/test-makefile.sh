@@ -137,8 +137,9 @@ get_device_guid () {
 
 run_fido_device_onboard () {
   local log=$1
+  local extra_args=("${@:2}")
   cd ${creds_dir}
-  go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 | tee "${log}"
+  go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 "${extra_args[@]}" | tee "${log}"
   cd -
   grep 'FIDO Device Onboard Complete' "${log}"
 }
