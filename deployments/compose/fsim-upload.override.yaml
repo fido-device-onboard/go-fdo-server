@@ -1,0 +1,18 @@
+services:
+  owner:
+    command:
+      - --db=/tmp/sqlite.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - owner:8043
+      - --owner-key=/tmp/go-fdo/certs/owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device-ca.crt
+      - --upload-directory=/tmp/go-fdo/uploads
+      - --command-upload
+      - uploaded.txt
+    environment:
+      - TMPDIR=/tmp/go-fdo/tmp
+    volumes:
+      - /tmp/go-fdo:/tmp/go-fdo:z
+      
