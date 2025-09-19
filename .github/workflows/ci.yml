@@ -153,7 +153,7 @@ jobs:
       - name: Fail if the source code has changes after build
         uses: NathanielHill/fail-if-changes@master
 
-  test-wget-fsim:
+  test-fsim-wget:
     name: test the wget FSIM functionality
     runs-on: ubuntu-latest
     steps:
