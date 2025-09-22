@@ -1,20 +1,20 @@
 # Configuration File Reference
 
-This document describes all configuration options available for the FDO server. Configuration files can use any format supported by Viper (YAML, JSON, TOML, HCL, Java properties) and the format is automatically detected based on the file extension.
+This document describes all configuration options available for the FDO server. Configuration files can use TOML or YAML format.
 
 Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the `address` key.
 
 Configuration files are loaded using the `--config` flag, for example:
 
 ```bash
-# Using YAML
-go-fdo-server manufacturing --config config.yaml
+# Using TOML configuration file
+go-fdo-server manufacturing --config config.toml
 
-# Using JSON, over ride address given in configuration file
-go-fdo-server owner --config config.json 127.0.0.1:8080
+# Using YAML configuration file
+go-fdo-server owner --config config.yaml 127.0.0.1:8080
 
 # Using TOML, enable debug logging
-go-fdo-server rendezvous  --debug --config config.toml
+go-fdo-server rendezvous --debug --config config.toml
 ```
 
 ## Global Configuration Options
@@ -64,91 +64,34 @@ The rendezvous server only uses the global configuration options listed above.
 
 ## Configuration File Examples
 
-### YAML Format
-
-```yaml
-# Global settings
-db: "fdo-server.db"
-db-pass: "MySecurePassword123!"
-debug: true
-insecure-tls: false
-server-cert-path: "/path/to/server.crt"
-server-key-path: "/path/to/server.key"
-address: "127.0.0.1:8080"
-
-# Manufacturing server specific settings
-manufacturing-key: "/path/to/manufacturing.key"
-device-ca-cert: "/path/to/device.ca"
-device-ca-key: "/path/to/device.key"
-owner-cert: "/path/to/owner.crt"
-
-# Owner server specific settings
-external-address: "0.0.0.0:8443"
-command-date: true
-command-wget: 
-  - "https://example.com/file1"
-  - "https://example.com/file2"
-command-upload: 
-  - "upload1.txt"
-  - "upload2.txt"
-upload-directory: "/tmp/uploads"
-command-download: 
-  - "download1.txt"
-reuse-credentials: true
-owner-key: "/path/to/owner.key"
-```
-
-### JSON Format
-
-```json
-{
-  "db": "fdo-server.db",
-  "db-pass": "MySecurePassword123!",
-  "debug": true,
-  "insecure-tls": false,
-  "server-cert-path": "/path/to/server.crt",
-  "server-key-path": "/path/to/server.key",
-  "address": "127.0.0.1:8080",
-  "manufacturing-key": "/path/to/manufacturing.key",
-  "device-ca-cert": "/path/to/device.ca",
-  "device-ca-key": "/path/to/device.key",
-  "owner-cert": "/path/to/owner.crt",
-  "external-address": "0.0.0.0:8443",
-  "command-date": true,
-  "command-wget": [
-    "https://example.com/file1",
-    "https://example.com/file2"
-  ],
-  "command-upload": [
-    "upload1.txt",
-    "upload2.txt"
-  ],
-  "upload-directory": "/tmp/uploads",
-  "command-download": [
-    "download1.txt"
-  ],
-  "reuse-credentials": true,
-  "owner-key": "/path/to/owner.key"
-}
-```
-
-### TOML Format
+### Manufacturing Server Configuration
 
 ```toml
-# Global settings
-db = "fdo-server.db"
-db-pass = "MySecurePassword123!"
+db = "manufacturing.db"
+db-pass = "ManufacturingPass123!"
 debug = true
 insecure-tls = false
-server-cert-path = "/path/to/server.crt"
-server-key-path = "/path/to/server.key"
-address = "127.0.0.1:8080"
+server-cert-path = "/path/to/manufacturing.crt"
+server-key-path = "/path/to/manufacturing.key"
+address = "127.0.0.1:8038"
 
 # Manufacturing server specific settings
 manufacturing-key = "/path/to/manufacturing.key"
 device-ca-cert = "/path/to/device.ca"
 device-ca-key = "/path/to/device.key"
 owner-cert = "/path/to/owner.crt"
+```
+
+### Owner Server Configuration
+
+```toml
+db = "owner.db"
+db-pass = "OwnerPass123!"
+debug = true
+insecure-tls = false
+server-cert-path = "/path/to/owner.crt"
+server-key-path = "/path/to/owner.key"
+address = "127.0.0.1:8043"
 
 # Owner server specific settings
 external-address = "0.0.0.0:8443"
@@ -166,7 +109,20 @@ command-download = [
   "download1.txt"
 ]
 reuse-credentials = true
+device-ca-cert = "/path/to/device.ca"
 owner-key = "/path/to/owner.key"
+```
+
+### Rendezvous Server Configuration
+
+```toml
+db = "rendezvous.db"
+db-pass = "RendezvousPass123!"
+debug = true
+insecure-tls = false
+server-cert-path = "/path/to/rendezvous.crt"
+server-key-path = "/path/to/rendezvous.key"
+address = "127.0.0.1:8041"
 ```
 
 ## Usage
@@ -177,4 +133,4 @@ owner-key = "/path/to/owner.key"
 - All file paths in the configuration should be absolute paths or paths relative to the current working directory
 - The `db-pass` field has strict requirements: minimum 8 characters, must include at least one number, one uppercase letter, and one special character
 - Array values (like `command-wget`, `command-upload`, `command-download`) can be specified multiple times in the configuration file
-- Boolean values can be specified as `true`/`false` (YAML/JSON) or `true`/`false` (TOML)
+- Boolean values can be specified as `true`/`false`
