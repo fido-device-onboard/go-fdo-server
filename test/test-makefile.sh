@@ -93,15 +93,15 @@ update_ips() {
   return
 }
 
-wait_for_service() {
+wait_for_url() {
     local status
     local retry=0
     local -r interval=2
     local -r max_retries=5
-    local service=$1
-    echo "Waiting for ${service} to be healthy"
+    local url=$1
+    echo "Waiting for ${url} to be available"
     while true; do
-        [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://${service}/health")" = "200" ]] && break
+        [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
         status=$?
         ((retry+=1))
         if [ $retry -gt $max_retries ]; then
@@ -112,15 +112,20 @@ wait_for_service() {
     done
 }
 
+wait_for_service() {
+  service=$1
+  wait_for_url "http://${service}/health"
+}
+
 wait_for_fdo_servers_ready () {
   # manufacturer server
-  wait_for_service "${manufacturer_service}"
+  wait_for_service ${manufacturer_service}
   # Rendezvous server
-  wait_for_service "${rendezvous_service}"
+  wait_for_service ${rendezvous_service}
   # Owner server
-  wait_for_service "${owner_service}"
+  wait_for_service ${owner_service}
   # New Owner server
-  wait_for_service "${new_owner_service}"
+  wait_for_service ${new_owner_service}
 }
 
 run_device_initialization() {
@@ -137,9 +142,9 @@ get_device_guid () {
 
 run_fido_device_onboard () {
   local log=$1
-  local extra_args=("${@:2}")
+  shift
   cd ${creds_dir}
-  go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 "${extra_args[@]}" | tee "${log}"
+  go-fdo-client --blob "${device_credentials}" --debug onboard --key ec256 --kex ECDH256 "${@}" | tee "${log}"
   cd -
   grep 'FIDO Device Onboard Complete' "${log}"
 }

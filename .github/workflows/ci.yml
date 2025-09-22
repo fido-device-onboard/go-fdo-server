@@ -167,17 +167,17 @@ jobs:
 
       - name: Run the wget FSIM
         run: |
-          source test/test-wget-fsim.sh
-          test_wget_fsim
+          source test/test-fsim-wget.sh
+          test_fsim_wget
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
         if: failure() && steps.setup_env.outcome == 'success'
         run: |
-          source test/test-wget-fsim.sh
+          source test/test-fsim-wget.sh
           get_server_logs
 
       - name: Cleanup the environment
         if: always()
         run: |
-          source test/test-wget-fsim.sh
+          source test/test-fsim-wget.sh
           cleanup_wget
