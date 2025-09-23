@@ -171,7 +171,7 @@ jobs:
           test_fsim_wget
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure() && steps.setup_env.outcome == 'success'
+        if: failure()
         run: |
           source test/test-fsim-wget.sh
           get_server_logs
