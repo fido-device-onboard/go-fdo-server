@@ -119,13 +119,13 @@ wait_for_service() {
 
 wait_for_fdo_servers_ready () {
   # manufacturer server
-  wait_for_service ${manufacturer_service}
+  wait_for_service "${manufacturer_service}"
   # Rendezvous server
-  wait_for_service ${rendezvous_service}
+  wait_for_service "${rendezvous_service}"
   # Owner server
-  wait_for_service ${owner_service}
+  wait_for_service "${owner_service}"
   # New Owner server
-  wait_for_service ${new_owner_service}
+  wait_for_service "${new_owner_service}"
 }
 
 run_device_initialization() {
