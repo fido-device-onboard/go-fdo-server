@@ -83,6 +83,7 @@ install -m 0755 -vp -D -t %{buildroot}%{_datadir}/%{name} scripts/*
 %package manufacturer
 Requires: go-fdo-server
 Requires: group(go-fdo-server)
+Requires: openssl
 Summary: A Go implementation of the FDO manufacturer server
 License: %combined_license
 %description manufacturer
