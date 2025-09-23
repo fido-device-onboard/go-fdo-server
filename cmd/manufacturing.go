@@ -69,7 +69,7 @@ var manufacturingCmd = &cobra.Command{
 			return err
 		}
 
-		return serveManufacturing(rvInfo, state, insecureTLS)
+		return serveManufacturing(rvInfo, state, useTLS)
 	},
 }
 

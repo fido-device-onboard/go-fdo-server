@@ -101,7 +101,7 @@ wait_for_service() {
     local service=$1
     echo "Waiting for ${service} to be healthy"
     while true; do
-        [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://${service}/health")" = "200" ]] && break
+        [[ "$(curl -k --silent --output /dev/null --write-out '%{http_code}' "http://${service}/health")" = "200" ]] && break
         status=$?
         ((retry+=1))
         if [ $retry -gt $max_retries ]; then
@@ -155,7 +155,7 @@ run_service () {
   local address_port=$2
   local db=$3
   local log=$4
-  nohup ${bin_dir}/go-fdo-server "${role}" "${address_port}" --db "${base_dir}/${db}.sqlite" --db-pass '2=,%95QF<uTLLHt' --debug "${@:5}" &> "${log}" &
+  nohup ${bin_dir}/go-fdo-server --tls=false "${role}" "${address_port}" --db "${base_dir}/${db}.sqlite" --db-pass '2=,%95QF<uTLLHt' --debug "${@:5}" &> "${log}" &
 }
 
 run_services () {
@@ -196,10 +196,10 @@ uninstall_server() {
 
 generate_certs() {
   mkdir -p "${certs_dir}"
-  generate_cert "${manufacturer_key}" "${manufacturer_crt}" "${manufacturer_pub}" "/C=US/O=FDO/CN=Manufacturer"
-  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_pub}" "/C=US/O=FDO/CN=Device CA"
-  generate_cert "${owner_key}" "${owner_crt}" "${owner_pub}" "/C=US/O=FDO/CN=Owner"
-  generate_cert "${new_owner_key}" "${new_owner_crt}" "${new_owner_pub}" "/C=US/O=FDO/CN=New Owner"
+  generate_cert "${manufacturer_key}" "${manufacturer_crt}" "/C=US/O=FDO/CN=Manufacturer" "${manufacturer_pub}"
+  generate_cert "${device_ca_key}" "${device_ca_crt}" "/C=US/O=FDO/CN=Device CA" "${device_ca_pub}"
+  generate_cert "${owner_key}" "${owner_crt}" "/C=US/O=FDO/CN=Owner" "${owner_pub}"
+  generate_cert "${new_owner_key}" "${new_owner_crt}" "/C=US/O=FDO/CN=New Owner" "${new_owner_pub}"
   chmod a+r "${certs_dir}"/*
   ls -l "${certs_dir}"
 }

@@ -86,7 +86,7 @@ var ownerCmd = &cobra.Command{
 			return err
 		}
 
-		return serveOwner(state, insecureTLS)
+		return serveOwner(state, useTLS)
 	},
 }
 
@@ -370,6 +370,6 @@ func init() {
 	ownerCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
 	ownerCmd.Flags().StringVar(&ownerDeviceCACert, "device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().StringVar(&ownerPrivateKey, "owner-key", "", "Owner private key path")
-	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	ownerCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
 
 }

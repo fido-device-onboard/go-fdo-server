@@ -52,11 +52,11 @@ DB_PASS='P@ssw0rd1!'
 mkdir -p /tmp/fdo/db /tmp/fdo/keys /tmp/fdo/ov
 
 # Rendezvous (127.0.0.1:8041)
-go-fdo-server --debug rendezvous 127.0.0.1:8041 \
+go-fdo-server --tls=false --debug rendezvous 127.0.0.1:8041 \
   --db /tmp/fdo/db/rv.db --db-pass "$DB_PASS"
 
 # Manufacturing (127.0.0.1:8038)
-go-fdo-server --debug manufacturing 127.0.0.1:8038 \
+go-fdo-server --tls=false --debug manufacturing 127.0.0.1:8038 \
   --db /tmp/fdo/db/mfg.db --db-pass "$DB_PASS" \
   --manufacturing-key /tmp/fdo/keys/manufacturer_key.der \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
@@ -64,7 +64,7 @@ go-fdo-server --debug manufacturing 127.0.0.1:8038 \
   --owner-cert     /tmp/fdo/keys/owner_cert.pem
 
 # Owner (127.0.0.1:8043)
-go-fdo-server --debug owner 127.0.0.1:8043 \
+go-fdo-server --tls=false --debug owner 127.0.0.1:8043 \
   --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key      /tmp/fdo/keys/owner_key.der
@@ -124,7 +124,7 @@ Use GET and PUT requests to view and update existing owner redirect data.
 1. Device Initialization (DI) with `go-fdo-client` (stores `/tmp/fdo/cred.bin`):
 
 ```bash
-go-fdo-client device-init 'http://127.0.0.1:8038' \
+go-fdo-client --insecure-skip-tls-verify=true device-init 'http://127.0.0.1:8038' \
   --device-info gotest \
   --key ec256 \
   --debug \
@@ -154,7 +154,7 @@ curl --location --request GET "http://127.0.0.1:8043/api/v1/to0/${GUID}"
 5. Run onboarding (TO2) and verify success:
 
 ```bash
-go-fdo-client onboard --key ec256 --kex ECDH256 --debug --blob /tmp/fdo/cred.bin | tee /tmp/fdo/client-onboard.log
+go-fdo-client --insecure-skip-tls-verify=true onboard --key ec256 --kex ECDH256 --debug --blob /tmp/fdo/cred.bin | tee /tmp/fdo/client-onboard.log
 grep -F 'FIDO Device Onboard Complete' /tmp/fdo/client-onboard.log >/dev/null && echo 'Onboarding OK'
 ```
 
@@ -163,3 +163,20 @@ Cleanup:
 ```bash
 rm -rf /tmp/fdo
 ```
+
+## TLS configuration
+
+1. Generate key and certificate for the server
+
+```bash
+openssl ecparam -genkey -name secp384r1 -out server.key
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+2. Run go-fdo-server
+
+```bash
+go-fdo-server --server-cert-path <cert-path> --server-key-path <key-path> ...
+```
+
+To run the server without TLS (not recommended), just pass `--tls=false` to the `go-fdo-server` command.

@@ -11,6 +11,6 @@ key="${OWNER_KEY:-${conf_dir}/owner.key}"
 crt="${OWNER_CRT:-${conf_dir}/owner.crt}"
 pub="${OWNER_PUB:-${conf_dir}/owner.pub}"
 
-generate_cert "${key}" "${crt}" "${pub}" "${subj}"
+generate_cert "${key}" "${crt}" "${subj}" "${pub}"
 
 "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/generate-device-ca-certs.sh"
