@@ -7,6 +7,7 @@ Type=simple
 PrivateDevices=yes
 CacheDirectory=go-fdo-server-rendezvous
 StateDirectory=go-fdo-server-rendezvous
+ExecStartPre=/usr/share/go-fdo-server/generate-server-certs.sh rendezvous
 ExecStart=/usr/bin/go-fdo-server --db ${DATABASE_DSN} --db-pass ${DATABASE_PASSWORD} rendezvous ${LISTEN_IP}:${LISTEN_PORT}
 User=go-fdo-server-rendezvous
 

@@ -45,7 +45,7 @@ var rendezvousCmd = &cobra.Command{
 			return err
 		}
 
-		return serveRendezvous(state, insecureTLS)
+		return serveRendezvous(state, useTLS)
 	},
 }
 

@@ -11,7 +11,7 @@ key="${MANUFACTURER_KEY:-${conf_dir}/manufacturer.key}"
 crt="${MANUFACTURER_CRT:-${conf_dir}/manufacturer.crt}"
 pub="${MANUFACTURER_PUB:-${conf_dir}/manufacturer.pub}"
 
-generate_cert "${key}" "${crt}" "${pub}" "${subj}"
+generate_cert "${key}" "${crt}" "${subj}" "${pub}"
 
 "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/generate-device-ca-certs.sh"
 "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/generate-owner-certs.sh"
