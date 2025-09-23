@@ -175,13 +175,13 @@ jobs:
         run: |
           source test/test-fsim-wget.sh
           get_server_logs
-      
+
       - name: Cleanup the environment
         if: always()
         run: |
           source test/test-fsim-wget.sh
           cleanup_wget
-      
+
   test-fsim-upload:
     name: test fsim upload
     runs-on: ubuntu-latest
@@ -193,12 +193,12 @@ jobs:
 
       - name: Check out repository code
         uses: actions/checkout@v4
-      
+
       - name: Test FSIM upload
         run: |
           source test/test-fsim-upload.sh
           run_test
-      
+
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
         if: failure()
         run: |
@@ -210,4 +210,32 @@ jobs:
         run: |
           source test/test-fsim-upload.sh
           fsim_teardown
-          
+
+  test-fsim-download:
+    name: test download fsim
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Run the download FSIM test
+        run: |
+          source test/test-fsim-download.sh
+          test_fsim_download
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+        if: failure()
+        run: |
+          source test/test-fsim-download.sh
+          get_server_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/test-fsim-download.sh
+          cleanup_download_fsim
