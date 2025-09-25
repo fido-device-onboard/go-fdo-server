@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"strconv"
 	"time"
@@ -239,7 +240,11 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 		case protocol.RVDns:
 			return cbor.Marshal(v)
 		case protocol.RVIPAddress:
-			return cbor.Marshal(net.ParseIP(v))
+			ip := net.ParseIP(v)
+			if ip == nil {
+				return nil, fmt.Errorf("invalid ip %q", v)
+			}
+			return cbor.Marshal(ip)
 		default:
 			return cbor.Marshal(v)
 		}
@@ -442,14 +447,23 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 func parsePortValue(v any) (uint16, error) {
 	switch t := v.(type) {
 	case float64:
+		if t != math.Trunc(t) {
+			return 0, fmt.Errorf("port must be an integer, got %v", t)
+		}
+		if t < 1 || t > 65535 {
+			return 0, fmt.Errorf("port out of range: %v", t)
+		}
 		return uint16(t), nil
 	case string:
 		if t == "" {
-			return 0, fmt.Errorf("empty")
+			return 0, fmt.Errorf("empty port")
 		}
 		i, err := strconv.Atoi(t)
 		if err != nil {
 			return 0, err
+		}
+		if i < 1 || i > 65535 {
+			return 0, fmt.Errorf("port out of range: %d", i)
 		}
 		return uint16(i), nil
 	default:
@@ -523,6 +537,9 @@ func parseHumanToTO2AddrsJSON(rawJSON []byte) ([]protocol.RvTO2Addr, error) {
 
 		if item.IP != "" {
 			ip := net.ParseIP(item.IP)
+			if ip == nil {
+				return nil, fmt.Errorf("invalid ip %q", item.IP)
+			}
 			ipPtr = &ip
 		}
 		if item.DNS != "" {

@@ -12,6 +12,9 @@ func FuzzParseHumanReadableRvJSON(f *testing.F) {
 	f.Add([]byte(`[{"ip":"127.0.0.1","protocol":"http"}]`))
 	// Seed with both DNS and IP
 	f.Add([]byte(`[{"dns":"example.com","ip":"127.0.0.1","protocol":"http","medium":"eth_all","delay_seconds":10}]`))
+	// Seed with invalid IPs
+	f.Add([]byte(`[{"ip":"999.999.999.999","protocol":"http"}]`))
+	f.Add([]byte(`[{"ip":"abc.def.ghi.jkl","protocol":"http"}]`))
 	// Seed with extra fields
 	f.Add([]byte(`[{"dns":"example.com","wifi_ssid":"ssid","wifi_pw":"pw","dev_only":true,"owner_only":false,"rv_bypass":true}]`))
 	// Seed with cert hashes and delay
@@ -41,11 +44,14 @@ func FuzzParseHumanReadableRvJSON(f *testing.F) {
 // FuzzParseHumanToTO2AddrsJSON ensures the TO2 addresses parser never panics on arbitrary inputs.
 func FuzzParseHumanToTO2AddrsJSON(f *testing.F) {
 	// Seed with a minimal valid example
-	f.Add([]byte(`[{"dns":"owner.example.com","port":"8043","protocol":"http"}]`))
+	f.Add([]byte(`[{"dns":"owner.example.com","port":"1","protocol":"http"}]`))
 	// Seed with IP-only
-	f.Add([]byte(`[{"ip":"192.168.1.10","port":"8043","protocol":"https"}]`))
+	f.Add([]byte(`[{"ip":"192.168.1.10","port":"65535","protocol":"https"}]`))
 	// Seed with both DNS and IP
-	f.Add([]byte(`[{"dns":"owner.example.com","ip":"10.0.0.5","port":"8043","protocol":"tls"}]`))
+	f.Add([]byte(`[{"dns":"owner.example.com","ip":"10.0.0.5","port":"65535","protocol":"tls"}]`))
+	// Seed with invalid IPs
+	f.Add([]byte(`[{"ip":"300.300.300.300","port":"8043","protocol":"http"}]`))
+	f.Add([]byte(`[{"ip":"not.an.ip","port":"8043","protocol":"http"}]`))
 	// Seed malformed JSON
 	f.Add([]byte(`[{bad}]`))
 	// Seed with missing fields

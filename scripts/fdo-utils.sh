@@ -16,7 +16,7 @@ update_rendezvous_info () {
   local manufacturer_service=$1
   local rendezvous_dns=$2
   local rendezvous_ip=$3
-  local rendezvous_ip=$4
+  local rendezvous_port=$4
   curl --fail --verbose --silent \
        --request PUT \
        --header 'Content-Type: text/plain' \

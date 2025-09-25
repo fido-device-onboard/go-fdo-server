@@ -33,6 +33,12 @@ func TestParseHumanReadableRvJSON_Cases(t *testing.T) {
 			jsonBody: `[{"dns":"example.com","delay_seconds":10}]`,
 		},
 		{
+			name:      "invalid_ip_value",
+			jsonBody:  `[{"ip":"999.999.999.999","protocol":"http"}]`,
+			wantError: true,
+			errSubstr: "invalid ip",
+		},
+		{
 			name:      "invalid_missing_dns_ip",
 			jsonBody:  `[{}]`,
 			wantError: true,
@@ -168,15 +174,15 @@ func TestParseHumanToTO2AddrsJSON_Cases(t *testing.T) {
 	}{
 		{
 			name:     "valid_dns_only",
-			jsonBody: `[{"dns":"owner.example.com","port":"8043","protocol":"http"}]`,
+			jsonBody: `[{"dns":"owner.example.com","port":"32768","protocol":"http"}]`,
 		},
 		{
 			name:     "valid_ip_only",
-			jsonBody: `[{"ip":"10.0.0.5","port":"8043","protocol":"https"}]`,
+			jsonBody: `[{"ip":"10.0.0.5","port":"32768","protocol":"https"}]`,
 		},
 		{
 			name:     "valid_both",
-			jsonBody: `[{"dns":"owner.example.com","ip":"10.0.0.5","port":"8043","protocol":"tls"}]`,
+			jsonBody: `[{"dns":"owner.example.com","ip":"10.0.0.5","port":"32768","protocol":"tls"}]`,
 		},
 		{
 			name:      "invalid_missing_dns_ip",
@@ -186,7 +192,7 @@ func TestParseHumanToTO2AddrsJSON_Cases(t *testing.T) {
 		},
 		{
 			name:      "invalid_protocol",
-			jsonBody:  `[{"dns":"owner.example.com","port":"8043","protocol":"bogus"}]`,
+			jsonBody:  `[{"dns":"owner.example.com","port":"32768","protocol":"bogus"}]`,
 			wantError: true,
 			errSubstr: "unsupported transport protocol",
 		},
@@ -198,7 +204,7 @@ func TestParseHumanToTO2AddrsJSON_Cases(t *testing.T) {
 		},
 		{
 			name:      "invalid_transport_protocol_case",
-			jsonBody:  `[{"dns":"owner.example.com","port":"8043","protocol":"HTTP"}]`,
+			jsonBody:  `[{"dns":"owner.example.com","port":"32768","protocol":"HTTP"}]`,
 			wantError: true,
 			errSubstr: "unsupported transport protocol",
 		},
@@ -258,6 +264,50 @@ func TestParseHumanToTO2AddrsJSON_Cases(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestParsePortValue_Cases(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        any
+		want      uint16
+		wantError bool
+		errSubstr string
+	}{
+		{name: "string_valid_lower_bound", in: "1", want: 1},
+		{name: "string_valid_upper_bound", in: "65535", want: 65535},
+		{name: "string_invalid_below_min", in: "0", wantError: true, errSubstr: "out of range"},
+		{name: "string_invalid_above_max", in: "65536", wantError: true, errSubstr: "out of range"},
+		{name: "string_invalid_non_numeric", in: "eighty", wantError: true},
+		{name: "string_invalid_empty", in: "", wantError: true, errSubstr: "empty"},
+
+		{name: "float_valid_lower_bound", in: float64(1), want: 1},
+		{name: "float_valid_upper_bound", in: float64(65535), want: 65535},
+		{name: "float_invalid_fractional", in: 8043.5, wantError: true, errSubstr: "integer"},
+		{name: "float_invalid_below_min", in: float64(0), wantError: true, errSubstr: "out of range"},
+		{name: "float_invalid_above_max", in: float64(65536), wantError: true, errSubstr: "out of range"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parsePortValue(tc.in)
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if tc.errSubstr != "" && !strings.Contains(err.Error(), tc.errSubstr) {
+					t.Fatalf("expected error containing %q, got %q", tc.errSubstr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("unexpected value: got %d want %d", got, tc.want)
 			}
 		})
 	}

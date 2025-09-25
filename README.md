@@ -101,7 +101,7 @@ curl --location --request GET 'http://localhost:8038/api/v1/rvinfo'
 ### Update Existing RV Info Data
 Send a PUT request to update the existing RV info data:
 ```
-curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \                      
+curl --location --request PUT 'http://localhost:8038/api/v1/rvinfo' \
 --header 'Content-Type: text/plain' \
 --data-raw '[{"dns":"fdo.example.com","device_port":"8041","rv_bypass": "false", "owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
 ```
@@ -110,13 +110,20 @@ curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \
 ### Create New Owner Redirect Data
 Send a POST request to create new owner redirect data, which is stored in the Owner’s database:
 ```
-curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \               
+curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \
 --header 'Content-Type: text/plain' \
 --data-raw '[{"dns":"fdo.example.com","port":"8043","protocol":"http","ip":"127.0.0.1"}]'
 ```
 
 ### View and Update Existing Owner Redirect Data
 Use GET and PUT requests to view and update existing owner redirect data.
+```
+curl --location --request GET 'http://localhost:8043/api/v1/owner/redirect'
+
+curl --location --request PUT 'http://localhost:8043/api/v1/owner/redirect' \
+--header 'Content-Type: text/plain' \
+--data-raw '[{"dns":"fdo.test.com","port":"8085","protocol":"http","ip":"127.0.0.1"}]'
+```
 
 
 ## Basic onboarding flow (device DI → voucher → TO0 → TO2)
@@ -124,7 +131,7 @@ Use GET and PUT requests to view and update existing owner redirect data.
 1. Device Initialization (DI) with `go-fdo-client` (stores `/tmp/fdo/cred.bin`):
 
 ```bash
-go-fdo-client device-init 'http://127.0.0.1:8038' \
+go-fdo-client device-init 'http://localhost:8038' \
   --device-info gotest \
   --key ec256 \
   --debug \
@@ -141,14 +148,14 @@ echo "GUID=${GUID}"
 3. Download voucher from Manufacturing and upload to Owner:
 
 ```bash
-curl -v "http://127.0.0.1:8038/api/v1/vouchers?guid=${GUID}" > /tmp/fdo/ov/ownervoucher
-curl -X POST 'http://127.0.0.1:8043/api/v1/owner/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
+curl -v "http://localhost:8038/api/v1/vouchers?guid=${GUID}" > /tmp/fdo/ov/ownervoucher
+curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
 ```
 
 4. Trigger TO0 on Owner server:
 
 ```bash
-curl --location --request GET "http://127.0.0.1:8043/api/v1/to0/${GUID}"
+curl --location --request GET "http://localhost:8043/api/v1/to0/${GUID}"
 ```
 
 5. Run onboarding (TO2) and verify success:
