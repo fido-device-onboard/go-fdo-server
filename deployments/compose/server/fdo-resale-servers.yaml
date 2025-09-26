@@ -1,0 +1,33 @@
+include:
+  - fdo-onboarding-servers.yaml
+services:
+   new_owner:
+    container_name: new_owner
+    hostname: new_owner
+    image: new_owner
+    build: ../../..
+    environment:
+      TZ: Europe/Madrid
+    user: ${container_user}
+    command:
+      - --db=/tmp/go-fdo/new_owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - new_owner:8045
+      - --owner-key=/tmp/go-fdo/certs/new_owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
+    working_dir: /tmp/go-fdo
+    networks:
+      - fdo
+    ports:
+      - 8045:8045
+    volumes:
+      - /tmp:/tmp:z
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://new_owner:8045/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s

@@ -4,42 +4,14 @@ on:
     - main
   pull_request:
 
-name: Continuous integration
+name: Container Tests
 
 jobs:
-  test-rpms:
-    name: Test srpm and rpm builds
-    runs-on: ubuntu-latest
-    container: fedora:latest
-    steps:
-      - name: Install dependencies
-        run: dnf install -y git make node
-
-      - name: Install golang
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: Check out repository code
-        uses: actions/checkout@v4
-
-      - name: Build SRPM
-        run: |
-          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
-          make srpm
-
-      - name: Build RPM
-        run: |
-          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
-          make rpm
-
-      - name: Fail if the source code has changes after build
-        uses: NathanielHill/fail-if-changes@master
-
-  test-onboarding:
+  test-container-onboarding:
     name: Test FIDO device onboarding
     runs-on: ubuntu-latest
     steps:
+
       - name: Install golang
         uses: actions/setup-go@v5
         with:
@@ -49,27 +21,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Test FIDO device onboarding
+        id: onboarding
         run: |
-          source test/ci/test-onboarding.sh
+          source test/container/test-onboarding.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after a failure
+      - name: Get manufacturer, rendezvous and owner server logs after failure
         if: failure()
         run: |
-          source test/ci/test-onboarding.sh
+          source test/container/test-onboarding.sh
           get_server_logs
 
       - name: Cleanup the environment
         if: always()
         run: |
-          source test/ci/test-onboarding.sh
+          source test/container/test-onboarding.sh
           cleanup
 
-  test-resale:
+  test-container-resale:
     name: Test FIDO resale protocol
     runs-on: ubuntu-latest
     steps:
-      - name: install golang
+
+      - name: Install golang
         uses: actions/setup-go@v5
         with:
           go-version: "1.25"
@@ -79,54 +53,26 @@ jobs:
 
       - name: Test FIDO resale protocol
         run: |
-          source test/ci/test-resale.sh
+          source test/container/test-resale.sh
           run_test
 
       - name: Get manufacturer, rendezvous and owner server logs after failure
         if: failure()
         run: |
-          source test/ci/test-resale.sh
+          source test/container/test-resale.sh
           get_server_logs
 
       - name: Cleanup the environment
         if: always()
         run: |
-          source test/ci/test-resale.sh
+          source test/container/test-resale.sh
           cleanup
 
-  test-fsim-wget:
-    name: Test FSIM fdo.wget
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install golang
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-
-      - name: Check out repository code
-        uses: actions/checkout@v4
-
-      - name: Test FSIM fdo.wget
-        run: |
-          source test/ci/test-fsim-wget.sh
-          run_test
-
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure()
-        run: |
-          source test/ci/test-fsim-wget.sh
-          get_server_logs
-
-      - name: Cleanup the environment
-        if: always()
-        run: |
-          source test/ci/test-fsim-wget.sh
-          cleanup
-
-  test-fsim-upload:
+  test-container-fsim-fdo-upload:
     name: Test FSIM fdo.upload
     runs-on: ubuntu-latest
     steps:
+
       - name: Install golang
         uses: actions/setup-go@v5
         with:
@@ -137,25 +83,26 @@ jobs:
 
       - name: Test FSIM fdo.upload
         run: |
-          source test/ci/test-fsim-upload.sh
+          source test/container/test-fsim-upload.sh
           run_test
 
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+      - name: Get manufacturer, rendezvous and owner server logs after failure
         if: failure()
         run: |
-          source test/ci/test-fsim-upload.sh
+          source test/container/test-fsim-upload.sh
           get_server_logs
 
       - name: Cleanup the environment
         if: always()
         run: |
-          source test/ci/test-fsim-upload.sh
+          source test/container/test-fsim-upload.sh
           cleanup
 
-  test-fsim-download:
+  test-container-fsim-fdo-download:
     name: Test FSIM fdo.download
     runs-on: ubuntu-latest
     steps:
+
       - name: Install golang
         uses: actions/setup-go@v5
         with:
@@ -166,17 +113,47 @@ jobs:
 
       - name: Test FSIM fdo.download
         run: |
-          source test/ci/test-fsim-download.sh
+          source test/container/test-fsim-download.sh
           run_test
 
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+      - name: Get manufacturer, rendezvous and owner server logs after failure
         if: failure()
         run: |
-          source test/ci/test-fsim-download.sh
+          source test/container/test-fsim-download.sh
           get_server_logs
 
       - name: Cleanup the environment
         if: always()
         run: |
-          source test/ci/test-fsim-download.sh
+          source test/container/test-fsim-download.sh
+          cleanup
+
+  test-container-fsim-fdo-wget:
+    name: Test FSIM fdo.wget
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test FSIM fdo.wget
+        run: |
+          source test/container/test-fsim-wget.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs after failure
+        if: failure()
+        run: |
+          source test/container/test-fsim-wget.sh
+          get_server_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/container/test-fsim-wget.sh
           cleanup
