@@ -1,0 +1,37 @@
+services:
+  owner:
+    command:
+      - --db=/tmp/go-fdo/owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - owner:8043
+      - --owner-key=/tmp/go-fdo/certs/owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
+      - --command-wget=http://wget_httpd:8888/file1
+  wget_httpd:
+    container_name: wget_httpd
+    hostname: wget_httpd
+    image: python:alpine
+    environment:
+      TZ: Europe/Madrid
+    user: ${container_user}
+    command:
+      - "python3"
+      - "-m"
+      - "http.server"
+      - "8888"
+    working_dir: /tmp/go-fdo/fsim/wget/httpd
+    networks:
+      - fdo
+    ports:
+      - 8888:8888
+    volumes:
+      - /tmp:/tmp:z
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://wget_httpd:8888/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s

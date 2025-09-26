@@ -1,11 +1,17 @@
-include:
-  - networks.yaml
 services:
   go-fdo-client:
     container_name: go-fdo-client
     hostname: go-fdo-client
     image: go-fdo-client
     build: https://github.com/fido-device-onboard/go-fdo-client.git#main
+    working_dir: /tmp/go-fdo/device-credentials
+    user: "${container_user}"
     networks:
       - fdo
+    volumes:
+      - /tmp:/tmp:z
     restart: no
+networks:
+  fdo:
+    name: fdo
+    external: true

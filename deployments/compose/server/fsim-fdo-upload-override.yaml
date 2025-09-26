@@ -1,0 +1,15 @@
+services:
+  owner:
+    command:
+      - --db=/tmp/go-fdo/owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - owner
+      - owner:8043
+      - --owner-key=/tmp/go-fdo/certs/owner.key
+      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
+      - --upload-directory=/tmp/go-fdo/fsim/upload/owner
+      - --command-upload=file1
+      - --command-upload=subdir1/file2
+      - --command-upload=subdir1/subdir2/file3
+    working_dir: /tmp/go/fdo/fsim/upload/owner
