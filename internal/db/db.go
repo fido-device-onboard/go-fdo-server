@@ -297,11 +297,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 
 	out := make([][]protocol.RvInstruction, 0, len(items))
 	for i, item := range items {
-		var (
-			others    []protocol.RvInstruction
-			protocols []protocol.RvInstruction
-			ports     []protocol.RvInstruction
-		)
+		group := make([]protocol.RvInstruction, 0)
 
 		// Spec requires at least one of DNS or IP to be present for an RV entry
 		if item.DNS == "" && item.IP == "" {
@@ -313,14 +309,14 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVDns, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVDns, Value: enc})
 		}
 		if item.IP != "" {
 			enc, err := encodeRvValue(protocol.RVIPAddress, item.IP)
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: enc})
 		}
 		if item.Protocol != "" {
 			code, err := protocolCodeFromString(item.Protocol)
@@ -331,7 +327,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			protocols = append(protocols, protocol.RvInstruction{Variable: protocol.RVProtocol, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVProtocol, Value: enc})
 		}
 		if item.Medium != "" {
 			m, err := parseMediumValue(item.Medium)
@@ -342,7 +338,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVMedium, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVMedium, Value: enc})
 		}
 		if item.DevicePort != "" {
 			num, err := parsePortValue(item.DevicePort)
@@ -353,7 +349,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			ports = append(ports, protocol.RvInstruction{Variable: protocol.RVDevPort, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVDevPort, Value: enc})
 		}
 		if item.OwnerPort != "" {
 			num, err := parsePortValue(item.OwnerPort)
@@ -364,30 +360,30 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			ports = append(ports, protocol.RvInstruction{Variable: protocol.RVOwnerPort, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVOwnerPort, Value: enc})
 		}
 		if item.WifiSSID != "" {
 			enc, err := encodeRvValue(protocol.RVWifiSsid, item.WifiSSID)
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiSsid, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVWifiSsid, Value: enc})
 		}
 		if item.WifiPW != "" {
 			enc, err := encodeRvValue(protocol.RVWifiPw, item.WifiPW)
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVWifiPw, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVWifiPw, Value: enc})
 		}
 		if item.DevOnly {
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVDevOnly})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVDevOnly})
 		}
 		if item.OwnerOnly {
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVOwnerOnly})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVOwnerOnly})
 		}
 		if item.RvBypass {
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVBypass})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVBypass})
 		}
 		if item.DelaySeconds != nil {
 			secs := uint64(*item.DelaySeconds)
@@ -395,7 +391,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVDelaysec, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVDelaysec, Value: enc})
 		}
 		if item.SvCertHash != "" {
 			b, err := hex.DecodeString(item.SvCertHash)
@@ -406,7 +402,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVSvCertHash, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVSvCertHash, Value: enc})
 		}
 		if item.ClCertHash != "" {
 			b, err := hex.DecodeString(item.ClCertHash)
@@ -417,28 +413,23 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVClCertHash, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVClCertHash, Value: enc})
 		}
 		if item.UserInput != "" {
 			enc, err := encodeRvValue(protocol.RVUserInput, item.UserInput)
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVUserInput, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVUserInput, Value: enc})
 		}
 		if item.ExtRV != "" {
 			enc, err := encodeRvValue(protocol.RVExtRV, item.ExtRV)
 			if err != nil {
 				return nil, err
 			}
-			others = append(others, protocol.RvInstruction{Variable: protocol.RVExtRV, Value: enc})
+			group = append(group, protocol.RvInstruction{Variable: protocol.RVExtRV, Value: enc})
 		}
 
-		// grouping is here because of a bug https://github.com/fido-device-onboard/go-fdo/issues/145
-		group := make([]protocol.RvInstruction, 0, len(others)+len(protocols)+len(ports))
-		group = append(group, others...)
-		group = append(group, protocols...)
-		group = append(group, ports...)
 		out = append(out, group)
 	}
 	return out, nil
