@@ -38,7 +38,7 @@ Additional options specific to the manufacturing server:
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `manufacturing-key` | string | Manufacturing private key path | Yes |
-| `device-ca-cert` | string | Device certificate path | Yes |
+| `device-ca-cert` | string | Device CA certificate path | Yes |
 | `device-ca-key` | string | Device CA private key path | Yes |
 | `owner-cert` | string | Owner certificate path | Yes |
 
@@ -124,9 +124,6 @@ server-cert-path = "/path/to/rendezvous.crt"
 server-key-path = "/path/to/rendezvous.key"
 address = "127.0.0.1:8041"
 ```
-
-## Usage
-
 
 ## Notes
 
