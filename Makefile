@@ -33,17 +33,17 @@ test:
 #
 SOURCE_DIR=$(CURDIR)/build/package/rpm
 
-SOURCE_TARBALL_FILENAME=go-fdo-server-$(VERSION).tar.gz
+SOURCE_TARBALL_FILENAME=go-fdo-server-$(COMMIT).tar.gz
 SOURCE_TARBALL=$(SOURCE_DIR)/${SOURCE_TARBALL_FILENAME}
 $(SOURCE_TARBALL):
-	git archive --prefix=go-fdo-server-$(VERSION)/ --format=tar.gz HEAD > $(SOURCE_TARBALL)
+	git archive --prefix=go-fdo-server-$(COMMIT)/ --format=tar.gz HEAD > $(SOURCE_TARBALL)
 
 .PHONY: source-tarball
 source-tarball: $(SOURCE_TARBALL)
 
 GO_VENDOR_TOOLS_FILE_NAME=go-vendor-tools.toml
 GO_VENDOR_TOOLS_FILE=$(SOURCE_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-VENDOR_TARBALL_FILENAME=go-fdo-server-$(VERSION)-vendor.tar.gz
+VENDOR_TARBALL_FILENAME=go-fdo-server-$(COMMIT)-vendor.tar.gz
 VENDOR_TARBALL=$(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
 
 $(VENDOR_TARBALL):
@@ -84,8 +84,8 @@ RPMBUILD_VENDOR_TARBALL=${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
 
 $(RPMBUILD_SPECFILE):
 	mkdir -p $(RPMBUILD_SPECS_DIR)
-	sed -e "s/^Version:.*/Version:        $(VERSION)/;" \
-		  -e "s/^Source0:.*/Source0:        go-fdo-server-$(VERSION).tar.gz/;" \
+	sed -e "s/^#%%global commit.*/%global commit   $(COMMIT)/;" \
+                  -e "s/^Version:.*/Version:        $(VERSION)/;" \
 	    $(SPEC_FILE) > $(RPMBUILD_SPECFILE)
 
 $(RPMBUILD_TARBALL): $(SOURCE_TARBALL) $(VENDOR_TARBALL)
