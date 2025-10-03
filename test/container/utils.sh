@@ -50,9 +50,19 @@ uninstall_server() {
   docker compose --file "${servers_compose_file}" down
 }
 
+start_service () {
+  local service_name=$1
+  docker compose --file "${servers_compose_file}" up -d "${service_name}"
+}
+
 start_services () {
   docker compose --file "${servers_compose_file}" up -d
   set_hostnames
+}
+
+stop_service () {
+  local service_name=$1
+  docker compose --file "${servers_compose_file}" stop "${service_name}"
 }
 
 stop_services () {

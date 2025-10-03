@@ -220,22 +220,38 @@ start_service_owner() {
     --device-ca-cert="${device_ca_crt}"
 }
 
+start_service () {
+  local service=$1
+  echo -n "  ⚙ Starting service ${service} "
+  local start_service="start_service_${service}"
+  ! declare -F "${start_service}" >/dev/null || ${start_service}
+  echo " 🚀"
+}
+
 start_services () {
   set_hostnames
   echo "⭐ Starting services"
   for service in "${services[@]}"; do
-    echo -n "  ⚙ Starting service ${service} "
-    local start_service="start_service_${service}"
-    ! declare -F "${start_service}" >/dev/null || ${start_service}
-    echo " 🚀"
+    start_service ${service}
   done
+}
+
+stop_service () {
+  local service=$1
+  local service_pid_file="${service}_pid_file"
+  echo -n "  ⚙ Stopping service ${service} "
+  if [[ -v "${service_pid_file}" ]] && [[ -f "${!service_pid_file}" ]]; then
+    if pkill -F "${!service_pid_file}"; then
+      wait "$(cat ${!service_pid_file})" 2>/dev/null || :
+    fi
+  fi
+  echo " 🛑"
 }
 
 stop_services () {
   echo "⭐ Stopping services"
   for service in "${services[@]}"; do
-    local service_pid_file="${service}_pid_file"
-    [[ ! -v "${service_pid_file}" ]] || [[ ! -f "${!service_pid_file}" ]] || pkill -F "${!service_pid_file}" || :
+    stop_service ${service}
   done
 }
 
