@@ -22,11 +22,11 @@ wget_httpd_url="http://${wget_httpd_dns}:${wget_httpd_port}"
 wget_httpd_health_url="${wget_httpd_url}"
 
 wget_test_file_name="file1"
-wget_test_file="${wget_httpd_dir}/${wget_test_file_name}"
-wget_test_url="${wget_httpd_url}/${wget_test_file_name}"
+wget_source_file="${wget_httpd_dir}/${wget_test_file_name}"
+wget_source_url="${wget_httpd_url}/${wget_test_file_name}"
 
 wget_device_download_dir="${fsim_wget_dir}/download"
-wget_device_test_file="${wget_device_download_dir}/${wget_test_file_name}"
+wget_device_output_file="${wget_device_download_dir}/${wget_test_file_name}"
 
 
 start_service_wget_httpd() {
@@ -42,7 +42,7 @@ start_service_owner() {
   run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
     --owner-key="${owner_key}" \
     --device-ca-cert="${device_ca_crt}" \
-    --command-wget "${wget_test_url}"
+    --command-wget "${wget_source_url}"
 }
 
 run_test () {
@@ -70,8 +70,8 @@ run_test () {
   echo "⭐ Wait for the services to be ready:"
   wait_for_services_ready
 
-  echo "⭐ Prepare the wget test payload on server side: '${wget_test_file}'"
-  prepare_payload "${wget_test_file}"
+  echo "⭐ Prepare the wget test payload file on server side: '${wget_source_file}'"
+  prepare_payload "${wget_source_file}"
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
@@ -94,8 +94,9 @@ run_test () {
   echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}"
 
-  echo "⭐ Verify downloaded file: server: ${wget_test_file} device: ${wget_device_test_file}"
-  verify_equal_files "${wget_test_file}" "${wget_device_test_file}"
+  echo "⭐ Verify downloaded file: server: ${wget_source_file} device: ${wget_device_output_file}"
+  verify_equal_files "${wget_source_file}" "${wget_device_output_file}"
+  rm -f "${wget_device_output_file}"  # clean up result before next onboarding test
 
   echo "⭐ Device 1 Success! ✅"
 
@@ -113,28 +114,22 @@ run_test () {
 
   echo "⭐ Stop HTTP Server to Simulate Loss of WGET Service"
   stop_service "${wget_httpd_service_name}"
-  rm -f "${wget_device_test_file}"
 
   echo "⭐ Attempt WGET with missing HTTP server, verify FSIM error occurs"
-
-  onboarding_log="${logs_dir}/onboarding-device-$(get_device_guid).log"
-  rm -f "${onboarding_log}"
   ! run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
 
   # verify that the wget FSIM error is logged
-  find_in_log_or_fail "${onboarding_log}" "error handling device service info .*fdo\.wget:error"
+  find_in_log_or_fail "$(get_device_onboard_log)" "error handling device service info .*fdo\.wget:error"
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
   echo "⭐ Restarting HTTP Server"
   start_service "${wget_httpd_service_name}"
 
   echo "⭐ Re-running FIDO Device Onboard with FSIM fdo.wget"
-  rm -f "${onboarding_log}"
-  rm -f "${wget_device_test_file}"
   run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}"
 
-  echo "⭐ Verify downloaded file: server: ${wget_test_file} device: ${wget_device_test_file}"
-  verify_equal_files "${wget_test_file}" "${wget_device_test_file}"
+  echo "⭐ Verify downloaded file: server: ${wget_source_file} device: ${wget_device_output_file}"
+  verify_equal_files "${wget_source_file}" "${wget_device_output_file}"
 
   echo "⭐ Success! ✅"
 }

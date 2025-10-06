@@ -189,8 +189,13 @@ get_device_guid () {
   run_go_fdo_client --blob "${device_credentials}" print | grep GUID | awk '{print $2}'
 }
 
+get_device_onboard_log () {
+  echo "${logs_dir}/onboarding-device-$(get_device_guid).log"
+}
+
 run_fido_device_onboard () {
-  log="${logs_dir}/onboarding-device-$(get_device_guid).log"
+  log="$(get_device_onboard_log)"
+  >"${log}"
   run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 "$@" | tee "${log}"
   find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
