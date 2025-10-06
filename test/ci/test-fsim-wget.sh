@@ -45,8 +45,10 @@ start_service_owner() {
     --command-wget "${wget_test_url}"
 }
 
-# Perform common test setup, including device initialization and TO0
-fsim_wget_setup() {
+run_test () {
+  # Add the wget_httpd service defined above
+  services+=("${wget_httpd_service_name}")
+
   echo "⭐ Creating directories"
   directories+=("${wget_httpd_dir}" "${wget_device_download_dir}")
   create_directories
@@ -66,58 +68,56 @@ fsim_wget_setup() {
   echo "⭐ Wait for the services to be ready:"
   wait_for_services_ready
 
+  echo "⭐ Prepare the wget test payload on server side: '${wget_test_file}'"
+  prepare_payload "${wget_test_file}"
+
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
 
-  echo "⭐ Run Device Initialization"
+  echo "⭐ Run Device Initialization for Device 1"
   run_device_initialization
 
   guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device initialized with GUID: ${guid}"
+  echo "⭐ Device 1 initialized with GUID: ${guid}"
 
-  echo "⭐ Sending Ownership Voucher to the Owner"
+  echo "⭐ Sending Device 1 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
-  echo "⭐ Triggering TO0 on Owner server"
+  echo "⭐ Triggering TO0 on Owner server for Device 1 ${guid}"
   run_to0 ${owner_url} "${guid}" > /dev/null
 
-  echo "⭐ Prepare the wget payload on server side: '${wget_test_file}'"
-  prepare_payload "${wget_test_file}"
-}
-
-# Basic file transfer test
-fsim_wget_test() {
-  fsim_wget_setup
-
-  echo "⭐ Running FIDO Device Onboard with FSIM fdo.wget"
+  echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}"
 
   echo "⭐ Verify downloaded file: server: ${wget_test_file} device: ${wget_device_test_file}"
   verify_equal_files "${wget_test_file}" "${wget_device_test_file}"
-  echo "⭐ Success! ✅"
-  cleanup
-}
 
-# Test failure to contact HTTP server
-fsim_wget_nohost_test() {
-  fsim_wget_setup
+  echo "⭐ Device 1 Success! ✅"
+
+  echo "⭐ Run Device Initialization For Device 2"
+  run_device_initialization
+
+  guid=$(get_device_guid ${device_credentials})
+  echo "⭐ Device 2 initialized with GUID: ${guid}"
+
+  echo "⭐ Sending Device 2 Ownership Voucher to the Owner"
+  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
+
+  echo "⭐ Triggering TO0 on Owner server for Device 2 ${guid}"
+  run_to0 ${owner_url} "${guid}" > /dev/null
+
+  echo "⭐ Stop HTTP Server to Simulate Loss of WGET Service"
+  stop_service "${wget_httpd_service_name}"
+  rm -f "${wget_device_test_file}"
 
   echo "⭐ Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  stop_service "${wget_httpd_service_name}"
 
   onboarding_log="${logs_dir}/onboarding-device-$(get_device_guid).log"
   rm -f "${onboarding_log}"
-  set +e  # temporarily disable exit on failure, we expect onboard to fail here:
-  run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}"
-  rc=$?
-  set -e
-  if [ "${rc}" == "0" ]; then
-    echo "❌ Expected device onboard to fail!"
-    return 1
-  fi
+  ! run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
 
   # verify that the wget FSIM error is logged
   if ! grep -q "error handling device service info .*fdo\.wget:error" "${onboarding_log}" ; then
@@ -125,27 +125,20 @@ fsim_wget_nohost_test() {
     return 1
   fi
 
-  # Verify that the client can successfully onboard once the HTTP server is available
+  # Verify that Device 2 can successfully onboard once the HTTP server is available
+  echo "⭐ Restarting HTTP Server"
   start_service "${wget_httpd_service_name}"
 
   echo "⭐ Re-running FIDO Device Onboard with FSIM fdo.wget"
   rm -f "${onboarding_log}"
+  rm -f "${wget_device_test_file}"
   run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}"
 
   echo "⭐ Verify downloaded file: server: ${wget_test_file} device: ${wget_device_test_file}"
   verify_equal_files "${wget_test_file}" "${wget_device_test_file}"
+
   echo "⭐ Success! ✅"
-  cleanup
-}
-
-run_test () {
-  # Add the wget_httpd service defined above
-  services+=("${wget_httpd_service_name}")
-
-  fsim_wget_test
-  fsim_wget_nohost_test
   trap cleanup EXIT
-  echo "⭐ All WGET FSIM Tests Pass! ✅"
 }
 
 # Allow running directly
