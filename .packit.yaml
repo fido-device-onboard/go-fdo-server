@@ -129,3 +129,26 @@ jobs:
     owner: "@fedora-iot"
     project: fedora-iot
 
+  # E2E Testing jobs
+
+  - job: tests
+    trigger: pull_request
+    identifier: e2e-fedora
+    fmf_path: test/fmf
+    tmt_plan: plans/onboarding
+    packages: [go-fdo-server-fedora]
+    targets:
+      - fedora-latest-stable
+      - fedora-latest
+      - fedora-rawhide
+
+  - job: tests
+    trigger: pull_request
+    identifier: e2e-centos
+    fmf_path: test/fmf
+    tmt_plan: plans/onboarding
+    packages: [go-fdo-server-centos]
+    targets:
+      - epel-9
+      - epel-10
+
