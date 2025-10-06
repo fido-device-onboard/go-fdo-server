@@ -82,6 +82,12 @@ owner_ov="${base_dir}/owner.ov"
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
+find_in_log_or_fail() {
+  local log=$1
+  local pattern=$2
+  grep -q "${pattern}" "${log}"
+}
+
 create_directories() {
   for directory in "${directories[@]}"; do
     mkdir -p "${directory}"
@@ -186,7 +192,7 @@ get_device_guid () {
 run_fido_device_onboard () {
   log="${logs_dir}/onboarding-device-$(get_device_guid).log"
   run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 "$@" | tee "${log}"
-  grep -q 'FIDO Device Onboard Complete' "${log}"
+  find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
 
 run_go_fdo_server () {

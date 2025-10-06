@@ -49,6 +49,8 @@ run_test () {
   # Add the wget_httpd service defined above
   services+=("${wget_httpd_service_name}")
 
+  trap cleanup EXIT
+
   echo "⭐ Creating directories"
   directories+=("${wget_httpd_dir}" "${wget_device_download_dir}")
   create_directories
@@ -120,10 +122,7 @@ run_test () {
   ! run_fido_device_onboard --debug --wget-dir "${wget_device_download_dir}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
 
   # verify that the wget FSIM error is logged
-  if ! grep -q "error handling device service info .*fdo\.wget:error" "${onboarding_log}" ; then
-    echo "❌ Client failed to report FSIM error!"
-    return 1
-  fi
+  find_in_log_or_fail "${onboarding_log}" "error handling device service info .*fdo\.wget:error"
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
   echo "⭐ Restarting HTTP Server"
@@ -138,7 +137,6 @@ run_test () {
   verify_equal_files "${wget_test_file}" "${wget_device_test_file}"
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
