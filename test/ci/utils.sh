@@ -85,7 +85,7 @@ declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${log
 find_in_log_or_fail() {
   local log=$1
   local pattern=$2
-  grep -q "${pattern}" "${log}"
+  grep -q "${pattern}" "${log}" || { echo "❌ '${pattern}' not found in '${log}' "; return 1; }
 }
 
 create_directories() {
