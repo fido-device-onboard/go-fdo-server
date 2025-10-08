@@ -26,7 +26,11 @@ wget_source_file="${wget_httpd_dir}/${wget_file_name}"
 wget_source_url="${wget_httpd_url}/${wget_file_name}"
 
 # create separate download directories for each device
-declare -a wget_download_dirs=("${fsim_wget_dir}/download1" "${fsim_wget_dir}/download2")
+wget_device1_download_dir="${fsim_wget_dir}/device1"
+wget_device2_download_dir="${fsim_wget_dir}/device2"
+wget_device1_download_file="${wget_device1_download_dir}/${wget_file_name}"
+wget_device2_download_file="${wget_device2_download_dir}/${wget_file_name}"
+declare -a wget_download_dirs=("${wget_device1_download_dir}" "${wget_device2_download_dir}")
 
 
 start_service_wget_httpd() {
@@ -90,10 +94,10 @@ run_test () {
   run_to0 ${owner_url} "${guid}" > /dev/null
 
   echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
-  run_fido_device_onboard --debug --wget-dir "${wget_download_dirs[0]}"
+  run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
 
-  echo "⭐ Verify downloaded file ${wget_download_dirs[0]}/${wget_file_name}"
-  verify_equal_files "${wget_source_file}" "${wget_download_dirs[0]}/${wget_file_name}"
+  echo "⭐ Verify downloaded file ${wget_device1_download_file}"
+  verify_equal_files "${wget_source_file}" "${wget_device1_download_file}"
 
   echo "⭐ Device 1 Success! ✅"
 
@@ -113,7 +117,7 @@ run_test () {
   stop_service "${wget_httpd_service_name}"
 
   echo "⭐ Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  ! run_fido_device_onboard --debug --wget-dir "${wget_download_dirs[1]}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
+  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
 
   # verify that the wget FSIM error is logged
   find_in_log_or_fail "$(get_device_onboard_log)" "error handling device service info .*fdo\.wget:error"
@@ -123,10 +127,10 @@ run_test () {
   start_service "${wget_httpd_service_name}"
 
   echo "⭐ Re-running FIDO Device Onboard with FSIM fdo.wget"
-  run_fido_device_onboard --debug --wget-dir "${wget_download_dirs[1]}"
+  run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}"
 
-  echo "⭐ Verify downloaded file ${wget_download_dirs[1]}/${wget_file_name}"
-  verify_equal_files "${wget_source_file}" "${wget_download_dirs[1]}/${wget_file_name}"
+  echo "⭐ Verify downloaded file ${wget_device2_download_file}"
+  verify_equal_files "${wget_source_file}" "${wget_device2_download_file}"
 
   echo "⭐ Success! ✅"
   trap cleanup EXIT
