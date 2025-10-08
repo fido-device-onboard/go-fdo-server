@@ -30,7 +30,7 @@ services:
       - /tmp:/tmp:z
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl --silent --output /dev/null --fail http://wget_httpd:8888/health" ]
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://wget_httpd:8888" ]
       interval: 5s
       timeout: 30s
       retries: 5
