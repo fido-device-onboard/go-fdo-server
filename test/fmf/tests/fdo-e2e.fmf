@@ -1,0 +1,35 @@
+summary: Complete FDO end-to-end protocol testing
+description: |
+    Comprehensive FDO testing covering:
+    - Certificate infrastructure setup
+    - Multi-server orchestration (manufacturer, rendezvous, owner)
+    - Device initialization and onboarding
+    - ServiceInfo module testing
+    - Protocol validation
+
+test: ./fdo-e2e.sh
+
+framework: shell
+
+require:
+  - go-fdo-server
+  - go-fdo-server-manufacturer
+  - go-fdo-server-rendezvous
+  - go-fdo-server-owner
+  - go-fdo-client
+  - golang
+  - make
+  - openssl
+  - curl
+  - git
+
+recommend:
+  - tmt
+
+duration: 10m
+
+tag:
+  - fdo
+  - e2e
+  - protocol
+  - onboarding
