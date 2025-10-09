@@ -125,7 +125,7 @@ run_test () {
   # Verify that Device 2 can successfully onboard once the HTTP server is available
   echo "⭐ Restarting HTTP Server"
   start_service "${wget_httpd_service_name}"
-  wait_for_services_ready
+  wait_for_service_ready "${wget_httpd_service_name}"
 
   echo "⭐ Re-running FIDO Device Onboard with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}"

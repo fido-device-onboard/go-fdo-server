@@ -166,10 +166,18 @@ wait_for_url() {
     echo " 🚀"
 }
 
+wait_for_service_ready () {
+  local service=$1
+  local service_health_url="${service}_health_url"
+  [[ -v "${service_health_url}" ]] || { echo "❌ service ${service} has no health URL"; return 1; }
+  wait_for_url "${!service_health_url}"
+}
+
 wait_for_services_ready () {
   for service in "${services[@]}"; do
+    # only wait for those services that define a health URL
     local service_health_url="${service}_health_url"
-    [[ ! -v "${service_health_url}" ]] || wait_for_url "${!service_health_url}"
+    [[ ! -v "${service_health_url}" ]] || wait_for_service_ready "${service}"
   done
 }
 
