@@ -8,28 +8,20 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
 )
 
 var (
-	dbPath         string
-	dbPass         string
-	debug          bool
-	logLevel       slog.LevelVar
-	insecureTLS    bool
-	serverCertPath string
-	serverKeyPath  string
+	debug    bool
+	logLevel slog.LevelVar
 )
 
 var rootCmd = &cobra.Command{
@@ -43,6 +35,24 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		configFilePath, err := cmd.Flags().GetString("config")
+		if err != nil {
+			return fmt.Errorf("failed to get config flag: %w", err)
+		}
+		if configFilePath != "" {
+			slog.Debug("Loading server configuration file", "path", configFilePath)
+			viper.SetConfigFile(configFilePath)
+			if err := viper.ReadInConfig(); err != nil {
+				return fmt.Errorf("configuration file read failed: %w", err)
+			}
+		}
+		debug = viper.GetBool("debug")
+		if debug {
+			logLevel.Set(slog.LevelDebug)
+		}
+		return nil
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -54,71 +64,20 @@ func Execute() {
 	}
 }
 
+// Setup the root command line. Used by the unit tests to reset state between tests.
+func rootCmdInit() {
+	rootCmd.PersistentFlags().String("config", "", "Pathname of the configuration file")
+	rootCmd.PersistentFlags().Bool("debug", false, "Print debug contents")
+	if err := viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug")); err != nil {
+		panic(err)
+	}
+}
+
 func init() {
 	slog.SetDefault(slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
 		Level: &logLevel,
 	})))
-
-	rootCmd.PersistentFlags().Bool("debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().String("db", "", "SQLite database file path")
-	rootCmd.PersistentFlags().String("db-pass", "", "SQLite database encryption-at-rest passphrase")
-	rootCmd.PersistentFlags().Bool("insecure-tls", false, "Listen with a self-signed TLS certificate")
-	rootCmd.PersistentFlags().String("server-cert-path", "", "Path to server certificate")
-	rootCmd.PersistentFlags().String("server-key-path", "", "Path to server private key")
-}
-
-// Initialize configuration flags from viper's configuration. Enforce
-// required flags are present. This function is called by the
-// subcommands after the viper flags are bound and the configuration
-// file is loaded.
-func rootCmdLoadConfig() error {
-	if !viper.IsSet("db") {
-		return errors.New("missing required path to the database (--db)")
-	}
-	if !viper.IsSet("db-pass") {
-		return errors.New("missing database password (--db-pass)")
-	}
-	dbPath = viper.GetString("db")
-	dbPass = viper.GetString("db-pass")
-
-	err := validatePassword(dbPass)
-	if err != nil {
-		return err
-	}
-	debug = viper.GetBool("debug")
-	if debug {
-		logLevel.Set(slog.LevelDebug)
-	}
-	insecureTLS = viper.GetBool("insecure-tls")
-	serverCertPath = viper.GetString("server-cert-path")
-	serverKeyPath = viper.GetString("server-key-path")
-	return nil
-}
-
-const (
-	minPasswordLength = 8
-)
-
-func getState() (*sqlite.DB, error) {
-	return sqlite.Open(dbPath, dbPass)
-}
-
-func validatePassword(dbPass string) error {
-	// Check password length
-	if len(dbPass) < minPasswordLength {
-		return fmt.Errorf("password must be at least %d characters long", minPasswordLength)
-	}
-
-	// Check password complexity
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString
-	hasSpecial := regexp.MustCompile(`[!@#~$%^&*()_+{}:"<>?]`).MatchString
-
-	if !hasNumber(dbPass) || !hasUpper(dbPass) || !hasSpecial(dbPass) {
-		return errors.New("password must include a number, an uppercase letter, and a special character")
-	}
-
-	return nil
+	rootCmdInit()
 }
 
 func parsePrivateKey(keyPath string) (crypto.Signer, error) {

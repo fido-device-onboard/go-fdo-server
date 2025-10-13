@@ -2,7 +2,7 @@
 
 This document describes all configuration options available for the FDO server. Configuration files can use TOML or YAML format.
 
-Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the `address` key.
+Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the appropriate section.
 
 Configuration files are loaded using the `--config` flag, for example:
 
@@ -17,117 +17,186 @@ go-fdo-server owner --config config.yaml 127.0.0.1:8080
 go-fdo-server rendezvous --debug --config config.toml
 ```
 
-## Global Configuration Options
+## Configuration Structure
 
-These options are available for all server types (manufacturing, owner, rendezvous):
+The configuration file uses a hierarchical structure with separate sections for each server type:
+
+- `debug` - Global debug setting
+- `manufacturing` - Manufacturing server configuration
+- `owner` - Owner server configuration  
+- `rendezvous` - Rendezvous server configuration
+
+
+## Common Configuration Sub-Types
+
+### HTTP Configuration
+
+HTTP configuration is used by all server types under the `[http]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `db` | string | SQLite database file path | Yes |
-| `db-pass` | string | SQLite database encryption-at-rest passphrase (minimum 8 characters, must include number, uppercase letter, and special character) | Yes |
-| `debug` | boolean | Print debug contents | No (default: false) |
-| `insecure-tls` | boolean | Listen with a self-signed TLS certificate | No (default: false) |
-| `server-cert-path` | string | Path to server certificate | No |
-| `server-key-path` | string | Path to server private key | No |
-| `address` | string | HTTP server address (e.g., "127.0.0.1:8080") | Yes |
+| `listen` | string | HTTP server listen address (e.g., "127.0.0.1:8080") | Yes |
+| `ssl` | boolean | Enable SSL/TLS | No (default: false) |
+| `insecure-tls` | boolean | Use self-signed TLS certificate | No (default: false) |
+| `cert` | string | Path to server certificate file | No |
+| `key` | string | Path to server private key file | No |
+
+### Database Configuration
+
+Database configuration is used by all server types under the `[database]` section:
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `path` | string | SQLite database file path | Yes |
+| `password` | string | Database encryption passphrase (min 8 chars, must include number, uppercase, special char) | Yes |
+
+
+## Global Configuration Options
+
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `debug` | boolean | Enable debug logging | false |
+
 
 ## Manufacturing Server Configuration
 
-Additional options specific to the manufacturing server:
+The manufacturing server configuration is under the `[manufacturing]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `manufacturing-key` | string | Manufacturing private key path | Yes |
-| `device-ca-cert` | string | Device CA certificate path | Yes |
-| `device-ca-key` | string | Device CA private key path | Yes |
-| `owner-cert` | string | Owner certificate path | Yes |
+| `private-key` | string | Manufacturing private key file path | Yes |
+| `owner-cert` | string | Owner certificate file path | Yes |
+| `http` | map | HTTP Server configuration | Yes |
+| `database` | map | Database configuration | Yes |
+| `device-ca` | map | Device CA certificate configuration | Yes |
+
+### Device CA Configuration (`[manufacturing.device-ca]`)
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `cert` | string | Device CA certificate file path | Yes |
+| `key` | string | Device CA private key file path | Yes |
+
 
 ## Owner Server Configuration
 
-Additional options specific to the owner server:
+The owner server configuration is under the `[owner]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `device-ca-cert` | string | Device CA certificate path | Yes |
-| `owner-key` | string | Owner private key path | Yes |
-| `external-address` | string | External address devices should connect to (default: "127.0.0.1:${LISTEN_PORT}") | No |
-| `command-date` | boolean | Use fdo.command FSIM to have device run "date --utc" | No (default: false) |
-| `command-wget` | array of strings | Use fdo.wget FSIM for each URL (can be specified multiple times) | No |
-| `command-upload` | array of strings | Use fdo.upload FSIM for each file (can be specified multiple times) | No |
-| `upload-directory` | string | The directory path to put file uploads | No |
-| `command-download` | array of strings | Use fdo.download FSIM for each file (can be specified multiple times) | No |
+| `external-address` | string | External address devices should connect to | No |
+| `device-ca-cert` | string | Device CA certificate file path | Yes |
+| `owner-key` | string | Owner private key file path | Yes |
 | `reuse-credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
+| `http` | map | HTTP Server configuration | Yes |
+| `database` | map | Database configuration | Yes |
 
 ## Rendezvous Server Configuration
 
-The rendezvous server only uses the global configuration options listed above.
+The rendezvous server configuration is under the `[rendezvous]` section:
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `http` | map | HTTP Server configuration | Yes |
+| `database` | map | Database configuration | Yes |
 
 ## Configuration File Examples
 
 ### Manufacturing Server Configuration
 
 ```toml
-db = "manufacturing.db"
-db-pass = "ManufacturingPass123!"
 debug = true
-insecure-tls = false
-server-cert-path = "/path/to/manufacturing.crt"
-server-key-path = "/path/to/manufacturing.key"
-address = "127.0.0.1:8038"
 
-# Manufacturing server specific settings
-manufacturing-key = "/path/to/manufacturing.key"
-device-ca-cert = "/path/to/device.ca"
-device-ca-key = "/path/to/device.key"
+[manufacturing]
+private-key = "/path/to/manufacturing.key"
 owner-cert = "/path/to/owner.crt"
+
+[manufacturing.http]
+listen = "127.0.0.1:8038"
+ssl = false
+insecure-tls = false
+cert = "/path/to/manufacturing.crt"
+key = "/path/to/manufacturing.key"
+
+[manufacturing.database]
+path = "manufacturing.db"
+password = "ManufacturingPass123!"
+
+[manufacturing.device-ca]
+cert = "/path/to/device.ca"
+key = "/path/to/device.key"
 ```
 
 ### Owner Server Configuration
 
 ```toml
-db = "owner.db"
-db-pass = "OwnerPass123!"
 debug = true
-insecure-tls = false
-server-cert-path = "/path/to/owner.crt"
-server-key-path = "/path/to/owner.key"
-address = "127.0.0.1:8043"
 
-# Owner server specific settings
+[owner]
 external-address = "0.0.0.0:8443"
-command-date = true
-command-wget = [
-  "https://example.com/file1",
-  "https://example.com/file2"
-]
-command-upload = [
-  "upload1.txt",
-  "upload2.txt"
-]
-upload-directory = "/tmp/uploads"
-command-download = [
-  "download1.txt"
-]
-reuse-credentials = true
 device-ca-cert = "/path/to/device.ca"
 owner-key = "/path/to/owner.key"
+reuse-credentials = true
+
+[owner.http]
+listen = "127.0.0.1:8043"
+ssl = false
+insecure-tls = false
+cert = "/path/to/owner.crt"
+key = "/path/to/owner.key"
+
+[owner.database]
+path = "owner.db"
+password = "OwnerPass123!"
 ```
 
 ### Rendezvous Server Configuration
 
 ```toml
-db = "rendezvous.db"
-db-pass = "RendezvousPass123!"
 debug = true
+
+[rendezvous]
+
+[rendezvous.http]
+listen = "127.0.0.1:8041"
+ssl = false
 insecure-tls = false
-server-cert-path = "/path/to/rendezvous.crt"
-server-key-path = "/path/to/rendezvous.key"
-address = "127.0.0.1:8041"
+cert = "/path/to/rendezvous.crt"
+key = "/path/to/rendezvous.key"
+
+[rendezvous.database]
+path = "rendezvous.db"
+password = "RendezvousPass123!"
+```
+
+### YAML Configuration Example
+
+```yaml
+debug: true
+
+manufacturing:
+  private-key: "/path/to/manufacturing.key"
+  owner-cert: "/path/to/owner.crt"
+  http:
+    listen: "127.0.0.1:8038"
+    ssl: false
+    insecure-tls: false
+    cert: "/path/to/manufacturing.crt"
+    key: "/path/to/manufacturing.key"
+  database:
+    path: "manufacturing.db"
+    password: "ManufacturingPass123!"
+  device-ca:
+    cert: "/path/to/device.ca"
+    key: "/path/to/device.key"
 ```
 
 ## Notes
 
 - All file paths in the configuration should be absolute paths or paths relative to the current working directory
-- The `db-pass` field has strict requirements: minimum 8 characters, must include at least one number, one uppercase letter, and one special character
-- Array values (like `command-wget`, `command-upload`, `command-download`) can be specified multiple times in the configuration file
-- Boolean values can be specified as `true`/`false`
+- Database passwords have strict requirements: minimum 8 characters, must include at least one number, one uppercase letter, and one special character
+- Boolean values can be specified as `true`/`false` in TOML or `true`/`false` in YAML
+- The configuration file uses a hierarchical structure where each server type has its own section
+- Only the relevant server section will be processed when running a specific server type (e.g., only `[manufacturing]` section is used when running the manufacturing server)
+- Command-line arguments take precedence over configuration file values
+- The server listen address can be overridden by providing it as a positional argument to the command

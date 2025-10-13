@@ -27,59 +27,63 @@ import (
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var (
-	address             string
-	manufacturerKeyPath string
-	deviceCACertPath    string
-	deviceCAKeyPath     string
-	ownerPublicKeyPath  string
-)
+type DeviceCACertConfig struct {
+	CertPath string `mapstructure:"cert"` // path to certificate file
+	KeyPath  string `mapstructure:"key"`  // path to key file
+}
+
+// The manufacturer server configuration
+type ManufacturingConfig struct {
+	ManufacturerKeyPath string             `mapstructure:"private-key"`
+	OwnerPublicKeyPath  string             `mapstructure:"owner-cert"`
+	HTTP                HTTPConfig         `mapstructure:"http"`
+	DB                  DatabaseConfig     `mapstructure:"database"`
+	DeviceCACert        DeviceCACertConfig `mapstructure:"device-ca"`
+}
 
 // manufacturingCmd represents the manufacturing command
 var manufacturingCmd = &cobra.Command{
 	Use:   "manufacturing http_address",
 	Short: "Serve an instance of the manufacturing server",
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// Load configuration first
-		if err := manufacturingCmdLoadConfig(cmd, args); err != nil {
-			return err
-		}
-		return nil
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		state, err := getState()
-		if err != nil {
-			return err
+		if len(args) > 0 {
+			viper.Set("manufacturing.http.listen", args[0])
 		}
 
-		err = db.InitDb(state)
-		if err != nil {
-			return err
+		var fdoConfig FIDOServerConfig
+		if err := viper.Unmarshal(&fdoConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal manufacturing config: %w", err)
 		}
 
-		return serveManufacturing(state, insecureTLS)
+		if fdoConfig.Manufacturing == nil {
+			return fmt.Errorf("failed to find manufacturing config")
+		}
+
+		return serveManufacturing(fdoConfig.Manufacturing)
 	},
 }
 
 // Server represents the HTTP server
 type ManufacturingServer struct {
-	addr    string
 	handler http.Handler
-	useTLS  bool
+	config  HTTPConfig
 }
 
 // NewServer creates a new Server
-func NewManufacturingServer(addr string, handler http.Handler, useTLS bool) *ManufacturingServer {
-	return &ManufacturingServer{addr: addr, handler: handler, useTLS: useTLS}
+func NewManufacturingServer(config HTTPConfig, handler http.Handler) *ManufacturingServer {
+	return &ManufacturingServer{handler: handler, config: config}
 }
 
 // Start starts the HTTP server
 func (s *ManufacturingServer) Start() error {
+	err := s.config.validate()
+	if err != nil {
+		return err
+	}
 	srv := &http.Server{
 		Handler:           s.handler,
 		ReadHeaderTimeout: 3 * time.Second,
@@ -103,14 +107,14 @@ func (s *ManufacturingServer) Start() error {
 	}()
 
 	// Listen and serve
-	lis, err := net.Listen("tcp", s.addr)
+	lis, err := net.Listen("tcp", s.config.Listen)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lis.Close() }()
 	slog.Info("Listening", "local", lis.Addr().String())
 
-	if s.useTLS {
+	if s.config.UseTLS {
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
@@ -118,12 +122,12 @@ func (s *ManufacturingServer) Start() error {
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS v1.2
 		}
 
-		if serverCertPath != "" && serverKeyPath != "" {
+		if s.config.CertPath != "" && s.config.KeyPath != "" {
 			srv.TLSConfig = &tls.Config{
 				MinVersion:   tls.VersionTLS12,
 				CipherSuites: preferredCipherSuites,
 			}
-			return srv.ServeTLS(lis, serverCertPath, serverKeyPath)
+			return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
 		} else {
 			return fmt.Errorf("no TLS cert or key provided")
 		}
@@ -131,16 +135,28 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
-	mfgKey, err := parsePrivateKey(manufacturerKeyPath)
+func serveManufacturing(config *ManufacturingConfig) error {
+	// Database
+	dbState, err := config.DB.getState()
 	if err != nil {
 		return err
 	}
-	deviceKey, err := parsePrivateKey(deviceCAKeyPath)
+
+	err = db.InitDb(dbState)
 	if err != nil {
 		return err
 	}
-	deviceCA, err := os.ReadFile(deviceCACertPath)
+
+	// Load Certs
+	mfgKey, err := parsePrivateKey(config.ManufacturerKeyPath)
+	if err != nil {
+		return err
+	}
+	deviceKey, err := parsePrivateKey(config.DeviceCACert.KeyPath)
+	if err != nil {
+		return err
+	}
+	deviceCA, err := os.ReadFile(config.DeviceCACert.CertPath)
 	if err != nil {
 		return err
 	}
@@ -153,7 +169,7 @@ func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
 	deviceCAChain := []*x509.Certificate{parsedDeviceCACert}
 
 	// Parse
-	ownerPublicKey, err := os.ReadFile(ownerPublicKeyPath)
+	ownerPublicKey, err := os.ReadFile(config.OwnerPublicKeyPath)
 	if err != nil {
 		return err
 	}
@@ -206,9 +222,9 @@ func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
 	httpHandler := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewManufacturingServer(address, httpHandler, useTLS)
+	server := NewManufacturingServer(config.HTTP, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", address)
+	slog.Debug("Starting server on:", "addr", config.HTTP.Listen)
 	return server.Start()
 }
 
@@ -238,60 +254,37 @@ func encodePublicKey(keyType protocol.KeyType, keyEncoding protocol.KeyEncoding,
 	}
 }
 
-func init() {
+// Set up the manufacturing command line. Used by the unit tests to reset state between tests.
+func manufacturingCmdInit() {
 	rootCmd.AddCommand(manufacturingCmd)
 
+	// Declare any CLI flags for overriding configuration file settings and bind
+	// them into the proper fields of the configuration structure
+
 	manufacturingCmd.Flags().String("manufacturing-key", "", "Manufacturing private key path")
-	manufacturingCmd.Flags().String("device-ca-cert", "", "Device certificate path")
 	manufacturingCmd.Flags().String("owner-cert", "", "Owner certificate path")
+	manufacturingCmd.Flags().String("device-ca-cert", "", "Device certificate path")
 	manufacturingCmd.Flags().String("device-ca-key", "", "Device CA private key path")
-	manufacturingCmd.Flags().String("config", "", "Pathname of the configuration file")
+	if err := viper.BindPFlag("manufacturing.private-key", manufacturingCmd.Flags().Lookup("manufacturing-key")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("manufacturing.owner-cert", manufacturingCmd.Flags().Lookup("owner-cert")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("manufacturing.device-ca.cert", manufacturingCmd.Flags().Lookup("device-ca-cert")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("manufacturing.device-ca.key", manufacturingCmd.Flags().Lookup("device-ca-key")); err != nil {
+		panic(err)
+	}
+	if err := addDatabaseConfig(manufacturingCmd, "manufacturing.database"); err != nil {
+		panic(err)
+	}
+	if err := addHTTPConfig(manufacturingCmd, "manufacturing.http"); err != nil {
+		panic(err)
+	}
 }
 
-// Load configuration from viper
-func manufacturingCmdLoadConfig(cmd *cobra.Command, args []string) error {
-	err := viper.BindPFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	// If the http_address has been provided on the command line it
-	// will take precedence over the content of the configuration
-	// file. Yet viper has no visibility of the command line so we
-	// force it here:
-	if len(args) > 0 {
-		viper.Set("address", args[0])
-	}
-
-	// Get the config flag directly from the CLI
-	configFilePath, err := cmd.Flags().GetString("config")
-	if err != nil {
-		return fmt.Errorf("failed to get config flag: %w", err)
-	}
-
-	if configFilePath != "" {
-		slog.Debug("Loading manufacturing server configuration file", "path", configFilePath)
-		viper.SetConfigFile(configFilePath)
-		if err := viper.ReadInConfig(); err != nil {
-			return fmt.Errorf("configuration file read failed: %w", err)
-		}
-	}
-
-	// We can now load the root configuration after reading config
-	// file
-	if err := rootCmdLoadConfig(); err != nil {
-		return err
-	}
-
-	manufacturerKeyPath = viper.GetString("manufacturing-key")
-	deviceCACertPath = viper.GetString("device-ca-cert")
-	ownerPublicKeyPath = viper.GetString("owner-cert")
-	deviceCAKeyPath = viper.GetString("device-ca-key")
-	address = viper.GetString("address")
-
-	if address == "" {
-		return fmt.Errorf("the manufacturing command requires the 'http_address' argument")
-	}
-
-	return nil
+func init() {
+	manufacturingCmdInit()
 }

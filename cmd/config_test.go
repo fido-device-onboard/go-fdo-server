@@ -4,55 +4,54 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+// Configuration capture for testing
+var capturedConfig *FIDOServerConfig
+
 func resetState(t *testing.T) {
 	t.Helper()
-	// Reset viper state and rebind flags so precedence works
+
+	// reinitialize the CLI/Config logic
 	viper.Reset()
-	_ = viper.BindPFlags(rootCmd.PersistentFlags())
-	_ = viper.BindPFlags(manufacturingCmd.Flags())
-	_ = viper.BindPFlags(ownerCmd.Flags())
-	_ = viper.BindPFlags(rendezvousCmd.Flags())
+	rootCmd.ResetFlags()
+	rootCmd.ResetCommands()
+	rootCmd.SetArgs(nil)
+
+	manufacturingCmd.ResetFlags()
+	manufacturingCmd.ResetCommands()
+	manufacturingCmd.SetArgs(nil)
+
+	ownerCmd.ResetFlags()
+	ownerCmd.ResetCommands()
+	ownerCmd.SetArgs(nil)
+
+	rendezvousCmd.ResetFlags()
+	rendezvousCmd.ResetCommands()
+	rendezvousCmd.SetArgs(nil)
+
+	rootCmdInit()
+	ownerCmdInit()
+	manufacturingCmdInit()
+	rendezvousCmdInit()
 
 	// Zero globals populated by load functions
-	address = ""
-	insecureTLS = false
-	serverCertPath = ""
-	serverKeyPath = ""
-	externalAddress = ""
 	date = false
 	wgets = nil
 	uploads = nil
 	uploadDir = ""
 	downloads = nil
-	reuseCred = false
-
-	dbPath = ""
-	dbPass = ""
 	debug = false
 
-	// Manufacturing specific
-	manufacturerKeyPath = ""
-	deviceCACertPath = ""
-	deviceCAKeyPath = ""
-	ownerPublicKeyPath = ""
-
-	// Owner specific
-	ownerDeviceCACert = ""
-	ownerPrivateKey = ""
-
-	rootCmd.SetArgs(nil)
-	manufacturingCmd.SetArgs(nil)
-	ownerCmd.SetArgs(nil)
-	rendezvousCmd.SetArgs(nil)
+	// Reset captured config
+	capturedConfig = nil
 }
 
 // Stub out the command execution. We do not want to run the actual
@@ -60,7 +59,59 @@ func resetState(t *testing.T) {
 func stubRunE(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
 	orig := cmd.RunE
-	cmd.RunE = func(*cobra.Command, []string) error { return nil }
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+
+		// Parse flags to ensure viper gets the command-line values
+		if err := cmd.ParseFlags(args); err != nil {
+			return err
+		}
+
+		// Handle positional argument override (same as in actual commands)
+		if len(args) > 0 {
+			switch cmd {
+			case manufacturingCmd:
+				viper.Set("manufacturing.http.listen", args[0])
+			case ownerCmd:
+				viper.Set("owner.http.listen", args[0])
+			case rendezvousCmd:
+				viper.Set("rendezvous.http.listen", args[0])
+			}
+		}
+
+		// Capture the configuration that would be unmarshaled
+		var fdoConfig FIDOServerConfig
+		if err := viper.Unmarshal(&fdoConfig); err != nil {
+			return err
+		}
+		capturedConfig = &fdoConfig
+
+		// Validate the configuration (same as in actual commands)
+		switch cmd {
+		case manufacturingCmd:
+			if fdoConfig.Manufacturing == nil {
+				return fmt.Errorf("failed to find manufacturing config")
+			}
+			if err := fdoConfig.Manufacturing.HTTP.validate(); err != nil {
+				return err
+			}
+		case ownerCmd:
+			if fdoConfig.Owner == nil {
+				return fmt.Errorf("failed to find Owner config")
+			}
+			if err := fdoConfig.Owner.HTTP.validate(); err != nil {
+				return err
+			}
+		case rendezvousCmd:
+			if fdoConfig.Rendezvous == nil {
+				return fmt.Errorf("failed to find rendezvous config")
+			}
+			if err := fdoConfig.Rendezvous.HTTP.validate(); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
 	t.Cleanup(func() { cmd.RunE = orig })
 }
 
@@ -103,15 +154,19 @@ func TestManufacturing_LoadsFromTOMLConfig(t *testing.T) {
 		{
 			name: "basic configuration",
 			config: `
-address = "127.0.0.1:8081"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
-insecure-tls = true
-manufacturing-key = "/path/to/mfg.key"
-device-ca-cert = "/path/to/device.ca"
-device-ca-key = "/path/to/device.key"
+[manufacturing]
+private-key = "/path/to/mfg.key"
 owner-cert = "/path/to/owner.crt"
+[manufacturing.http]
+listen = "127.0.0.1:8081"
+ssl = false
+insecure-tls = true
+[manufacturing.database]
+path = "test.db"
+password = "Abcdef1!"
+[manufacturing.device-ca]
+cert = "/path/to/device.ca"
+key = "/path/to/device.key"
 `,
 			expected: expectedConfig{
 				address:         "127.0.0.1:8081",
@@ -126,15 +181,19 @@ owner-cert = "/path/to/owner.crt"
 		{
 			name: "toml-specific configuration",
 			config: `
-address = "127.0.0.1:8082"
-db = "test-toml.db"
-db-pass = "TomlPass123!"
-debug = true
-insecure-tls = true
-manufacturing-key = "/path/to/toml-mfg.key"
-device-ca-cert = "/path/to/toml-device.ca"
-device-ca-key = "/path/to/toml-device.key"
+[manufacturing]
+private-key = "/path/to/toml-mfg.key"
 owner-cert = "/path/to/toml-owner.crt"
+[manufacturing.http]
+listen = "127.0.0.1:8082"
+ssl = false
+insecure-tls = true
+[manufacturing.database]
+path = "test-toml.db"
+password = "TomlPass123!"
+[manufacturing.device-ca]
+cert = "/path/to/toml-device.ca"
+key = "/path/to/toml-device.key"
 `,
 			expected: expectedConfig{
 				address:         "127.0.0.1:8082",
@@ -160,26 +219,31 @@ owner-cert = "/path/to/toml-owner.crt"
 				t.Fatalf("execute failed: %v", err)
 			}
 
-			if address != tt.expected.address {
-				t.Fatalf("address=%q, want %q", address, tt.expected.address)
+			if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+				t.Fatalf("manufacturing config not captured")
 			}
-			if dbPath != tt.expected.dbPath || dbPass != tt.expected.dbPass {
-				t.Fatalf("db not loaded: path=%q pass=%q, want path=%q pass=%q", dbPath, dbPass, tt.expected.dbPath, tt.expected.dbPass)
+
+			cfg := capturedConfig.Manufacturing
+			if cfg.HTTP.Listen != tt.expected.address {
+				t.Fatalf("HTTP.Listen=%q, want %q", cfg.HTTP.Listen, tt.expected.address)
 			}
-			if !insecureTLS || !debug {
-				t.Fatalf("expected booleans true: insecureTLS=%v debug=%v", insecureTLS, debug)
+			if cfg.DB.Path != tt.expected.dbPath {
+				t.Fatalf("DB.Path=%q, want %q", cfg.DB.Path, tt.expected.dbPath)
 			}
-			if manufacturerKeyPath != tt.expected.manufacturerKey {
-				t.Fatalf("manufacturerKeyPath=%q, want %q", manufacturerKeyPath, tt.expected.manufacturerKey)
+			if cfg.DB.Password != tt.expected.dbPass {
+				t.Fatalf("DB.Password=%q, want %q", cfg.DB.Password, tt.expected.dbPass)
 			}
-			if deviceCACertPath != tt.expected.deviceCACert {
-				t.Fatalf("deviceCACertPath=%q, want %q", deviceCACertPath, tt.expected.deviceCACert)
+			if cfg.ManufacturerKeyPath != tt.expected.manufacturerKey {
+				t.Fatalf("ManufacturerKeyPath=%q, want %q", cfg.ManufacturerKeyPath, tt.expected.manufacturerKey)
 			}
-			if deviceCAKeyPath != tt.expected.deviceCAKey {
-				t.Fatalf("deviceCAKeyPath=%q, want %q", deviceCAKeyPath, tt.expected.deviceCAKey)
+			if cfg.DeviceCACert.CertPath != tt.expected.deviceCACert {
+				t.Fatalf("DeviceCACert.CertPath=%q, want %q", cfg.DeviceCACert.CertPath, tt.expected.deviceCACert)
 			}
-			if ownerPublicKeyPath != tt.expected.ownerCert {
-				t.Fatalf("ownerPublicKeyPath=%q, want %q", ownerPublicKeyPath, tt.expected.ownerCert)
+			if cfg.DeviceCACert.KeyPath != tt.expected.deviceCAKey {
+				t.Fatalf("DeviceCACert.KeyPath=%q, want %q", cfg.DeviceCACert.KeyPath, tt.expected.deviceCAKey)
+			}
+			if cfg.OwnerPublicKeyPath != tt.expected.ownerCert {
+				t.Fatalf("OwnerPublicKeyPath=%q, want %q", cfg.OwnerPublicKeyPath, tt.expected.ownerCert)
 			}
 		})
 	}
@@ -191,10 +255,6 @@ func TestOwner_LoadsFromTOMLConfig(t *testing.T) {
 		dbPath          string
 		dbPass          string
 		externalAddress string
-		wgets           []string
-		uploads         []string
-		uploadDir       string
-		downloads       []string
 		deviceCACert    string
 		ownerKey        string
 	}
@@ -207,30 +267,24 @@ func TestOwner_LoadsFromTOMLConfig(t *testing.T) {
 		{
 			name: "basic owner configuration",
 			config: `
-address = "127.0.0.1:8082"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
-insecure-tls = true
+[owner]
 external-address = "0.0.0.0:8443"
-command-date = true
-command-wget = ["https://a/x", "https://b/y"]
-command-upload = ["a.txt", "b.txt"]
-upload-directory = "/tmp/uploads"
-command-download = ["c.txt"]
 reuse-credentials = true
 device-ca-cert = "/path/to/owner.device.ca"
 owner-key = "/path/to/owner.key"
+[owner.http]
+listen = "127.0.0.1:8082"
+ssl = false
+insecure-tls = true
+[owner.database]
+path = "test.db"
+password = "Abcdef1!"
 `,
 			expected: expectedOwnerConfig{
 				address:         "127.0.0.1:8082",
 				dbPath:          "test.db",
 				dbPass:          "Abcdef1!",
 				externalAddress: "0.0.0.0:8443",
-				wgets:           []string{"https://a/x", "https://b/y"},
-				uploads:         []string{"a.txt", "b.txt"},
-				uploadDir:       "/tmp/uploads",
-				downloads:       []string{"c.txt"},
 				deviceCACert:    "/path/to/owner.device.ca",
 				ownerKey:        "/path/to/owner.key",
 			},
@@ -238,30 +292,24 @@ owner-key = "/path/to/owner.key"
 		{
 			name: "toml-specific owner configuration",
 			config: `
-address = "127.0.0.1:8083"
-db = "test-owner-toml.db"
-db-pass = "OwnerToml123!"
-debug = true
-insecure-tls = true
+[owner]
 external-address = "0.0.0.0:8444"
-command-date = true
-command-wget = ["https://toml.example.com/file1", "https://toml.example.com/file2"]
-command-upload = ["toml-upload1.txt", "toml-upload2.txt"]
-upload-directory = "/tmp/toml-uploads"
-command-download = ["toml-download1.txt"]
 reuse-credentials = true
 device-ca-cert = "/path/to/toml-owner.device.ca"
 owner-key = "/path/to/toml-owner.key"
+[owner.http]
+listen = "127.0.0.1:8083"
+ssl = false
+insecure-tls = true
+[owner.database]
+path = "test-owner-toml.db"
+password = "OwnerToml123!"
 `,
 			expected: expectedOwnerConfig{
 				address:         "127.0.0.1:8083",
 				dbPath:          "test-owner-toml.db",
 				dbPass:          "OwnerToml123!",
 				externalAddress: "0.0.0.0:8444",
-				wgets:           []string{"https://toml.example.com/file1", "https://toml.example.com/file2"},
-				uploads:         []string{"toml-upload1.txt", "toml-upload2.txt"},
-				uploadDir:       "/tmp/toml-uploads",
-				downloads:       []string{"toml-download1.txt"},
 				deviceCACert:    "/path/to/toml-owner.device.ca",
 				ownerKey:        "/path/to/toml-owner.key",
 			},
@@ -280,36 +328,32 @@ owner-key = "/path/to/toml-owner.key"
 				t.Fatalf("execute failed: %v", err)
 			}
 
-			if address != tt.expected.address {
-				t.Fatalf("address=%q, want %q", address, tt.expected.address)
+			if capturedConfig == nil || capturedConfig.Owner == nil {
+				t.Fatalf("owner config not captured")
 			}
-			if dbPath != tt.expected.dbPath || dbPass != tt.expected.dbPass {
-				t.Fatalf("db not loaded: path=%q pass=%q, want path=%q pass=%q", dbPath, dbPass, tt.expected.dbPath, tt.expected.dbPass)
+
+			cfg := capturedConfig.Owner
+			if cfg.HTTP.Listen != tt.expected.address {
+				t.Fatalf("HTTP.Listen=%q, want %q", cfg.HTTP.Listen, tt.expected.address)
 			}
-			if !insecureTLS || !debug || !date || !reuseCred {
-				t.Fatalf("expected booleans true: insecureTLS=%v debug=%v date=%v reuseCred=%v", insecureTLS, debug, date, reuseCred)
+			if cfg.DB.Path != tt.expected.dbPath {
+				t.Fatalf("DB.Path=%q, want %q", cfg.DB.Path, tt.expected.dbPath)
 			}
-			if externalAddress != tt.expected.externalAddress {
-				t.Fatalf("externalAddress=%q, want %q", externalAddress, tt.expected.externalAddress)
+			if cfg.DB.Password != tt.expected.dbPass {
+				t.Fatalf("DB.Password=%q, want %q", cfg.DB.Password, tt.expected.dbPass)
 			}
-			if got := wgets; !reflect.DeepEqual(got, tt.expected.wgets) {
-				t.Fatalf("wgets=%v, want %v", got, tt.expected.wgets)
+			if cfg.ExternalAddress != tt.expected.externalAddress {
+				t.Fatalf("ExternalAddress=%q, want %q", cfg.ExternalAddress, tt.expected.externalAddress)
 			}
-			if got := uploads; !reflect.DeepEqual(got, tt.expected.uploads) {
-				t.Fatalf("uploads=%v, want %v", got, tt.expected.uploads)
+			if cfg.OwnerDeviceCACert != tt.expected.deviceCACert {
+				t.Fatalf("OwnerDeviceCACert=%q, want %q", cfg.OwnerDeviceCACert, tt.expected.deviceCACert)
 			}
-			if uploadDir != tt.expected.uploadDir {
-				t.Fatalf("uploadDir=%q, want %q", uploadDir, tt.expected.uploadDir)
+			if cfg.OwnerPrivateKey != tt.expected.ownerKey {
+				t.Fatalf("OwnerPrivateKey=%q, want %q", cfg.OwnerPrivateKey, tt.expected.ownerKey)
 			}
-			if got := downloads; !reflect.DeepEqual(got, tt.expected.downloads) {
-				t.Fatalf("downloads=%v, want %v", got, tt.expected.downloads)
-			}
-			if ownerDeviceCACert != tt.expected.deviceCACert {
-				t.Fatalf("ownerDeviceCACert=%q, want %q", ownerDeviceCACert, tt.expected.deviceCACert)
-			}
-			if ownerPrivateKey != tt.expected.ownerKey {
-				t.Fatalf("ownerPrivateKey=%q, want %q", ownerPrivateKey, tt.expected.ownerKey)
-			}
+
+			// Note: wgets, uploads, downloads, uploadDir are command-line only arguments
+			// and are not loaded from configuration files, so we don't validate them here
 		})
 	}
 }
@@ -319,11 +363,14 @@ func TestRendezvous_LoadsFromTOMLConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-address = "127.0.0.1:8083"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
+[rendezvous]
+[rendezvous.http]
+listen = "127.0.0.1:8083"
+ssl = false
 insecure-tls = true
+[rendezvous.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"rendezvous", "--config", path})
@@ -332,14 +379,19 @@ insecure-tls = true
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:8083" {
-		t.Fatalf("address=%q", address)
+	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+		t.Fatalf("rendezvous config not captured")
 	}
-	if dbPath != "test.db" || dbPass != "Abcdef1!" {
-		t.Fatalf("db not loaded: path=%q pass=%q", dbPath, dbPass)
+
+	cfgObj := capturedConfig.Rendezvous
+	if cfgObj.HTTP.Listen != "127.0.0.1:8083" {
+		t.Fatalf("HTTP.Listen=%q, want %q", cfgObj.HTTP.Listen, "127.0.0.1:8083")
 	}
-	if !insecureTLS || !debug {
-		t.Fatalf("expected booleans true: insecureTLS=%v debug=%v", insecureTLS, debug)
+	if cfgObj.DB.Path != "test.db" {
+		t.Fatalf("DB.Path=%q, want %q", cfgObj.DB.Path, "test.db")
+	}
+	if cfgObj.DB.Password != "Abcdef1!" {
+		t.Fatalf("DB.Password=%q, want %q", cfgObj.DB.Password, "Abcdef1!")
 	}
 }
 
@@ -348,9 +400,13 @@ func TestManufacturing_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
-address = "1.2.3.4:1111"
-db = "test.db"
-db-pass = "Abcdef1!"
+[manufacturing]
+[manufacturing.http]
+listen = "1.2.3.4:1111"
+ssl = false
+[manufacturing.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path, "127.0.0.1:9090"})
@@ -359,8 +415,13 @@ db-pass = "Abcdef1!"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:9090" {
-		t.Fatalf("expected positional address override, got %q", address)
+	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+		t.Fatalf("manufacturing config not captured")
+	}
+
+	// The positional argument should override the config file value
+	if capturedConfig.Manufacturing.HTTP.Listen != "127.0.0.1:9090" {
+		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Manufacturing.HTTP.Listen, "127.0.0.1:9090")
 	}
 }
 
@@ -369,22 +430,28 @@ func TestOwner_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
-address = "1.2.3.4:1111"
-db = "test.db"
-db-pass = "Abcdef1!"
+[owner]
+[owner.http]
+listen = "1.2.3.4:1111"
+ssl = false
+[owner.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
-	rootCmd.SetArgs([]string{"owner", "--config", path, "127.0.0.1:9090"})
+	rootCmd.SetArgs([]string{"owner", "--config", path, "127.0.0.1:9191"})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:9090" {
-		t.Fatalf("expected positional address override, got %q", address)
+	if capturedConfig == nil || capturedConfig.Owner == nil {
+		t.Fatalf("owner config not captured")
 	}
-	if externalAddress != address {
-		t.Fatalf("externalAddress default mismatch: got %q want %q", externalAddress, address)
+
+	// The positional argument should override the config file value
+	if capturedConfig.Owner.HTTP.Listen != "127.0.0.1:9191" {
+		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Owner.HTTP.Listen, "127.0.0.1:9191")
 	}
 }
 
@@ -393,19 +460,28 @@ func TestRendezvous_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-address = "1.2.3.4:1111"
-db = "test.db"
-db-pass = "Abcdef1!"
+[rendezvous]
+[rendezvous.http]
+listen = "1.2.3.4:1111"
+ssl = false
+[rendezvous.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
-	rootCmd.SetArgs([]string{"rendezvous", "--config", path, "127.0.0.1:9090"})
+	rootCmd.SetArgs([]string{"rendezvous", "--config", path, "127.0.0.1:9292"})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:9090" {
-		t.Fatalf("expected positional address override, got %q", address)
+	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+		t.Fatalf("rendezvous config not captured")
+	}
+
+	// The positional argument should override the config file value
+	if capturedConfig.Rendezvous.HTTP.Listen != "127.0.0.1:9292" {
+		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Rendezvous.HTTP.Listen, "127.0.0.1:9292")
 	}
 }
 
@@ -414,13 +490,16 @@ func TestManufacturing_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
-db = "test.db"
-db-pass = "Abcdef1!"
+[manufacturing]
+[manufacturing.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path})
 
 	if err := rootCmd.Execute(); err == nil {
+		fmt.Printf("VIPER: %s\n", viper.GetString("manufacturing.http.listen"))
 		t.Fatalf("expected error for missing address")
 	}
 }
@@ -430,8 +509,10 @@ func TestOwner_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
-db = "test.db"
-db-pass = "Abcdef1!"
+[owner]
+[owner.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path})
@@ -446,8 +527,10 @@ func TestRendezvous_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-db = "test.db"
-db-pass = "Abcdef1!"
+[rendezvous]
+[rendezvous.database]
+path = "test.db"
+password = "Abcdef1!"
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"rendezvous", "--config", path})
@@ -495,15 +578,19 @@ func TestManufacturing_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
-address: "127.0.0.1:8081"
-db: "test-yaml.db"
-db-pass: "YamlPass123!"
-debug: true
-insecure-tls: true
-manufacturing-key: "/path/to/yaml-mfg.key"
-device-ca-cert: "/path/to/yaml-device.ca"
-device-ca-key: "/path/to/yaml-device.key"
-owner-cert: "/path/to/yaml-owner.crt"
+manufacturing:
+  http:
+    listen: "127.0.0.1:8081"
+    ssl: false
+    insecure-tls: true
+  database:
+    path: "test-yaml.db"
+    password: "YamlPass123!"
+  private-key: "/path/to/yaml-mfg.key"
+  owner-cert: "/path/to/yaml-owner.crt"
+  device-ca:
+    cert: "/path/to/yaml-device.ca"
+    key: "/path/to/yaml-device.key"
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path})
@@ -512,26 +599,22 @@ owner-cert: "/path/to/yaml-owner.crt"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:8081" {
-		t.Fatalf("address=%q", address)
+	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+		t.Fatalf("manufacturing config not captured")
 	}
-	if dbPath != "test-yaml.db" || dbPass != "YamlPass123!" {
-		t.Fatalf("db not loaded: path=%q pass=%q", dbPath, dbPass)
+
+	cfgObj := capturedConfig.Manufacturing
+	if cfgObj.ManufacturerKeyPath != "/path/to/yaml-mfg.key" {
+		t.Fatalf("ManufacturerKeyPath=%q", cfgObj.ManufacturerKeyPath)
 	}
-	if !insecureTLS || !debug {
-		t.Fatalf("expected booleans true: insecureTLS=%v debug=%v", insecureTLS, debug)
+	if cfgObj.DeviceCACert.CertPath != "/path/to/yaml-device.ca" {
+		t.Fatalf("DeviceCACert.CertPath=%q", cfgObj.DeviceCACert.CertPath)
 	}
-	if manufacturerKeyPath != "/path/to/yaml-mfg.key" {
-		t.Fatalf("manufacturerKeyPath=%q", manufacturerKeyPath)
+	if cfgObj.DeviceCACert.KeyPath != "/path/to/yaml-device.key" {
+		t.Fatalf("DeviceCACert.KeyPath=%q", cfgObj.DeviceCACert.KeyPath)
 	}
-	if deviceCACertPath != "/path/to/yaml-device.ca" {
-		t.Fatalf("deviceCACertPath=%q", deviceCACertPath)
-	}
-	if deviceCAKeyPath != "/path/to/yaml-device.key" {
-		t.Fatalf("deviceCAKeyPath=%q", deviceCAKeyPath)
-	}
-	if ownerPublicKeyPath != "/path/to/yaml-owner.crt" {
-		t.Fatalf("ownerPublicKeyPath=%q", ownerPublicKeyPath)
+	if cfgObj.OwnerPublicKeyPath != "/path/to/yaml-owner.crt" {
+		t.Fatalf("OwnerPublicKeyPath=%q", cfgObj.OwnerPublicKeyPath)
 	}
 }
 
@@ -540,20 +623,18 @@ func TestOwner_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
-address: "127.0.0.1:8082"
-db: "test-owner-yaml.db"
-db-pass: "OwnerYaml123!"
-debug: true
-insecure-tls: true
-external-address: "0.0.0.0:8443"
-command-date: true
-command-wget: ["https://yaml.example.com/file1", "https://yaml.example.com/file2"]
-command-upload: ["yaml-upload1.txt", "yaml-upload2.txt"]
-upload-directory: "/tmp/yaml-uploads"
-command-download: ["yaml-download1.txt"]
-reuse-credentials: true
-device-ca-cert: "/path/to/yaml-owner.device.ca"
-owner-key: "/path/to/yaml-owner.key"
+owner:
+  http:
+    listen: "127.0.0.1:8082"
+    ssl: false
+    insecure-tls: true
+  database:
+    path: "test-owner-yaml.db"
+    password: "OwnerYaml123!"
+  external-address: "0.0.0.0:8443"
+  device-ca-cert: "/path/to/yaml-owner.device.ca"
+  owner-key: "/path/to/yaml-owner.key"
+  reuse-credentials: true
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path})
@@ -562,36 +643,23 @@ owner-key: "/path/to/yaml-owner.key"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:8082" {
-		t.Fatalf("address=%q", address)
+	if capturedConfig == nil || capturedConfig.Owner == nil {
+		t.Fatalf("owner config not captured")
 	}
-	if dbPath != "test-owner-yaml.db" || dbPass != "OwnerYaml123!" {
-		t.Fatalf("db not loaded: path=%q pass=%q", dbPath, dbPass)
+
+	cfgObj := capturedConfig.Owner
+	if cfgObj.ExternalAddress != "0.0.0.0:8443" {
+		t.Fatalf("ExternalAddress=%q", cfgObj.ExternalAddress)
 	}
-	if !insecureTLS || !debug || !date || !reuseCred {
-		t.Fatalf("expected booleans true: insecureTLS=%v debug=%v date=%v reuseCred=%v", insecureTLS, debug, date, reuseCred)
+	if cfgObj.OwnerDeviceCACert != "/path/to/yaml-owner.device.ca" {
+		t.Fatalf("OwnerDeviceCACert=%q", cfgObj.OwnerDeviceCACert)
 	}
-	if externalAddress != "0.0.0.0:8443" {
-		t.Fatalf("externalAddress=%q", externalAddress)
+	if cfgObj.OwnerPrivateKey != "/path/to/yaml-owner.key" {
+		t.Fatalf("OwnerPrivateKey=%q", cfgObj.OwnerPrivateKey)
 	}
-	if got := wgets; !reflect.DeepEqual(got, []string{"https://yaml.example.com/file1", "https://yaml.example.com/file2"}) {
-		t.Fatalf("wgets=%v", got)
-	}
-	if got := uploads; !reflect.DeepEqual(got, []string{"yaml-upload1.txt", "yaml-upload2.txt"}) {
-		t.Fatalf("uploads=%v", got)
-	}
-	if uploadDir != "/tmp/yaml-uploads" {
-		t.Fatalf("uploadDir=%q", uploadDir)
-	}
-	if got := downloads; !reflect.DeepEqual(got, []string{"yaml-download1.txt"}) {
-		t.Fatalf("downloads=%v", got)
-	}
-	if ownerDeviceCACert != "/path/to/yaml-owner.device.ca" {
-		t.Fatalf("ownerDeviceCACert=%q", ownerDeviceCACert)
-	}
-	if ownerPrivateKey != "/path/to/yaml-owner.key" {
-		t.Fatalf("ownerPrivateKey=%q", ownerPrivateKey)
-	}
+
+	// Note: command-line only options (wgets, uploads, downloads, uploadDir, date) are not loaded from configuration files
+	// They are only available as command-line flags
 }
 
 func TestRendezvous_LoadsFromYAMLConfig(t *testing.T) {
@@ -599,11 +667,14 @@ func TestRendezvous_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-address: "127.0.0.1:8083"
-db: "test-rendezvous-yaml.db"
-db-pass: "RendezvousYaml123!"
-debug: true
-insecure-tls: true
+rendezvous:
+  http:
+    listen: "127.0.0.1:8083"
+    ssl: false
+    insecure-tls: true
+  database:
+    path: "test-rendezvous-yaml.db"
+    password: "RendezvousYaml123!"
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"rendezvous", "--config", path})
@@ -612,245 +683,245 @@ insecure-tls: true
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if address != "127.0.0.1:8083" {
-		t.Fatalf("address=%q", address)
+	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+		t.Fatalf("rendezvous config not captured")
 	}
-	if dbPath != "test-rendezvous-yaml.db" || dbPass != "RendezvousYaml123!" {
-		t.Fatalf("db not loaded: path=%q pass=%q", dbPath, dbPass)
+
+	cfgObj := capturedConfig.Rendezvous
+	if cfgObj.HTTP.Listen != "127.0.0.1:8083" {
+		t.Fatalf("HTTP.Listen=%q", cfgObj.HTTP.Listen)
 	}
-	if !insecureTLS || !debug {
-		t.Fatalf("expected booleans true: insecureTLS=%v debug=%v", insecureTLS, debug)
+	if cfgObj.DB.Path != "test-rendezvous-yaml.db" {
+		t.Fatalf("DB.Path=%q", cfgObj.DB.Path)
+	}
+	if cfgObj.DB.Password != "RendezvousYaml123!" {
+		t.Fatalf("DB.Password=%q", cfgObj.DB.Password)
 	}
 }
 
-func TestManufacturing_IgnoresInvalidConfigOptions(t *testing.T) {
+func TestManufacturing_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 	resetState(t)
 	stubRunE(t, manufacturingCmd)
 
-	// Include owner-specific options that should be ignored by manufacturing server
+	// Create a configuration file with specific values
 	cfg := `
-address = "127.0.0.1:8081"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
+[manufacturing]
+private-key = "/config/mfg.key"
+owner-cert = "/config/owner.crt"
+[manufacturing.http]
+listen = "127.0.0.1:8081"
+ssl = false
 insecure-tls = true
-manufacturing-key = "/path/to/mfg.key"
-device-ca-cert = "/path/to/device.ca"
-device-ca-key = "/path/to/device.key"
-owner-cert = "/path/to/owner.crt"
-# These should be ignored by manufacturing server
-command-wget = ["https://example.com/file"]
-command-upload = ["upload.txt"]
-command-download = ["download.txt"]
-upload-directory = "/tmp/uploads"
-reuse-credentials = true
-owner-key = "/path/to/owner.key"
-external-address = "0.0.0.0:8443"
+cert = "/config/server.crt"
+key = "/config/server.key"
+[manufacturing.database]
+path = "config.db"
+password = "ConfigPass123!"
+[manufacturing.device-ca]
+cert = "/config/device.ca"
+key = "/config/device.key"
 `
 	path := writeTOMLConfig(t, cfg)
-	rootCmd.SetArgs([]string{"manufacturing", "--config", path})
+
+	// Set command-line flags that should override the config file values
+	rootCmd.SetArgs([]string{
+		"manufacturing",
+		"--config", path,
+		"127.0.0.1:9090", // positional argument for listen address
+		"--manufacturing-key", "/cli/mfg.key",
+		"--owner-cert", "/cli/owner.crt",
+		"--device-ca-cert", "/cli/device.ca",
+		"--device-ca-key", "/cli/device.key",
+		"--db", "cli.db",
+		"--db-pass", "CliPass123!",
+		"--insecure-tls=false",
+		"--server-cert-path", "/cli/server.crt",
+		"--server-key-path", "/cli/server.key",
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	// Verify that manufacturing-specific options are loaded correctly
-	if address != "127.0.0.1:8081" {
-		t.Fatalf("address=%q", address)
-	}
-	if manufacturerKeyPath != "/path/to/mfg.key" {
-		t.Fatalf("manufacturerKeyPath=%q", manufacturerKeyPath)
-	}
-	if deviceCACertPath != "/path/to/device.ca" {
-		t.Fatalf("deviceCACertPath=%q", deviceCACertPath)
-	}
-	if deviceCAKeyPath != "/path/to/device.key" {
-		t.Fatalf("deviceCAKeyPath=%q", deviceCAKeyPath)
-	}
-	if ownerPublicKeyPath != "/path/to/owner.crt" {
-		t.Fatalf("ownerPublicKeyPath=%q", ownerPublicKeyPath)
+	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+		t.Fatalf("manufacturing config not captured")
 	}
 
-	// Verify that owner-specific options are NOT loaded (should remain at default values)
-	if len(wgets) != 0 {
-		t.Fatalf("wgets should be empty for manufacturing server, got %v", wgets)
+	cfgObj := capturedConfig.Manufacturing
+
+	// Verify that command-line values overrode config file values
+	if cfgObj.HTTP.Listen != "127.0.0.1:9090" {
+		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9090")
 	}
-	if len(uploads) != 0 {
-		t.Fatalf("uploads should be empty for manufacturing server, got %v", uploads)
+	if cfgObj.ManufacturerKeyPath != "/cli/mfg.key" {
+		t.Fatalf("ManufacturerKeyPath=%q, want %q (CLI flag should override config)", cfgObj.ManufacturerKeyPath, "/cli/mfg.key")
 	}
-	if len(downloads) != 0 {
-		t.Fatalf("downloads should be empty for manufacturing server, got %v", downloads)
+	if cfgObj.OwnerPublicKeyPath != "/cli/owner.crt" {
+		t.Fatalf("OwnerPublicKeyPath=%q, want %q (CLI flag should override config)", cfgObj.OwnerPublicKeyPath, "/cli/owner.crt")
 	}
-	if uploadDir != "" {
-		t.Fatalf("uploadDir should be empty for manufacturing server, got %q", uploadDir)
+	if cfgObj.DeviceCACert.CertPath != "/cli/device.ca" {
+		t.Fatalf("DeviceCACert.CertPath=%q, want %q (CLI flag should override config)", cfgObj.DeviceCACert.CertPath, "/cli/device.ca")
 	}
-	if reuseCred {
-		t.Fatalf("reuseCred should be false for manufacturing server, got %v", reuseCred)
+	if cfgObj.DeviceCACert.KeyPath != "/cli/device.key" {
+		t.Fatalf("DeviceCACert.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.DeviceCACert.KeyPath, "/cli/device.key")
 	}
-	if ownerPrivateKey != "" {
-		t.Fatalf("ownerPrivateKey should be empty for manufacturing server, got %q", ownerPrivateKey)
+	if cfgObj.DB.Path != "cli.db" {
+		t.Fatalf("DB.Path=%q, want %q (CLI flag should override config)", cfgObj.DB.Path, "cli.db")
 	}
-	if externalAddress != "" {
-		t.Fatalf("externalAddress should be empty for manufacturing server, got %q", externalAddress)
+	if cfgObj.DB.Password != "CliPass123!" {
+		t.Fatalf("DB.Password=%q, want %q (CLI flag should override config)", cfgObj.DB.Password, "CliPass123!")
+	}
+	if cfgObj.HTTP.InsecureTLS != false {
+		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
+	}
+	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
+	}
+	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
 	}
 }
 
-func TestOwner_IgnoresInvalidConfigOptions(t *testing.T) {
+func TestOwner_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 	resetState(t)
 	stubRunE(t, ownerCmd)
 
-	// Include manufacturing-specific options that should be ignored by owner server
+	// Create a configuration file with specific values
 	cfg := `
-address = "127.0.0.1:8082"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
-insecure-tls = true
+[owner]
 external-address = "0.0.0.0:8443"
-command-date = true
-command-wget = ["https://a/x", "https://b/y"]
-command-upload = ["a.txt", "b.txt"]
-upload-directory = "/tmp/uploads"
-command-download = ["c.txt"]
+device-ca-cert = "/config/owner.device.ca"
+owner-key = "/config/owner.key"
 reuse-credentials = true
-device-ca-cert = "/path/to/owner.device.ca"
-owner-key = "/path/to/owner.key"
-# These should be ignored by owner server
-manufacturing-key = "/path/to/mfg.key"
-device-ca-key = "/path/to/device.key"
-owner-cert = "/path/to/owner.crt"
+[owner.http]
+listen = "127.0.0.1:8082"
+ssl = false
+insecure-tls = true
+cert = "/config/server.crt"
+key = "/config/server.key"
+[owner.database]
+path = "config.db"
+password = "ConfigPass123!"
 `
 	path := writeTOMLConfig(t, cfg)
-	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	// Set command-line flags that should override the config file values
+	rootCmd.SetArgs([]string{
+		"owner",
+		"--config", path,
+		"127.0.0.1:9091", // positional argument for listen address
+		"--external-address", "0.0.0.0:9443",
+		"--device-ca-cert", "/cli/owner.device.ca",
+		"--owner-key", "/cli/owner.key",
+		"--reuse-credentials=false",
+		"--db", "cli.db",
+		"--db-pass", "CliPass123!",
+		"--insecure-tls=false",
+		"--server-cert-path", "/cli/server.crt",
+		"--server-key-path", "/cli/server.key",
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	// Verify that owner-specific options are loaded correctly
-	if address != "127.0.0.1:8082" {
-		t.Fatalf("address=%q", address)
-	}
-	if externalAddress != "0.0.0.0:8443" {
-		t.Fatalf("externalAddress=%q", externalAddress)
-	}
-	if !date {
-		t.Fatalf("date should be true, got %v", date)
-	}
-	if got := wgets; !reflect.DeepEqual(got, []string{"https://a/x", "https://b/y"}) {
-		t.Fatalf("wgets=%v", got)
-	}
-	if got := uploads; !reflect.DeepEqual(got, []string{"a.txt", "b.txt"}) {
-		t.Fatalf("uploads=%v", got)
-	}
-	if uploadDir != "/tmp/uploads" {
-		t.Fatalf("uploadDir=%q", uploadDir)
-	}
-	if got := downloads; !reflect.DeepEqual(got, []string{"c.txt"}) {
-		t.Fatalf("downloads=%v", got)
-	}
-	if !reuseCred {
-		t.Fatalf("reuseCred should be true, got %v", reuseCred)
-	}
-	if ownerDeviceCACert != "/path/to/owner.device.ca" {
-		t.Fatalf("ownerDeviceCACert=%q", ownerDeviceCACert)
-	}
-	if ownerPrivateKey != "/path/to/owner.key" {
-		t.Fatalf("ownerPrivateKey=%q", ownerPrivateKey)
+	if capturedConfig == nil || capturedConfig.Owner == nil {
+		t.Fatalf("owner config not captured")
 	}
 
-	// Verify that manufacturing-specific options are NOT loaded (should remain at default values)
-	if manufacturerKeyPath != "" {
-		t.Fatalf("manufacturerKeyPath should be empty for owner server, got %q", manufacturerKeyPath)
+	cfgObj := capturedConfig.Owner
+
+	// Verify that command-line values overrode config file values
+	if cfgObj.HTTP.Listen != "127.0.0.1:9091" {
+		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9091")
 	}
-	if deviceCAKeyPath != "" {
-		t.Fatalf("deviceCAKeyPath should be empty for owner server, got %q", deviceCAKeyPath)
+	if cfgObj.ExternalAddress != "0.0.0.0:9443" {
+		t.Fatalf("ExternalAddress=%q, want %q (CLI flag should override config)", cfgObj.ExternalAddress, "0.0.0.0:9443")
 	}
-	if ownerPublicKeyPath != "" {
-		t.Fatalf("ownerPublicKeyPath should be empty for owner server, got %q", ownerPublicKeyPath)
+	if cfgObj.OwnerDeviceCACert != "/cli/owner.device.ca" {
+		t.Fatalf("OwnerDeviceCACert=%q, want %q (CLI flag should override config)", cfgObj.OwnerDeviceCACert, "/cli/owner.device.ca")
+	}
+	if cfgObj.OwnerPrivateKey != "/cli/owner.key" {
+		t.Fatalf("OwnerPrivateKey=%q, want %q (CLI flag should override config)", cfgObj.OwnerPrivateKey, "/cli/owner.key")
+	}
+	if cfgObj.ReuseCred != false {
+		t.Fatalf("ReuseCred=%v, want %v (CLI flag should override config)", cfgObj.ReuseCred, false)
+	}
+	if cfgObj.DB.Path != "cli.db" {
+		t.Fatalf("DB.Path=%q, want %q (CLI flag should override config)", cfgObj.DB.Path, "cli.db")
+	}
+	if cfgObj.DB.Password != "CliPass123!" {
+		t.Fatalf("DB.Password=%q, want %q (CLI flag should override config)", cfgObj.DB.Password, "CliPass123!")
+	}
+	if cfgObj.HTTP.InsecureTLS != false {
+		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
+	}
+	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
+	}
+	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
 	}
 }
 
-func TestRendezvous_IgnoresInvalidConfigOptions(t *testing.T) {
+func TestRendezvous_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 	resetState(t)
 	stubRunE(t, rendezvousCmd)
 
-	// Include manufacturing and owner-specific options that should be ignored by rendezvous server
+	// Create a configuration file with specific values
 	cfg := `
-address = "127.0.0.1:8083"
-db = "test.db"
-db-pass = "Abcdef1!"
-debug = true
+[rendezvous]
+[rendezvous.http]
+listen = "127.0.0.1:8083"
+ssl = false
 insecure-tls = true
-# These should be ignored by rendezvous server
-manufacturing-key = "/path/to/mfg.key"
-device-ca-cert = "/path/to/device.ca"
-device-ca-key = "/path/to/device.key"
-owner-cert = "/path/to/owner.crt"
-command-wget = ["https://example.com/file"]
-command-upload = ["upload.txt"]
-command-download = ["download.txt"]
-upload-directory = "/tmp/uploads"
-reuse-credentials = true
-owner-key = "/path/to/owner.key"
-external-address = "0.0.0.0:8443"
-command-date = true
+cert = "/config/server.crt"
+key = "/config/server.key"
+[rendezvous.database]
+path = "config.db"
+password = "ConfigPass123!"
 `
 	path := writeTOMLConfig(t, cfg)
-	rootCmd.SetArgs([]string{"rendezvous", "--config", path})
+
+	// Set command-line flags that should override the config file values
+	rootCmd.SetArgs([]string{
+		"rendezvous",
+		"--config", path,
+		"127.0.0.1:9092", // positional argument for listen address
+		"--db", "cli.db",
+		"--db-pass", "CliPass123!",
+		"--insecure-tls=false",
+		"--server-cert-path", "/cli/server.crt",
+		"--server-key-path", "/cli/server.key",
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	// Verify that rendezvous-specific options are loaded correctly
-	if address != "127.0.0.1:8083" {
-		t.Fatalf("address=%q", address)
-	}
-	if dbPath != "test.db" || dbPass != "Abcdef1!" {
-		t.Fatalf("db not loaded: path=%q pass=%q", dbPath, dbPass)
-	}
-	if !insecureTLS || !debug {
-		t.Fatalf("expected booleans true: insecureTLS=%v debug=%v", insecureTLS, debug)
+	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+		t.Fatalf("rendezvous config not captured")
 	}
 
-	// Verify that manufacturing-specific options are NOT loaded (should remain at default values)
-	if manufacturerKeyPath != "" {
-		t.Fatalf("manufacturerKeyPath should be empty for rendezvous server, got %q", manufacturerKeyPath)
-	}
-	if deviceCACertPath != "" {
-		t.Fatalf("deviceCACertPath should be empty for rendezvous server, got %q", deviceCACertPath)
-	}
-	if deviceCAKeyPath != "" {
-		t.Fatalf("deviceCAKeyPath should be empty for rendezvous server, got %q", deviceCAKeyPath)
-	}
-	if ownerPublicKeyPath != "" {
-		t.Fatalf("ownerPublicKeyPath should be empty for rendezvous server, got %q", ownerPublicKeyPath)
-	}
+	cfgObj := capturedConfig.Rendezvous
 
-	// Verify that owner-specific options are NOT loaded (should remain at default values)
-	if len(wgets) != 0 {
-		t.Fatalf("wgets should be empty for rendezvous server, got %v", wgets)
+	// Verify that command-line values overrode config file values
+	if cfgObj.HTTP.Listen != "127.0.0.1:9092" {
+		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9092")
 	}
-	if len(uploads) != 0 {
-		t.Fatalf("uploads should be empty for rendezvous server, got %v", uploads)
+	if cfgObj.DB.Path != "cli.db" {
+		t.Fatalf("DB.Path=%q, want %q (CLI flag should override config)", cfgObj.DB.Path, "cli.db")
 	}
-	if len(downloads) != 0 {
-		t.Fatalf("downloads should be empty for rendezvous server, got %v", downloads)
+	if cfgObj.DB.Password != "CliPass123!" {
+		t.Fatalf("DB.Password=%q, want %q (CLI flag should override config)", cfgObj.DB.Password, "CliPass123!")
 	}
-	if uploadDir != "" {
-		t.Fatalf("uploadDir should be empty for rendezvous server, got %q", uploadDir)
+	if cfgObj.HTTP.InsecureTLS != false {
+		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
 	}
-	if reuseCred {
-		t.Fatalf("reuseCred should be false for rendezvous server, got %v", reuseCred)
+	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
 	}
-	if ownerPrivateKey != "" {
-		t.Fatalf("ownerPrivateKey should be empty for rendezvous server, got %q", ownerPrivateKey)
-	}
-	if externalAddress != "" {
-		t.Fatalf("externalAddress should be empty for rendezvous server, got %q", externalAddress)
-	}
-	if date {
-		t.Fatalf("date should be false for rendezvous server, got %v", date)
+	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
 	}
 }
