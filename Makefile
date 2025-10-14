@@ -1,7 +1,8 @@
 #! /usr/bin/make -f
 COMMIT = $(shell git rev-parse --short HEAD)
 DATE = $(shell date "+%Y%m%d" )
-VERSION = git$(DATE).$(COMMIT)
+#VERSION = git$(DATE).$(COMMIT)
+VERSION = $(COMMIT)
 
 # Build the Go project
 .PHONY: build
@@ -84,8 +85,7 @@ RPMBUILD_VENDOR_TARBALL=${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
 
 $(RPMBUILD_SPECFILE):
 	mkdir -p $(RPMBUILD_SPECS_DIR)
-	sed -e "s/^Version:.*/Version:        $(VERSION)/;" \
-		  -e "s/^Source0:.*/Source0:        go-fdo-server-$(VERSION).tar.gz/;" \
+	sed -e "s/^%global commit .*/%global commit $(COMMIT)/;" \
 	    $(SPEC_FILE) > $(RPMBUILD_SPECFILE)
 
 $(RPMBUILD_TARBALL): $(SOURCE_TARBALL) $(VENDOR_TARBALL)
