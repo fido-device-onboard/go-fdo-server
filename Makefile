@@ -1,7 +1,7 @@
 #! /usr/bin/make -f
-COMMIT = $(shell git rev-parse --short HEAD)
-DATE = $(shell date "+%Y%m%d" )
-VERSION = git$(DATE).$(COMMIT)
+COMMIT = $(shell git rev-parse HEAD)
+DATE = $(shell date "+%Y%m%d")
+VERSION = $(COMMIT)
 
 # Build the Go project
 .PHONY: build
@@ -43,13 +43,13 @@ source-tarball: $(SOURCE_TARBALL)
 
 GO_VENDOR_TOOLS_FILE_NAME=go-vendor-tools.toml
 GO_VENDOR_TOOLS_FILE=$(SOURCE_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-VENDOR_TARBALL_FILENAME=go-fdo-server-$(VERSION)-vendor.tar.gz
+VENDOR_TARBALL_FILENAME=go-fdo-server-$(VERSION)-vendor.tar.bz2
 VENDOR_TARBALL=$(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
 
 $(VENDOR_TARBALL):
 	rm -rf vendor; \
 	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit; \
-	go_vendor_archive create --compression gz --config $(GO_VENDOR_TOOLS_FILE) --write-config --output $(VENDOR_TARBALL) .; \
+	go_vendor_archive create --config $(GO_VENDOR_TOOLS_FILE) --write-config --output $(VENDOR_TARBALL) .; \
 	rm -rf vendor;
 
 .PHONY: vendor-tarball
@@ -84,8 +84,7 @@ RPMBUILD_VENDOR_TARBALL=${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
 
 $(RPMBUILD_SPECFILE):
 	mkdir -p $(RPMBUILD_SPECS_DIR)
-	sed -e "s/^Version:.*/Version:        $(VERSION)/;" \
-		  -e "s/^Source0:.*/Source0:        go-fdo-server-$(VERSION).tar.gz/;" \
+	sed -e "s/^%global commit .*/%global commit          $(VERSION)/;" \
 	    $(SPEC_FILE) > $(RPMBUILD_SPECFILE)
 
 $(RPMBUILD_TARBALL): $(SOURCE_TARBALL) $(VENDOR_TARBALL)
@@ -134,7 +133,7 @@ packit-create-archive: $(SOURCE_TARBALL) $(VENDOR_TARBALL)
 .PHONY: clean
 clean:
 	rm -rf $(RPMBUILD_TOP_DIR)
-	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.gz
+	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.{gz,bz2}
 
 # Default target
 all: build test
