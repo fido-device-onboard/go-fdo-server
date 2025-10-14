@@ -107,6 +107,18 @@ jobs:
     allowed_builders: [all_committers]
     dist_git_branches: ["fedora-development", "fedora-stable"]
 
+  # Fedora E2E Testing jobs
+
+  - job: tests
+    trigger: pull_request
+    identifier: e2e-fedora
+    tmt_plan: test/fmf/plans/e2e
+    packages: [go-fdo-server-fedora]
+    targets:
+      - fedora-latest-stable
+      - fedora-latest
+      - fedora-rawhide
+
   # CentOS jobs
 
   - &fdo_copr_build_centos
@@ -131,33 +143,13 @@ jobs:
     owner: "@fedora-iot"
     project: fedora-iot
 
-  # E2E Testing jobs
-
-  - job: tests
-    trigger: pull_request
-    identifier: e2e-fedora
-    fmf_path: test/fmf
-    tmt_plan: plans/e2e
-    packages: [go-fdo-server-fedora]
-    additional_packages:
-      - go-fdo-server-manufacturer
-      - go-fdo-server-rendezvous
-      - go-fdo-server-owner
-    targets:
-      - fedora-latest-stable
-      - fedora-latest
-      - fedora-rawhide
-
+  # CentOS E2E Testing jobs
+  #
   - job: tests
     trigger: pull_request
     identifier: e2e-centos
-    fmf_path: test/fmf
-    tmt_plan: plans/e2e
+    tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-centos]
-    additional_packages:
-      - go-fdo-server-manufacturer
-      - go-fdo-server-rendezvous
-      - go-fdo-server-owner
     targets:
       - epel-9
       - epel-10

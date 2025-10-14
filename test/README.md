@@ -8,6 +8,7 @@
 * docker: https://docs.docker.com/engine/install/
 * docker compose: https://docs.docker.com/compose/install/
 * act: https://github.com/nektos/act
+* tmt: https://docs.fedoraproject.org/en-US/ci/tmt/#_install
 
 ## CI Workflows and jobs
 
@@ -39,10 +40,23 @@ When running the workflow jobs it's important to bind mount the `/tmp` dir:
 ➜ act --container-options "-v /tmp:/tmp" -j test-onboarding
 ```
 
-## Testing the CI jobs locally without `act`:
+## Testing the CI jobs with `tmt`:
 
-It's also possible to run the scripts directly without `act`.
-Any script from `./test/{ci,container}` directories can be executed from the shell:
+The list of available tmt tests can be listed with `tmt test ls`:
+```bash
+➜ tmt test ls
+```
+
+When running the tmt tests it's important to be verbose `-vvv` to see the actual test's output:
+```bash
+/test/fmf/tests/test-onboarding
+➜ tmt -vvv run test --name /test/fmf/tests/test-onboarding
+```
+
+## Testing the CI jobs locally without `act` or `tmt`:
+
+It's also possible to run the scripts directly without `act` or `tmt`.
+Any script from `./test/{ci,container,fmf}` directories can be executed from the shell:
 *  CI tests 
 ```bash
 ➜ ./test/ci/test-onboarding.sh
@@ -51,9 +65,15 @@ Any script from `./test/{ci,container}` directories can be executed from the she
 ```bash
 ➜ ./test/container/test-onboarding.sh
 ```
+* TMT tests
+```bash
+➜ ./test/fmf/tests/test-onboarding.sh
+```
 * Debugging
 ```bash
 ➜ sh -x ./test/ci/test-onboarding.sh
 # or
 ➜ sh -x ./test/container/test-onboarding.sh
+# or
+➜ sh -x ./test/fmf/tests/test-onboarding.sh
 ```

@@ -3,13 +3,9 @@ description: Fast smoke tests + comprehensive FDO protocol testing
 
 discover:
     how: fmf
-    test:
-      - onboarding
-      - resale
-      - rendezvous
-      - fdo-e2e
 
 provision:
+    how: virtual
     memory: 2048MB
     disk: 10GB
 

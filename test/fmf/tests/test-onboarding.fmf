@@ -7,24 +7,9 @@ description: |
     - ServiceInfo module testing
     - Protocol validation
 
-test: ./fdo-e2e.sh
+test: ./test-onboarding.sh
 
 framework: shell
-
-require:
-  - go-fdo-server
-  - go-fdo-server-manufacturer
-  - go-fdo-server-rendezvous
-  - go-fdo-server-owner
-  - go-fdo-client
-  - golang
-  - make
-  - openssl
-  - curl
-  - git
-
-recommend:
-  - tmt
 
 duration: 10m
 
