@@ -145,3 +145,17 @@ jobs:
       - fedora-latest-stable
       - fedora-latest
       - fedora-rawhide
+
+  - job: tests
+    trigger: pull_request
+    identifier: e2e-centos
+    fmf_path: test/fmf
+    tmt_plan: plans/e2e
+    packages: [go-fdo-server-centos]
+    additional_packages:
+      - go-fdo-server-manufacturer
+      - go-fdo-server-rendezvous
+      - go-fdo-server-owner
+    targets:
+      - epel-9
+      - epel-10
