@@ -7,7 +7,7 @@ files_to_sync:
       - ".packit.yaml"
       - "build/package/rpm/go-fdo-server.spec"
       - "build/package/rpm/go-vendor-tools.toml"
-      - "build/package/rpm/go-fdo-server-*-vendor.tar.gz"
+      - "build/package/rpm/go-fdo-server-*-vendor.tar.bz2"
     dest: .
 
 upstream_package_name: go-fdo-server
@@ -39,6 +39,8 @@ packages:
     specfile_path: build/package/rpm/go-fdo-server.spec
 
 actions:
+  fix-spec-file:
+    - bash -c 'sed -i "s/^%global commit .*/%global commit          $(git rev-parse HEAD)/;" build/package/rpm/go-fdo-server.spec'
   post-upstream-clone:
     - |
       bash -c "
@@ -54,10 +56,10 @@ actions:
       "
   # for the propose-downstream CLI command
   pre-sync:
-    - bash -c ". ${HOME}/.gvm/scripts/gvm; make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}"
+    - bash -c ". ${HOME}/.gvm/scripts/gvm; make vendor-tarball"
   # for the srpm and copr builds
   create-archive:
-    - bash -c ". ${HOME}/.gvm/scripts/gvm; make packit-create-archive VERSION=${PACKIT_PROJECT_VERSION}"
+    - bash -c ". ${HOME}/.gvm/scripts/gvm; make packit-create-archive"
 
 jobs:
 

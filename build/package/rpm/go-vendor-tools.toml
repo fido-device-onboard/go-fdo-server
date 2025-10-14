@@ -1,2 +1,5 @@
 [archive]
-compression_type = "gz"
+compression_type = "bz2"
+
+[licensing]
+detector = "askalono"
