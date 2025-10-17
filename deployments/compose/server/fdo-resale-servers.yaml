@@ -10,20 +10,20 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --db=/tmp/go-fdo/new_owner.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - owner
       - new_owner:8045
-      - --owner-key=/tmp/go-fdo/certs/new_owner.key
-      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
-    working_dir: /tmp/go-fdo
+      - --db=${container_working_dir:-/workdir}/new_owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - --owner-key=${container_working_dir:-/workdir}/certs/new_owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+    working_dir: ${container_working_dir:-/workdir}
     networks:
       - fdo
     ports:
       - 8045:8045
     volumes:
-      - /tmp:/tmp:z
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl --silent --output /dev/null --fail http://new_owner:8045/health" ]

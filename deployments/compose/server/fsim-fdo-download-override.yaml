@@ -1,14 +1,14 @@
 services:
   owner:
     command:
-      - --db=/tmp/go-fdo/owner.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - owner
       - owner:8043
-      - --owner-key=/tmp/go-fdo/certs/owner.key
-      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
+      - --db=${container_working_dir:-/workdir}/owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
       - --command-download=file1
-      - --command-download=/tmp/go-fdo/fsim/download/owner/file2
-      - --command-download=/tmp/go-fdo/fsim/download/owner/subdir1/file3
-    working_dir: /tmp/go-fdo/fsim/download/owner
+      - --command-download=${container_working_dir:-/workdir}/fsim/download/owner/file2
+      - --command-download=${container_working_dir:-/workdir}/fsim/download/owner/subdir1/file3
+    working_dir: ${container_working_dir:-/workdir}/fsim/download/owner

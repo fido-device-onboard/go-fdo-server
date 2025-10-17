@@ -3,10 +3,18 @@
 set -euo pipefail
 
 client_compose_file="deployments/compose/client/fdo-client.yaml"
-servers_compose_file="deployments/compose/servers/fdo-onboarding-servers.yaml"
+servers_compose_file="deployments/compose/server/fdo-onboarding-servers.yaml"
 
+# Export base_dir explicitly for Docker Compose
+export base_dir
+
+# Export container_user explicitly for Docker Compose
 container_user="$(id -u):$(id -g)"
 export container_user
+
+# Container working directory (default to /workdir if not set)
+container_working_dir="${container_working_dir:-/workdir}"
+export container_working_dir
 
 get_real_ip() {
   local service_name=$1
@@ -41,7 +49,13 @@ uninstall_client() {
 }
 
 run_go_fdo_client() {
-  docker compose --file "${client_compose_file}" run --rm go-fdo-client "$@"
+  # Translate host paths to container paths in arguments
+  local args=()
+  for arg in "$@"; do
+    # Replace base_dir with container_working_dir in paths
+    args+=("${arg//$base_dir/$container_working_dir}")
+  done
+  docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}"
 }
 
 install_server() {

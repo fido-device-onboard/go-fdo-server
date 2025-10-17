@@ -4,12 +4,12 @@ services:
     hostname: go-fdo-client
     image: go-fdo-client
     build: https://github.com/fido-device-onboard/go-fdo-client.git#main
-    working_dir: /tmp/go-fdo/device-credentials
+    working_dir: ${container_working_dir:-/workdir}/device-credentials
     user: "${container_user}"
     networks:
       - fdo
     volumes:
-      - /tmp:/tmp:z
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     restart: no
 networks:
   fdo:

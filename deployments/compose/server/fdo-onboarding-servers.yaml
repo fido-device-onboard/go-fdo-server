@@ -10,18 +10,18 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-     - --db=/tmp/go-fdo/manufacturer.db
-     - --db-pass='2=,%95QF<uTLLHt'
-     - --debug
      - manufacturing
      - manufacturer:8038
-     - --manufacturing-key=/tmp/go-fdo/certs/manufacturer.key
-     - --owner-cert=/tmp/go-fdo/certs/owner.crt
-     - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
-     - --device-ca-key=/tmp/go-fdo/certs/device_ca.key
-    working_dir: /tmp/go-fdo
+     - --db=${container_working_dir:-/workdir}/manufacturer.db
+     - --db-pass='2=,%95QF<uTLLHt'
+     - --debug
+     - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
+     - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
+     - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+     - --device-ca-key=${container_working_dir:-/workdir}/certs/device_ca.key
+    working_dir: ${container_working_dir:-/workdir}
     volumes:
-      - /tmp:/tmp:z
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     networks:
       - fdo
     ports:
@@ -43,14 +43,14 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --db=/tmp/go-fdo/rendezvous.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - rendezvous
       - rendezvous:8041
-    working_dir: /tmp/go-fdo
+      - --db=${container_working_dir:-/workdir}/rendezvous.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+    working_dir: ${container_working_dir:-/workdir}
     volumes:
-      - /tmp:/tmp:z
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     networks:
       - fdo
     ports:
@@ -72,16 +72,16 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --db=/tmp/go-fdo/owner.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - owner
       - owner:8043
-      - --owner-key=/tmp/go-fdo/certs/owner.key
-      - --device-ca-cert=/tmp/go-fdo/certs/device_ca.crt
-    working_dir: /tmp/go-fdo
+      - --db=${container_working_dir:-/workdir}/owner.db
+      - --db-pass='2=,%95QF<uTLLHt'
+      - --debug
+      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+    working_dir: ${container_working_dir:-/workdir}
     volumes:
-      - /tmp:/tmp:z
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     networks:
       - fdo
     ports:

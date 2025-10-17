@@ -7,7 +7,7 @@ trap stop_services EXIT
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
 
-base_dir="/tmp/go-fdo"
+base_dir="${PWD}/test/workdir"
 bin_dir="${base_dir}/bin"
 pid_dir="${base_dir}/run"
 logs_dir="${base_dir}/logs"
