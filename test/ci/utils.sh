@@ -104,9 +104,12 @@ set_hostname() {
   ip=$2
   if grep -q " ${dns}" /etc/hosts; then
     echo "${ip} ${dns}"
-    sudo sed -i "s/.* ${dns}/$ip $dns/" /etc/hosts
+    tmp_hosts=$(mktemp)
+    sed "s/.* ${dns}/$ip $dns/" /etc/hosts >"${tmp_hosts}"
+    sudo cp "${tmp_hosts}" /etc/hosts
+    rm -f "${tmp_hosts}"
   else
-    sudo echo "${ip} ${dns}" | sudo tee -a /etc/hosts;
+    echo "${ip} ${dns}" | sudo tee -a /etc/hosts
   fi
 }
 
@@ -291,7 +294,7 @@ uninstall_client() {
 
 install_server() {
   mkdir -p "${bin_dir}"
-  make && install -D -m 755 -t ${bin_dir} go-fdo-server  && rm -f go-fdo-server
+  make && install -m 755 go-fdo-server ${bin_dir} && rm -f go-fdo-server
 }
 
 uninstall_server() {
