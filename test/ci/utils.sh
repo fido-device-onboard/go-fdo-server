@@ -1,11 +1,11 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
 trap stop_services EXIT
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/cert-utils.sh"
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../../scripts/fdo-utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
 
 base_dir="/tmp/go-fdo"
 bin_dir="${base_dir}/bin"
@@ -85,7 +85,10 @@ declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${log
 find_in_log_or_fail() {
   local log=$1
   local pattern=$2
-  grep -q "${pattern}" "${log}" || { echo "❌ '${pattern}' not found in '${log}' "; return 1; }
+  grep -q "${pattern}" "${log}" || {
+    echo "❌ '${pattern}' not found in '${log}' "
+    return 1
+  }
 }
 
 create_directories() {
@@ -99,7 +102,7 @@ set_hostname() {
   local ip
   dns=$1
   ip=$2
-  if grep -q " ${dns}" /etc/hosts ; then
+  if grep -q " ${dns}" /etc/hosts; then
     echo "${ip} ${dns}"
     sudo sed -i "s/.* ${dns}/$ip $dns/" /etc/hosts
   else
@@ -115,13 +118,13 @@ unset_hostname() {
   echo "${ip} ${dns}"
   if grep -q " ${dns}" /etc/hosts; then
     tmp_hosts=$(mktemp)
-    sed "/.* ${dns}/d" /etc/hosts > "${tmp_hosts}"
+    sed "/.* ${dns}/d" /etc/hosts >"${tmp_hosts}"
     sudo cp "${tmp_hosts}" /etc/hosts
     rm -f "${tmp_hosts}"
   fi
 }
 
-set_hostnames () {
+set_hostnames() {
   echo "⭐ Adding hostnames to '/etc/hosts'"
   for service in "${services[@]}"; do
     service_ip=${service}_ip
@@ -130,7 +133,7 @@ set_hostnames () {
   done
 }
 
-unset_hostnames () {
+unset_hostnames() {
   echo "⭐ Removing hostnames from '/etc/hosts'"
   for service in "${services[@]}"; do
     local service_ip=${service}_ip
@@ -146,34 +149,37 @@ get_real_ip() {
 }
 
 wait_for_url() {
-    local status
-    local retry=0
-    local -r interval=2
-    local -r max_retries=5
-    local url=$1
-    echo -n "❓ Waiting for ${url} to be healthy "
-    while true; do
-        [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
-        status=$?
-        ((retry+=1))
-        if [ $retry -gt $max_retries ]; then
-            echo " ❌"
-            return $status
-        fi
-        echo -n "." 1>&2
-        sleep "$interval"
-    done
-    echo " 🚀"
+  local status
+  local retry=0
+  local -r interval=2
+  local -r max_retries=5
+  local url=$1
+  echo -n "❓ Waiting for ${url} to be healthy "
+  while true; do
+    [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
+    status=$?
+    ((retry += 1))
+    if [ $retry -gt $max_retries ]; then
+      echo " ❌"
+      return $status
+    fi
+    echo -n "." 1>&2
+    sleep "$interval"
+  done
+  echo " 🚀"
 }
 
-wait_for_service_ready () {
+wait_for_service_ready() {
   local service=$1
   local service_health_url="${service}_health_url"
-  [[ -v "${service_health_url}" ]] || { echo "❌ service ${service} has no health URL"; return 1; }
+  [[ -v "${service_health_url}" ]] || {
+    echo "❌ service ${service} has no health URL"
+    return 1
+  }
   wait_for_url "${!service_health_url}"
 }
 
-wait_for_services_ready () {
+wait_for_services_ready() {
   for service in "${services[@]}"; do
     # only wait for those services that define a health URL
     local service_health_url="${service}_health_url"
@@ -185,7 +191,7 @@ run_go_fdo_client() {
   mkdir -p ${credentials_dir}
   cd ${credentials_dir}
   go-fdo-client "$@"
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 run_device_initialization() {
@@ -193,22 +199,22 @@ run_device_initialization() {
   run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256
 }
 
-get_device_guid () {
+get_device_guid() {
   run_go_fdo_client --blob "${device_credentials}" print | grep GUID | awk '{print $2}'
 }
 
-get_device_onboard_log () {
+get_device_onboard_log() {
   echo "${logs_dir}/onboarding-device-$(get_device_guid).log"
 }
 
-run_fido_device_onboard () {
+run_fido_device_onboard() {
   log="$(get_device_onboard_log)"
   >"${log}"
   run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 "$@" | tee "${log}"
   find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
 
-run_go_fdo_server () {
+run_go_fdo_server() {
   local role=$1
   local address_port=$2
   local name=$3
@@ -217,8 +223,8 @@ run_go_fdo_server () {
   shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db "${base_dir}/${name}.db" --db-pass '2=,%95QF<uTLLHt' --debug "${@}" &> "${log}" &
-  echo -n $! > "${pid_file}"
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db "${base_dir}/${name}.db" --db-pass '2=,%95QF<uTLLHt' --debug "${@}" &>"${log}" &
+  echo -n $! >"${pid_file}"
 }
 
 start_service_manufacturer() {
@@ -239,7 +245,7 @@ start_service_owner() {
     --device-ca-cert="${device_ca_crt}"
 }
 
-start_service () {
+start_service() {
   local service=$1
   echo -n "  ⚙ Starting service ${service} "
   local start_service="start_service_${service}"
@@ -247,7 +253,7 @@ start_service () {
   echo " 🚀"
 }
 
-start_services () {
+start_services() {
   set_hostnames
   echo "⭐ Starting services"
   for service in "${services[@]}"; do
@@ -255,7 +261,7 @@ start_services () {
   done
 }
 
-stop_service () {
+stop_service() {
   local service=$1
   local service_pid_file="${service}_pid_file"
   echo -n "  ⚙ Stopping service ${service} "
@@ -267,7 +273,7 @@ stop_service () {
   echo " 🛑"
 }
 
-stop_services () {
+stop_services() {
   echo "⭐ Stopping services"
   for service in "${services[@]}"; do
     stop_service ${service}
@@ -383,7 +389,10 @@ verify_equal_files() {
   local file_2=$2
 
   for file in "${file_1}" "${file_2}"; do
-    [ -f "${file}" ] || { echo "❌ File not found: ${file}"; return 1; }
+    [ -f "${file}" ] || {
+      echo "❌ File not found: ${file}"
+      return 1
+    }
   done
 
   [ "${file_1}" != "${file_2}" ] || return 0

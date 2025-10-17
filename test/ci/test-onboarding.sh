@@ -1,10 +1,10 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
-run_test () {
+run_test() {
 
   echo "⭐ Creating directories"
   create_directories
@@ -40,7 +40,7 @@ run_test () {
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
   echo "⭐ Triggering TO0 on Owner server"
-  run_to0 ${owner_url} "${guid}" > /dev/null
+  run_to0 ${owner_url} "${guid}" >/dev/null
 
   echo "⭐ Running FIDO Device Onboard "
   run_fido_device_onboard --debug

@@ -1,8 +1,8 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 new_owner_service_name=new_owner
 new_owner_dns=new_owner
@@ -27,7 +27,7 @@ new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
 
-start_service_new_owner () {
+start_service_new_owner() {
   run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
     --owner-key="${new_owner_key}" \
     --device-ca-cert="${device_ca_crt}"
@@ -77,7 +77,7 @@ run_test() {
   set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}"
 
   echo "⭐ Triggering TO0 on the New Owner"
-  run_to0 "${new_owner_url}" "${guid}" > /dev/null
+  run_to0 "${new_owner_url}" "${guid}" >/dev/null
 
   echo "⭐ Running FIDO Device Onboard"
   run_fido_device_onboard --debug

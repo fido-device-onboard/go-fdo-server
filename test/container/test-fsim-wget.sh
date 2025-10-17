@@ -1,9 +1,9 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/../ci/test-fsim-wget.sh"
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../ci/test-fsim-wget.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 client_compose_file="deployments/compose/client/fdo-client.yaml"
 servers_compose_file="deployments/compose/server/fsim-fdo-wget-servers.yaml"

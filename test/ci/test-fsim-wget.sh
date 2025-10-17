@@ -1,8 +1,8 @@
-#!/bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 # FSIM fdo.wget specific configuration
 fsim_wget_dir="${base_dir}/fsim/wget"
@@ -32,13 +32,12 @@ wget_device1_download_file="${wget_device1_download_dir}/${wget_file_name}"
 wget_device2_download_file="${wget_device2_download_dir}/${wget_file_name}"
 declare -a wget_download_dirs=("${wget_device1_download_dir}" "${wget_device2_download_dir}")
 
-
 start_service_wget_httpd() {
   # Start Python HTTP server in background
   cd "${wget_httpd_dir}"
-  nohup python3 -m http.server ${wget_httpd_port} > "${wget_httpd_log_file}" 2>&1 &
-  echo -n $! > "${wget_httpd_pid_file}"
-  cd - > /dev/null
+  nohup python3 -m http.server ${wget_httpd_port} >"${wget_httpd_log_file}" 2>&1 &
+  echo -n $! >"${wget_httpd_pid_file}"
+  cd - >/dev/null
 }
 
 # Modified run_services function that adds wget support for owner service
@@ -49,7 +48,7 @@ start_service_owner() {
     --command-wget "${wget_source_url}"
 }
 
-run_test () {
+run_test() {
   # Add the wget_httpd service defined above
   services+=("${wget_httpd_service_name}")
 
@@ -91,7 +90,7 @@ run_test () {
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
   echo "⭐ Triggering TO0 on Owner server for Device 1 ${guid}"
-  run_to0 ${owner_url} "${guid}" > /dev/null
+  run_to0 ${owner_url} "${guid}" >/dev/null
 
   echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
@@ -111,13 +110,16 @@ run_test () {
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   echo "⭐ Triggering TO0 on Owner server for Device 2 ${guid}"
-  run_to0 ${owner_url} "${guid}" > /dev/null
+  run_to0 ${owner_url} "${guid}" >/dev/null
 
   echo "⭐ Stop HTTP Server to Simulate Loss of WGET Service"
   stop_service "${wget_httpd_service_name}"
 
   echo "⭐ Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" || { echo "❌ Expected Device 2 onboard to fail!"; return 1; }
+  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" || {
+    echo "❌ Expected Device 2 onboard to fail!"
+    return 1
+  }
 
   # verify that the wget FSIM error is logged
   find_in_log_or_fail "$(get_device_onboard_log)" "error handling device service info .*fdo\.wget:error"

@@ -1,8 +1,8 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 # FSIM fdo.upload specific configuration
 fsim_upload_dir=${base_dir}/fsim/upload
@@ -32,7 +32,7 @@ generate_upload_files() {
   for device_file in "${upload_files[@]}"; do
     prepare_payload "${device_file}"
   done
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 verify_uploads() {
@@ -41,11 +41,11 @@ verify_uploads() {
     owner_file="${owner_uploads_dir}/$(basename "${device_file}")"
     verify_equal_files "${owner_file}" "${device_file}"
   done
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 # Public entrypoint used by CI
-run_test () {
+run_test() {
 
   echo "⭐ Creating directories"
   # Add uploads directories to be created
@@ -83,7 +83,7 @@ run_test () {
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
   echo "⭐ Triggering TO0 on Owner server"
-  run_to0 ${owner_url} "${guid}" > /dev/null
+  run_to0 ${owner_url} "${guid}" >/dev/null
 
   echo "⭐ Prepare the upload payloads on client side: ${upload_files[*]}"
   generate_upload_files

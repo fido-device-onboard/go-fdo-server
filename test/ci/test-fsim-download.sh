@@ -1,8 +1,8 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 # FSIM fdo.download specific configuration
 fsim_download_dir="${base_dir}/fsim/download"
@@ -24,7 +24,7 @@ start_service_owner() {
     --owner-key="${owner_key}" \
     --device-ca-cert="${device_ca_crt}" \
     "${download_commands[@]}"
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 generate_download_files() {
@@ -32,7 +32,7 @@ generate_download_files() {
   for owner_file in "${download_files[@]}"; do
     prepare_payload "${owner_file}"
   done
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 verify_downloads() {
@@ -41,11 +41,11 @@ verify_downloads() {
     device_file="${device_download_dir}/$(basename "${owner_file}")"
     verify_equal_files "${device_file}" "${owner_file}"
   done
-  cd - > /dev/null
+  cd - >/dev/null
 }
 
 # Public entrypoint used by CI
-run_test () {
+run_test() {
 
   echo "⭐ Creating directories"
   directories+=("$owner_download_dir" "$device_download_dir")
@@ -82,7 +82,7 @@ run_test () {
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
   echo "⭐ Triggering TO0 on Owner server"
-  run_to0 ${owner_url} "${guid}" > /dev/null
+  run_to0 ${owner_url} "${guid}" >/dev/null
 
   echo "⭐ Generate the download payloads on owner side: ${download_files[*]}"
   generate_download_files

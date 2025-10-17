@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 
 set -euo pipefail
 
@@ -42,7 +42,7 @@ run_go_fdo_client() {
   docker compose --file "${client_compose_file}" run --rm go-fdo-client "$@"
 }
 
-install_server () {
+install_server() {
   docker compose --file "${servers_compose_file}" build -q
 }
 
@@ -50,22 +50,22 @@ uninstall_server() {
   docker compose --file "${servers_compose_file}" down
 }
 
-start_service () {
+start_service() {
   local service_name=$1
   docker compose --file "${servers_compose_file}" up -d "${service_name}"
 }
 
-start_services () {
+start_services() {
   docker compose --file "${servers_compose_file}" up -d
   set_hostnames
 }
 
-stop_service () {
+stop_service() {
   local service_name=$1
   docker compose --file "${servers_compose_file}" stop "${service_name}"
 }
 
-stop_services () {
+stop_services() {
   docker compose --file "${servers_compose_file}" stop
 }
 
