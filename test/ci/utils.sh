@@ -415,6 +415,6 @@ cleanup() {
   unset_hostnames
   uninstall_server
   uninstall_client
-  rm -rf "${base_dir}"
+  rm -rf "${base_dir:?}"/*
   echo "⭐ Done!"
 }
