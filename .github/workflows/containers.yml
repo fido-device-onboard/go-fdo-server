@@ -38,6 +38,36 @@ jobs:
           source test/container/test-onboarding.sh
           cleanup
 
+  test-container-ov-verification:
+    name: Test Ownership Voucher verification
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test Ownership Voucher verification
+        run: |
+          source test/container/test-ov-verification.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs after failure
+        if: failure()
+        run: |
+          source test/container/test-ov-verification.sh
+          get_server_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/container/test-ov-verification.sh
+          cleanup
+
   test-container-resale:
     name: Test FIDO resale protocol
     runs-on: ubuntu-latest

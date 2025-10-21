@@ -207,6 +207,9 @@ func serveOwner(db *sqlite.DB, useTLS bool) error {
 		},
 		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return reuseCred, nil },
+		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
+			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
+		},
 	}
 
 	handler := &transport.Handler{

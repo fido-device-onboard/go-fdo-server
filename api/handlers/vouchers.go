@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
@@ -89,6 +90,93 @@ func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// VerifyVoucherOwnership verifies the ownership voucher belongs to this owner.
+// It checks that the voucher's owner key matches one of the server's configured keys.
+func VerifyVoucherOwnership(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) error {
+	if len(ownerPKeys) == 0 {
+		return fmt.Errorf("ownerPKeys must contain at least one owner public key")
+	}
+
+	expectedPubKey, err := ov.OwnerPublicKey()
+	if err != nil {
+		return fmt.Errorf("unable to parse owner public key from voucher: %w", err)
+	}
+
+	// Cast is needed to call Equal()
+	// See: https://pkg.go.dev/crypto#PublicKey
+	if !slices.ContainsFunc(ownerPKeys, expectedPubKey.(interface{ Equal(crypto.PublicKey) bool }).Equal) {
+		return fmt.Errorf("voucher owner key does not match any of the server's configured keys")
+	}
+
+	return nil
+}
+
+// VerifyOwnershipVoucher performs header field validation and cryptographic verification.
+
+// Note: The following validations can be performed by the device during TO2, not by owner-server,
+// so are not included in this verification:
+//   - HMAC verification (ov.VerifyHeader): Owner server does not have the device HMAC secret
+//   - Manufacturer key hash verification (ov.VerifyManufacturerKey): Requires trusted manufacturer
+//     key hashes to be configured (owner server has no source for these hashes)
+func VerifyOwnershipVoucher(ov *fdo.Voucher) error {
+	// TODO: Investigate whether protocol version should be verified for all messages received by the server
+	// and whether FDOProtocolVersion const should be moved to a common package (e.g., api package)
+	const FDOProtocolVersion uint16 = 101 // FDO spec v1.1
+
+	// Header Field Validation
+	if ov.Version != FDOProtocolVersion {
+		return fmt.Errorf("unsupported protocol version: %d (expected %d)", ov.Version, FDOProtocolVersion)
+	}
+	if ov.Version != ov.Header.Val.Version {
+		return fmt.Errorf("protocol version mismatch: voucher version=%d, header version=%d",
+			ov.Version, ov.Header.Val.Version)
+	}
+	var zeroGUID protocol.GUID
+	if ov.Header.Val.GUID == zeroGUID {
+		return fmt.Errorf("invalid voucher: GUID is zero")
+	}
+	if ov.Header.Val.DeviceInfo == "" {
+		return fmt.Errorf("invalid voucher: DeviceInfo is empty")
+	}
+	if ov.Header.Val.ManufacturerKey.Type == 0 {
+		return fmt.Errorf("invalid voucher: ManufacturerKey is missing or invalid")
+	}
+	// even for rv bypass there needs to be some instruction, not empty array
+	if len(ov.Header.Val.RvInfo) == 0 {
+		return fmt.Errorf("invalid voucher: RvInfo is empty")
+	}
+
+	// Cryptographic Integrity Verification
+	if err := ov.VerifyEntries(); err != nil {
+		return fmt.Errorf("signature chain (manufacturer -> owner transfers) verification failed: %w", err)
+	}
+	if err := ov.VerifyCertChainHash(); err != nil {
+		return fmt.Errorf("device certificate chain hash verification failed: %w", err)
+	}
+	if err := ov.VerifyDeviceCertChain(nil); err != nil {
+		return fmt.Errorf("device certificate chain verification failed: %w", err)
+	}
+	if err := ov.VerifyManufacturerCertChain(nil); err != nil {
+		return fmt.Errorf("manufacturer certificate chain verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// VerifyVoucher performs comprehensive verification of an ownership voucher
+// as per FDO spec section 3.4.6. This combines both ownership and integrity checks.
+func VerifyVoucher(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) error {
+	if err := VerifyVoucherOwnership(ov, ownerPKeys); err != nil {
+		return err
+	}
+
+	if err := VerifyOwnershipVoucher(ov); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -110,61 +198,24 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 				return
 			}
 
+			// Ov Verification
+			if err := VerifyVoucher(&ov, ownerPKeys); err != nil {
+				slog.Error("Ownership voucher verification failed", "guid", ov.Header.Val.GUID[:], "err", err)
+				http.Error(w, "Invalid ownership voucher", http.StatusBadRequest)
+				return
+			}
+
+			// Check for duplicate vouchers in database
 			if dbOv, err := db.FetchVoucher(map[string]interface{}{"guid": ov.Header.Val.GUID[:]}); err == nil {
 				if bytes.Equal(block.Bytes, dbOv.CBOR) {
 					slog.Debug("Voucher already exists", "guid", ov.Header.Val.GUID[:])
 					continue
 				}
 				slog.Debug("Voucher guid already exists. not overwriting it", "guid", ov.Header.Val.GUID[:])
+				continue
 			}
 
-			// Check that voucher owner key matches
-			expectedPubKey, err := ov.OwnerPublicKey()
-			if err != nil {
-				slog.Debug("Unable to parse owner public key of voucher", "err", err)
-				http.Error(w, "Invalid voucher", http.StatusBadRequest)
-				return
-			}
-			expectedKeyType := ov.Header.Val.ManufacturerKey.Type
-
-			// TODO: there's only one owner key when the server starts
-			// we don't need this as we're only using one key type for now
-			//
-			// var possibleOwnerKeys []db.OwnerKey
-			// for _, ownerKey := range ownerPKeys {
-			// 	if ownerKey.Type == int(expectedKeyType) {
-			// 		possibleOwnerKeys = append(possibleOwnerKeys, ownerKey)
-			// 	}
-			// }
-		CheckOwnerKey:
-			switch possibilities := len(ownerPKeys); possibilities {
-			case 0:
-				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
-				return
-
-			case 1, 2: // Can be two in the case of RSA 2048+3072 support
-				if possibilities == 2 && expectedKeyType != protocol.RsaPkcsKeyType && expectedKeyType != protocol.RsaPssKeyType {
-					slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
-					http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
-					return
-				}
-
-				for _, possibleOwnerKey := range ownerPKeys {
-					if possibleOwnerKey.(interface{ Equal(crypto.PublicKey) bool }).Equal(expectedPubKey) {
-						break CheckOwnerKey
-					}
-				}
-
-				http.Error(w, "owner key in database does not match the owner of the voucher", http.StatusBadRequest)
-				return
-
-			default:
-				slog.Error("database contains too many owner keys", "type", ov.Header.Val.ManufacturerKey.Type)
-				http.Error(w, "database contains too many owner keys of a type", http.StatusInternalServerError)
-				return
-			}
-
-			// TODO: https://github.com/fido-device-onboard/go-fdo-server/issues/18
+			// Insert voucher into database
 			slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
 
 			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes, DeviceInfo: ov.Header.Val.DeviceInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
