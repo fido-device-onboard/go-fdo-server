@@ -325,6 +325,9 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 				if !yield("fdo.upload", &fsim.UploadRequest{
 					Dir:  uploadDir,
 					Name: name,
+					CreateTemp: func() (*os.File, error) {
+						return os.CreateTemp(uploadDir, ".fdo-upload_*")
+					},
 				}) {
 					return
 				}
@@ -362,7 +365,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 func init() {
 	rootCmd.AddCommand(ownerCmd)
 
-	//serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	// serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
 	ownerCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
 	ownerCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
 	ownerCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
@@ -372,5 +375,4 @@ func init() {
 	ownerCmd.Flags().StringVar(&ownerDeviceCACert, "device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().StringVar(&ownerPrivateKey, "owner-key", "", "Owner private key path")
 	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-
 }
