@@ -226,8 +226,8 @@ run_go_fdo_server() {
   shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db "${base_dir}/${name}.db" --db-pass '2=,%95QF<uTLLHt' --debug "${@}" &>"${log}" &
-  echo -n $! >"${pid_file}"
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --debug "${@}" &> "${log}" &
+  echo -n $! > "${pid_file}"
 }
 
 start_service_manufacturer() {

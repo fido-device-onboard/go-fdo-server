@@ -6,7 +6,7 @@ VERSION = git$(DATE).$(COMMIT)
 # Build the Go project
 .PHONY: build
 build: tidy fmt vet
-	CGO_ENABLED=0 go build
+	CGO_ENABLED=1 go build
 
 .PHONY: tidy
 tidy:
