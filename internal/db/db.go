@@ -18,15 +18,13 @@ import (
 
 var db *gorm.DB
 
-// FetchVoucher doesn't take into account mfg_voucher where go-fdo stores vouchers that have not been extended yet
-// we don't need it right now, but for use cases where manufacturers just initializes empty devices (tpm) this is going to be needed.
-//
 // FetchVoucher returns a single voucher filtered by provided fields.
 // Supported filters (keys):
 // - "guid" (expects []byte)
 // - "device_info" (expects string)
 // If more than one voucher matches, an error is returned.
-// Note: This does not query mfg_voucher (unextended vouchers).
+// Note: This only queries owner_vouchers (extended vouchers). For manufacturer
+// vouchers (unextended), use FetchMfgVoucher.
 func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
 	if len(filters) == 0 {
 		return nil, fmt.Errorf("no filters provided")
@@ -42,6 +40,44 @@ func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
 		return nil, fmt.Errorf("multiple vouchers matched filters")
 	}
 	return &list[0], nil
+}
+
+// FetchMfgVoucher returns a single manufacturer voucher filtered by provided fields.
+// Supported filters (keys):
+// - "guid" (expects []byte)
+// - "device_info" (expects string)
+// If more than one voucher matches, an error is returned.
+// Manufacturer vouchers are created during device initialization and have not been
+// extended to the owner yet.
+func FetchMfgVoucher(filters map[string]interface{}) (*MfgVoucher, error) {
+	if len(filters) == 0 {
+		return nil, fmt.Errorf("no filters provided")
+	}
+
+	query := db.Model(&MfgVoucher{})
+
+	// Apply filters
+	if v, ok := filters["guid"]; ok {
+		b, ok := v.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for guid filter; want []byte")
+		}
+		query = query.Where("guid = ?", b)
+	}
+	if v, ok := filters["device_info"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for device_info filter; want string")
+		}
+		query = query.Where("device_info = ?", s)
+	}
+
+	var mfgVoucher MfgVoucher
+	if err := query.First(&mfgVoucher).Error; err != nil {
+		return nil, err
+	}
+
+	return &mfgVoucher, nil
 }
 
 // QueryVouchers returns owner vouchers matching optional filters.
