@@ -29,7 +29,10 @@ BuildRequires:  systemd-rpm-macros
 %{?sysusers_requires_compat}
 
 %description
-%{summary}
+This package provides a server-side implementation of the FIDO Device Onboard
+(FDO) specification, written in Go. FDO is an open standard for the late
+binding of device credentials, allowing for automated and secure onboarding of
+devices when they are first powered on in their final location.
 
 %prep
 %goprep -A
@@ -85,7 +88,10 @@ Requires: openssl
 Summary: A Go implementation of the FDO manufacturer server
 BuildArch: noarch
 %description manufacturer
-%{summary}
+This package provides the manufacturer server component of the FDO stack.
+The manufacturer server is responsible for creating ownership vouchers and
+preparing devices for the onboarding process during the manufacturing phase.
+
 %files manufacturer
 # Systemd unit
 %{_unitdir}/go-fdo-server-manufacturer.service
@@ -110,7 +116,10 @@ Requires: group(go-fdo-server)
 Summary: A Go implementation of the FDO rendezvous server
 BuildArch: noarch
 %description rendezvous
-%{summary}
+This package provides the rendezvous server component of the FDO stack.
+The rendezvous server acts as a trusted intermediary, redirecting devices
+to their designated owner's onboarding service based on their ownership voucher.
+
 %files rendezvous
 # Systemd unit
 %{_unitdir}/go-fdo-server-rendezvous.service
@@ -135,7 +144,11 @@ Requires: group(go-fdo-server)
 Summary: A Go implementation of the FDO owner server
 BuildArch: noarch
 %description owner
-%{summary}
+This package provides the owner server component of the FDO stack. The owner
+server is the final destination for a device during onboarding. It verifies the
+device's authenticity, establishes ownership, and provisions it with the
+necessary credentials and configuration for operation.
+
 %files owner
 # Systemd unit
 %{_unitdir}/go-fdo-server-owner.service
