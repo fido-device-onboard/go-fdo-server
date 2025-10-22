@@ -12,9 +12,10 @@ RUN install -D -m 755 go-fdo-server /go/bin/
 RUN <<EOF
   set -xeuo pipefail
   latest_version_url=`curl --fail --output /dev/null --silent --write-out '%{redirect_url}' https://github.com/stunnel/static-curl/releases/latest`
-  latest_version=${latest_version_url/*\//}
+  latest_version_path=${latest_version_url/*\//}
+  latest_version=${latest_version_path%-ech}
   arch=`uname -m`
-  curl -sLO https://github.com/stunnel/static-curl/releases/download/${latest_version}/curl-linux-${arch}-glibc-${latest_version}.tar.xz
+  curl -sLO https://github.com/stunnel/static-curl/releases/download/${latest_version_path}/curl-linux-${arch}-glibc-${latest_version}.tar.xz
   tar -xf curl-linux-${arch}-glibc-${latest_version}.tar.xz -C /go/bin curl
 EOF
 
