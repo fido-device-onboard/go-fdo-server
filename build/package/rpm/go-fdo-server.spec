@@ -45,12 +45,11 @@ BuildRequires:  systemd-rpm-macros
 
 %install
 %go_vendor_license_install -c %{S:2}
-install -m 0755 -vd                     %{buildroot}%{_bindir}
+install -m 0755 -vd  %{buildroot}%{_bindir}
+install -m 0755 -vd  %{buildroot}%{_sysconfdir}/%{name}
 install -m 0755 -vp -s %{gobuilddir}/bin/* %{buildroot}%{_bindir}/
 # Sysusers
 install -m 0644 -vp -D -t %{buildroot}%{_sysusersdir}/ configs/sysusers.d/*
-# Tmpfiles
-install -m 0644 -vp -D -t %{buildroot}%{_tmpfilesdir}/ configs/tmpfiles.d/%{name}.conf
 # Sysconfig files
 install -m 0644 -vp -D -t %{buildroot}%{_sysconfdir}/sysconfig/ configs/sysconfig/*
 # Systemd units
@@ -63,14 +62,13 @@ install -m 0755 -vp -D -t %{buildroot}%{_datadir}/%{name} scripts/*
 %if %{with check}
 %gotest ./...
 %endif
-
 %files -f %{go_vendor_license_filelist}
 %license vendor/modules.txt
 %doc DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
 %{_bindir}/go-fdo-server
+%config(noreplace) %attr(770, root, go-fdo-server) %{_sysconfdir}/%{name}
 %{_sysusersdir}/%{name}.conf
 %dir %{_datadir}/%{name}
-%{_tmpfilesdir}/%{name}.conf
 %{_datadir}/%{name}/fdo-utils.sh
 %{_datadir}/%{name}/cert-utils.sh
 %{_datadir}/%{name}/generate-manufacturer-certs.sh
@@ -79,10 +77,6 @@ install -m 0755 -vp -D -t %{buildroot}%{_datadir}/%{name} scripts/*
 
 %pre
 %sysusers_create_compat %{_sysusersdir}/go-fdo-server.conf
-
-%post
-%tmpfiles_create %{_tmpfilesdir}/go-fdo-server.conf
-
 
 %package manufacturer
 Requires: go-fdo-server
