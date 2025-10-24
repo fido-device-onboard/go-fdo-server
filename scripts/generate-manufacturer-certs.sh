@@ -2,6 +2,12 @@
 
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/cert-utils.sh"
 
+set -x
+echo `whoami`
+ls -ld /etc || echo "no /etc"
+ls -ld /etc/go-fdo-server || echo "no /etc/go-fdo-server"
+ls -l /etc/go-fdo-server || echo "can not ls"
+
 ENV_FILE="/etc/sysconfig/go-fdo-server-manufacturer"
 [ ! -f "${ENV_FILE}" ] || source "${ENV_FILE}"
 
