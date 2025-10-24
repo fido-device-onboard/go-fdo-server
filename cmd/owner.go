@@ -32,7 +32,6 @@ import (
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/fido-device-onboard/go-fdo/serviceinfo"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +59,12 @@ var ownerCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		state, err := getState()
+		dbType, dsn, err := getDBConfig()
+		if err != nil {
+			return err
+		}
+
+		state, err := db.InitDb(dbType, dsn)
 		if err != nil {
 			return err
 		}
@@ -79,11 +83,6 @@ var ownerCmd = &cobra.Command{
 		// 	return fmt.Errorf("invalid external port: %w", err)
 		// }
 		// port := uint16(portNum)
-
-		err = db.InitDb(state)
-		if err != nil {
-			return err
-		}
 
 		return serveOwner(state, insecureTLS)
 	},
@@ -156,13 +155,13 @@ func (s *OwnerServer) Start() error {
 }
 
 type OwnerServerState struct {
-	DB           *sqlite.DB
+	DB           *db.State
 	ownerKey     crypto.Signer
 	ownerKeyType protocol.KeyType
 	chain        []*x509.Certificate
 }
 
-func getOwnerServerState(db *sqlite.DB) (*OwnerServerState, error) {
+func getOwnerServerState(dbState *db.State) (*OwnerServerState, error) {
 	ownerKey, err := parsePrivateKey(ownerPrivateKey)
 	if err != nil {
 		return nil, err
@@ -185,15 +184,15 @@ func getOwnerServerState(db *sqlite.DB) (*OwnerServerState, error) {
 	}
 
 	return &OwnerServerState{
-		DB:           db,
+		DB:           dbState,
 		chain:        []*x509.Certificate{parsedDeviceCACert},
 		ownerKey:     ownerKey,
 		ownerKeyType: ownerKeyType,
 	}, nil
 }
 
-func serveOwner(db *sqlite.DB, useTLS bool) error {
-	state, err := getOwnerServerState(db)
+func serveOwner(dbState *db.State, useTLS bool) error {
+	state, err := getOwnerServerState(dbState)
 	if err != nil {
 		return err
 	}
@@ -227,7 +226,7 @@ func serveOwner(db *sqlite.DB, useTLS bool) error {
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
-	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
+	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewOwnerServer(address, externalAddress, httpHandler, useTLS)
@@ -241,7 +240,7 @@ func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.Ke
 }
 
 type moduleStateMachines struct {
-	DB *sqlite.DB
+	DB *db.State
 	// current module state machine state for all sessions (indexed by token)
 	states map[string]*moduleStateMachineState
 }

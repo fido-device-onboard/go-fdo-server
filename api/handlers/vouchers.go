@@ -67,6 +67,8 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetVoucherByGUIDHandler returns a PEM-encoded voucher by path GUID.
+// It first checks the owner_vouchers table (extended vouchers), and if not found,
+// checks the mfg_vouchers table (unextended vouchers from device initialization).
 func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
 	guidHex := r.PathValue("guid")
 	if !utils.IsValidGUID(guidHex) {
@@ -78,13 +80,26 @@ func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid GUID format", http.StatusBadRequest)
 		return
 	}
+
+	var voucherCBOR []byte
+
+	// First try to fetch from owner_vouchers (extended vouchers)
 	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guid})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err == nil {
+		voucherCBOR = voucher.CBOR
+	} else {
+		// If not found in owner_vouchers, try mfg_vouchers (unextended vouchers)
+		mfgVoucher, mfgErr := db.FetchMfgVoucher(map[string]interface{}{"guid": guid})
+		if mfgErr != nil {
+			// Neither table has the voucher
+			http.Error(w, "Voucher not found", http.StatusNotFound)
+			return
+		}
+		voucherCBOR = mfgVoucher.CBOR
 	}
+
 	w.Header().Set("Content-Type", "application/x-pem-file")
-	if err := pem.Encode(w, &pem.Block{Type: "OWNERSHIP VOUCHER", Bytes: voucher.CBOR}); err != nil {
+	if err := pem.Encode(w, &pem.Block{Type: "OWNERSHIP VOUCHER", Bytes: voucherCBOR}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

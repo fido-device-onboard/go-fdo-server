@@ -12,18 +12,16 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 	"hermannm.dev/devlog"
 )
 
 var (
-	dbPath         string
-	dbPass         string
+	dbType         string
+	dbDSN          string
 	debug          bool
 	logLevel       slog.LevelVar
 	insecureTLS    bool
@@ -64,52 +62,26 @@ func init() {
 	})))
 
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "SQLite database file path")
-	rootCmd.PersistentFlags().StringVar(&dbPass, "db-pass", "", "SQLite database encryption-at-rest passphrase")
-	rootCmd.MarkPersistentFlagRequired("db")
-	rootCmd.MarkPersistentFlagRequired("db-pass")
+	rootCmd.PersistentFlags().StringVar(&dbType, "db-type", "sqlite", "Database type (sqlite or postgres)")
+	rootCmd.PersistentFlags().StringVar(&dbDSN, "db-dsn", "", "Database DSN (connection string)")
+	rootCmd.MarkPersistentFlagRequired("db-dsn")
 	rootCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
 	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
 	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
 }
 
-const (
-	minPasswordLength = 8
-)
-
-func getState() (*sqlite.DB, error) {
-	if dbPath == "" {
-		return nil, errors.New("db flag is required")
+func getDBConfig() (string, string, error) {
+	if dbDSN == "" {
+		return "", "", errors.New("db-dsn flag is required")
 	}
 
-	if dbPass == "" {
-		return nil, errors.New("db password is empty")
+	// Validate database type
+	normalizedType := strings.ToLower(dbType)
+	if normalizedType != "sqlite" && normalizedType != "postgres" {
+		return "", "", fmt.Errorf("unsupported database type: %s (must be 'sqlite' or 'postgres')", dbType)
 	}
 
-	err := validatePassword(dbPass)
-	if err != nil {
-		return nil, err
-	}
-
-	return sqlite.Open(dbPath, dbPass)
-}
-
-func validatePassword(dbPass string) error {
-	// Check password length
-	if len(dbPass) < minPasswordLength {
-		return fmt.Errorf("password must be at least %d characters long", minPasswordLength)
-	}
-
-	// Check password complexity
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString
-	hasSpecial := regexp.MustCompile(`[!@#~$%^&*()_+{}:"<>?]`).MatchString
-
-	if !hasNumber(dbPass) || !hasUpper(dbPass) || !hasSpecial(dbPass) {
-		return errors.New("password must include a number, an uppercase letter, and a special character")
-	}
-
-	return nil
+	return normalizedType, dbDSN, nil
 }
 
 func parsePrivateKey(keyPath string) (crypto.Signer, error) {

@@ -1,0 +1,4 @@
+include:
+  - path:
+    - fdo-onboarding-servers.yaml
+    - fdo-onboarding-servers-postgres-override.yaml

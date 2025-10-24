@@ -27,7 +27,7 @@ Execute shell commands on the device during onboarding.
 ### Usage
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-date
@@ -60,7 +60,7 @@ Transfer files from the owner server to the device during onboarding.
 ### Usage
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-download /path/to/local/file1.txt \
@@ -90,7 +90,7 @@ echo "Application settings" > /tmp/app-settings.json
 
 # Start owner with download FSIM
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-download /tmp/device-config.txt \
@@ -113,7 +113,7 @@ Transfer files from the device to the owner server during onboarding.
 ### Usage
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --upload-directory /tmp/uploads \
@@ -139,7 +139,7 @@ mkdir -p /tmp/fdo-uploads
 
 # Start owner with upload FSIM
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --upload-directory /tmp/fdo-uploads \
@@ -161,7 +161,7 @@ Instruct the device to download files from external URLs during onboarding.
 ### Usage
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-wget https://example.com/config/device.conf \
@@ -187,7 +187,7 @@ go-fdo-client onboard --key ec256 --kex ECDH256 --debug --blob /tmp/fdo/cred.bin
 ### Example
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-wget https://config.example.com/production/app.conf \
@@ -210,7 +210,7 @@ Multiple FSIMs can be used together in a single onboarding session:
 
 ```bash
 go-fdo-server owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key /tmp/fdo/keys/owner_key.der \
   --command-date \

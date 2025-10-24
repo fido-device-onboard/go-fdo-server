@@ -25,15 +25,34 @@ func (t *GUID) MarshalJSON() (b []byte, err error) {
 }
 
 type Voucher struct {
-	GUID       GUID      `json:"guid"`
+	GUID       GUID      `json:"guid" gorm:"primaryKey"`
 	CBOR       []byte    `json:"cbor,omitempty"`
-	DeviceInfo string    `json:"device_info"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	DeviceInfo string    `json:"device_info" gorm:"type:text"`
+	CreatedAt  time.Time `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt  time.Time `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
-type OwnerKey struct {
-	Type      int    `json:"type"`
-	PKCS8     []byte `json:"pkcs8"`
-	X509Chain []byte `json:"x509_chain"`
+// TableName specifies the table name for Voucher model
+func (Voucher) TableName() string {
+	return "owner_vouchers"
+}
+
+type OwnerInfo struct {
+	ID    int    `gorm:"primaryKey;check:id = 1"`
+	Value []byte `gorm:"type:text;not null"`
+}
+
+// TableName specifies the table name for OwnerInfo model
+func (OwnerInfo) TableName() string {
+	return "owner_info"
+}
+
+type RvInfo struct {
+	ID    int    `gorm:"primaryKey;check:id = 1"`
+	Value []byte `gorm:"type:text;not null"`
+}
+
+// TableName specifies the table name for RvInfo model
+func (RvInfo) TableName() string {
+	return "rvinfo"
 }

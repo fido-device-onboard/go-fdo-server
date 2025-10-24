@@ -150,8 +150,7 @@ docker run -d \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
   --debug rendezvous 0.0.0.0:8041 \
-  --db /tmp/fdo/db/rendezvous.db \
-  --db-pass 'P@ssw0rd1!'
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/rendezvous.db"
 ```
 
 **With rootless Podman:**
@@ -164,8 +163,7 @@ podman run -d \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
   --debug rendezvous 0.0.0.0:8041 \
-  --db /tmp/fdo/db/rendezvous.db \
-  --db-pass 'P@ssw0rd1!'
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/rendezvous.db"
 ```
 
 **Note for rootless Podman**: The `--user 0:0` flag tells the container to run as UID 0, which with user namespace mapping maps to your host UID. This allows the container to access files you own. The `:z` suffix on the volume mount automatically sets the correct SELinux context on SELinux-enabled systems.
@@ -181,8 +179,7 @@ docker run -d \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
   --debug manufacturing 0.0.0.0:8038 \
-  --db /tmp/fdo/db/manufacturer.db \
-  --db-pass 'P@ssw0rd1!' \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/manufacturer.db" \
   --manufacturing-key /tmp/fdo/certs/manufacturer.key \
   --owner-cert /tmp/fdo/certs/owner.crt \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt \
@@ -199,8 +196,7 @@ podman run -d \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
   --debug manufacturing 0.0.0.0:8038 \
-  --db /tmp/fdo/db/manufacturer.db \
-  --db-pass 'P@ssw0rd1!' \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/manufacturer.db" \
   --manufacturing-key /tmp/fdo/certs/manufacturer.key \
   --owner-cert /tmp/fdo/certs/owner.crt \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt \
@@ -218,8 +214,7 @@ docker run -d \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
   --debug owner 0.0.0.0:8043 \
-  --db /tmp/fdo/db/owner.db \
-  --db-pass 'P@ssw0rd1!' \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/owner.db" \
   --owner-key /tmp/fdo/certs/owner.key \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt
 ```
@@ -234,8 +229,7 @@ podman run -d \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
   --debug owner 0.0.0.0:8043 \
-  --db /tmp/fdo/db/owner.db \
-  --db-pass 'P@ssw0rd1!' \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/owner.db" \
   --owner-key /tmp/fdo/certs/owner.key \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt
 ```
