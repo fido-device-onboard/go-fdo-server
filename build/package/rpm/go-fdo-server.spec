@@ -3,7 +3,7 @@
 
 # https://github.com/fido-device-onboard/go-fdo-server
 %global goipath         github.com/fido-device-onboard/go-fdo-server
-%global commit          e48986e6b56ae67f738a2543b5bd2a01e016668c
+%global commit          731ab83111e3988adceea66b79888af1aa92b8c8
 
 %global debug_package   %{nil}
 
@@ -69,7 +69,8 @@ install -m 0755 -vp -D -t %{buildroot}%{_datadir}/%{name} scripts/*
 %license vendor/modules.txt
 %doc DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
 %{_bindir}/go-fdo-server
-%config(noreplace) %attr(770, root, go-fdo-server) %{_sysconfdir}/%{name}
+%config(noreplace) %{_sysconfdir}/%{name}
+%attr(770, root, go-fdo-server) %{_sysconfdir}/%{name}
 %{_sysusersdir}/%{name}.conf
 %dir %{_datadir}/%{name}
 %{_datadir}/%{name}/fdo-utils.sh
