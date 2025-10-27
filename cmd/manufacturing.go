@@ -27,7 +27,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 )
 
@@ -51,12 +50,12 @@ var manufacturingCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		state, err := getState()
+		dbType, dsn, err := getDBConfig()
 		if err != nil {
 			return err
 		}
 
-		err = db.InitDb(state)
+		state, err := db.InitDb(dbType, dsn)
 		if err != nil {
 			return err
 		}
@@ -130,7 +129,7 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
+func serveManufacturing(dbState *db.State, useTLS bool) error {
 	mfgKey, err := parsePrivateKey(manufacturerKeyPath)
 	if err != nil {
 		return err
@@ -202,7 +201,7 @@ func serveManufacturing(dbState *sqlite.DB, useTLS bool) error {
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
 	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
 	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
-	httpHandler := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
+	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewManufacturingServer(address, httpHandler, useTLS)

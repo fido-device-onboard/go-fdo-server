@@ -19,7 +19,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	transport "github.com/fido-device-onboard/go-fdo/http"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/spf13/cobra"
 )
 
@@ -35,12 +34,12 @@ var rendezvousCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		state, err := getState()
+		dbType, dsn, err := getDBConfig()
 		if err != nil {
 			return err
 		}
 
-		err = db.InitDb(state)
+		state, err := db.InitDb(dbType, dsn)
 		if err != nil {
 			return err
 		}
@@ -116,12 +115,12 @@ func (s *RendezvousServer) Start() error {
 }
 
 type RendezvousServerState struct {
-	DB *sqlite.DB
+	DB *db.State
 }
 
-func serveRendezvous(db *sqlite.DB, useTLS bool) error {
+func serveRendezvous(dbState *db.State, useTLS bool) error {
 	state := &RendezvousServerState{
-		DB: db,
+		DB: dbState,
 	}
 	// Create FDO responder
 	handler := &transport.Handler{
@@ -135,7 +134,7 @@ func serveRendezvous(db *sqlite.DB, useTLS bool) error {
 			RVBlobs: state.DB,
 		}}
 
-	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(nil)
+	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
 
 	// Listen and serve
 	server := NewRendezvousServer(address, externalAddress, httpHandler, useTLS)
