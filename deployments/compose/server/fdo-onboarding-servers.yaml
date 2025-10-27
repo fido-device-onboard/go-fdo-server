@@ -10,11 +10,11 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+     - --db-type=sqlite
+     - --db-dsn=file:${container_working_dir:-/workdir}/manufacturer.db
+     - --debug
      - manufacturing
      - manufacturer:8038
-     - --db=${container_working_dir:-/workdir}/manufacturer.db
-     - --db-pass='2=,%95QF<uTLLHt'
-     - --debug
      - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
      - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
@@ -43,11 +43,11 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/rendezvous.db
+      - --debug
       - rendezvous
       - rendezvous:8041
-      - --db=${container_working_dir:-/workdir}/rendezvous.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
     working_dir: ${container_working_dir:-/workdir}
     volumes:
       - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
@@ -72,11 +72,11 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/owner.db
+      - --debug
       - owner
       - owner:8043
-      - --db=${container_working_dir:-/workdir}/owner.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
       - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
     working_dir: ${container_working_dir:-/workdir}

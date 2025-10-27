@@ -8,7 +8,7 @@ PrivateDevices=yes
 CacheDirectory=go-fdo-server-manufacturer
 StateDirectory=go-fdo-server-manufacturer
 ExecStartPre=/usr/share/go-fdo-server/generate-manufacturer-certs.sh
-ExecStart=/usr/bin/go-fdo-server --db ${DATABASE_DSN} --db-pass ${DATABASE_PASSWORD} manufacturing ${LISTEN_IP}:${LISTEN_PORT} \
+ExecStart=/usr/bin/go-fdo-server --db-type ${DATABASE_TYPE} --db-dsn ${DATABASE_DSN} manufacturing ${LISTEN_IP}:${LISTEN_PORT} \
                                  --manufacturing-key ${MANUFACTURER_KEY} --owner-cert ${OWNER_CRT} \
                                  --device-ca-cert ${DEVICE_CA_CRT} --device-ca-key ${DEVICE_CA_KEY}
 User=go-fdo-server-manufacturer

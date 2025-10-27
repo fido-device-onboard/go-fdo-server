@@ -1,11 +1,11 @@
 services:
   owner:
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/owner.db
+      - --debug
       - owner
       - owner:8043
-      - --db=${container_working_dir:-/workdir}/owner.db
-      - --db-pass='2=,%95QF<uTLLHt'
-      - --debug
       - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
       - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
       - --command-wget=http://wget_httpd:8888/file1

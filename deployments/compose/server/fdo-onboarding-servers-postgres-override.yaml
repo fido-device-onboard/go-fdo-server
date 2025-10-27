@@ -1,0 +1,116 @@
+services:
+  manufacturer:
+    command:
+     - --db-type=postgres
+     - --db-dsn=host=manufacturer-db user=manufacturer password=Passw0rd dbname=manufacturer port=5432 sslmode=disable TimeZone=Europe/Madrid
+     - --debug
+     - manufacturing
+     - manufacturer:8038
+     - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
+     - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
+     - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+     - --device-ca-key=${container_working_dir:-/workdir}/certs/device_ca.key
+    depends_on:
+      manufacturer-db:
+        condition: service_healthy
+
+  manufacturer-db:
+    container_name: manufacturer-db
+    hostname: manufacturer-db
+    image: postgres:alpine
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    # or set shared memory limit when deploy via swarm stack
+    #volumes:
+    #  - type: tmpfs
+    #    target: /dev/shm
+    #    tmpfs:
+    #      size: 134217728 # 128*2^20 bytes = 128Mb
+    environment:
+      POSTGRES_DB: manufacturer
+      POSTGRES_USER: manufacturer
+      POSTGRES_PASSWORD: Passw0rd
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - fdo
+
+  rendezvous:
+    command:
+      - --db-type=postgres
+      - --db-dsn=host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid
+      - --debug
+      - rendezvous
+      - rendezvous:8041
+    depends_on:
+      rendezvous-db:
+        condition: service_healthy
+
+  rendezvous-db:
+    container_name: rendezvous-db
+    hostname: rendezvous-db
+    image: postgres:alpine
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    # or set shared memory limit when deploy via swarm stack
+    #volumes:
+    #  - type: tmpfs
+    #    target: /dev/shm
+    #    tmpfs:
+    #      size: 134217728 # 128*2^20 bytes = 128Mb
+    environment:
+      POSTGRES_DB: rendezvous
+      POSTGRES_USER: rendezvous
+      POSTGRES_PASSWORD: Passw0rd
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - fdo
+
+  owner:
+    command:
+      - --db-type=postgres
+      - --db-dsn=host=owner-db user=owner password=Passw0rd dbname=owner port=5432 sslmode=disable TimeZone=Europe/Madrid
+      - --debug
+      - owner
+      - owner:8043
+      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+    depends_on:
+      owner-db:
+        condition: service_healthy
+
+  owner-db:
+    container_name: owner-db
+    hostname: owner-db
+    image: postgres:alpine
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    # or set shared memory limit when deploy via swarm stack
+    #volumes:
+    #  - type: tmpfs
+    #    target: /dev/shm
+    #    tmpfs:
+    #      size: 134217728 # 128*2^20 bytes = 128Mb
+    environment:
+      POSTGRES_DB: owner
+      POSTGRES_USER: owner
+      POSTGRES_PASSWORD: Passw0rd
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - fdo
+
+
