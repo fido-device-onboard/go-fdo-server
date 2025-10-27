@@ -11,22 +11,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
-
-	"log/slog"
-
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"gorm.io/gorm"
 )
 
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +78,10 @@ func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guid})
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Voucher not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -112,7 +114,6 @@ func VerifyVoucherOwnership(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) erro
 }
 
 // VerifyOwnershipVoucher performs header field validation and cryptographic verification.
-
 // Note: The following validations can be performed by the device during TO2, not by owner-server,
 // so are not included in this verification:
 //   - HMAC verification (ov.VerifyHeader): Owner server does not have the device HMAC secret

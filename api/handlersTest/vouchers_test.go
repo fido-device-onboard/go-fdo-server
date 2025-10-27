@@ -19,17 +19,11 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/cbor"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 	"github.com/fido-device-onboard/go-fdo/testdata"
 )
 
 func setupTestDB(t *testing.T) {
-	testDB, err := sqlite.Open(":memory:", "")
-	if err != nil {
-		t.Fatalf("Failed to open test database: %v", err)
-	}
-
-	err = db.InitDb(testDB)
+	_, err := db.InitDb("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("Failed to initialize test database: %v", err)
 	}

@@ -4,14 +4,14 @@
 package handlers
 
 import (
-	"database/sql"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 
-	"log/slog"
-
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"gorm.io/gorm"
 )
 
 func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +34,7 @@ func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching ownerInfo")
 	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Debug("No ownerInfo found")
 			http.Error(w, "No ownerInfo found", http.StatusNotFound)
 		} else {
@@ -63,7 +63,7 @@ func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		slog.Debug("ownerInfo already exists, cannot create new entry")
 		http.Error(w, "ownerInfo already exists", http.StatusConflict)
 		return
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Debug("Error checking ownerInfo existence", "error", err)
 		http.Error(w, "Error processing ownerInfo", http.StatusInternalServerError)
 		return
@@ -92,7 +92,7 @@ func updateOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
-	if _, err := db.FetchOwnerInfoJSON(); err == sql.ErrNoRows {
+	if _, err := db.FetchOwnerInfoJSON(); errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Debug("ownerInfo does not exist, cannot update")
 		http.Error(w, "ownerInfo does not exist", http.StatusNotFound)
 		return

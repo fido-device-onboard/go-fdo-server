@@ -8,9 +8,9 @@ import (
 	"net/http"
 
 	"golang.org/x/time/rate"
+	"gorm.io/gorm"
 
 	transport "github.com/fido-device-onboard/go-fdo/http"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
 
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 )
@@ -18,7 +18,7 @@ import (
 // HTTPHandler handles HTTP requests
 type HTTPHandler struct {
 	handler *transport.Handler
-	state   *sqlite.DB
+	state   *gorm.DB
 }
 
 func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
@@ -45,7 +45,7 @@ func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
 }
 
 // NewHTTPHandler creates a new HTTPHandler
-func NewHTTPHandler(handler *transport.Handler, state *sqlite.DB) *HTTPHandler {
+func NewHTTPHandler(handler *transport.Handler, state *gorm.DB) *HTTPHandler {
 	return &HTTPHandler{handler: handler, state: state}
 }
 

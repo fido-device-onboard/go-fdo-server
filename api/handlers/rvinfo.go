@@ -4,14 +4,14 @@
 package handlers
 
 import (
-	"database/sql"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 
-	"log/slog"
-
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"gorm.io/gorm"
 )
 
 func RvInfoHandler() http.HandlerFunc {
@@ -36,7 +36,7 @@ func getRvInfo(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching rvInfo")
 	rvInfoJSON, err := db.FetchRvInfoJSON()
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Debug("No rvInfo found")
 			http.Error(w, "No rvInfo found", http.StatusNotFound)
 		} else {
@@ -65,7 +65,7 @@ func createRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		slog.Debug("rvInfo already exists, cannot create new entry")
 		http.Error(w, "rvInfo already exists", http.StatusConflict)
 		return
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Debug("Error checking rvInfo existence", "error", err)
 		http.Error(w, "Error processing rvInfo", http.StatusInternalServerError)
 		return
@@ -95,7 +95,7 @@ func updateRvInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 		return
 	}
 
-	if _, err := db.FetchRvInfoJSON(); err == sql.ErrNoRows {
+	if _, err := db.FetchRvInfoJSON(); errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Debug("rvInfo does not exist, cannot update")
 		http.Error(w, "rvInfo does not exist", http.StatusNotFound)
 		return
