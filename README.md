@@ -48,16 +48,15 @@ openssl req -x509 -key /tmp/fdo/keys/owner_key.der -keyform der -out /tmp/fdo/ke
 Start the services in three terminals (or background them). Use distinct databases under /tmp/fdo/db and a strong DB passphrase.
 
 ```bash
-DB_PASS='P@ssw0rd1!'
 mkdir -p /tmp/fdo/db /tmp/fdo/keys /tmp/fdo/ov
 
 # Rendezvous (127.0.0.1:8041)
 go-fdo-server --debug rendezvous 127.0.0.1:8041 \
-  --db /tmp/fdo/db/rv.db --db-pass "$DB_PASS"
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/rv.db"
 
 # Manufacturing (127.0.0.1:8038)
 go-fdo-server --debug manufacturing 127.0.0.1:8038 \
-  --db /tmp/fdo/db/mfg.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/mfg.db" \
   --manufacturing-key /tmp/fdo/keys/manufacturer_key.der \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --device-ca-key  /tmp/fdo/keys/device_ca_key.der \
@@ -65,7 +64,7 @@ go-fdo-server --debug manufacturing 127.0.0.1:8038 \
 
 # Owner (127.0.0.1:8043)
 go-fdo-server --debug owner 127.0.0.1:8043 \
-  --db /tmp/fdo/db/own.db --db-pass "$DB_PASS" \
+  --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key      /tmp/fdo/keys/owner_key.der
 ```
