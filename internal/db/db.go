@@ -4,69 +4,25 @@
 package db
 
 import (
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"math"
 	"net"
 	"strconv"
-	"time"
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/sqlite"
+	"gorm.io/gorm"
 )
 
-var db *sql.DB
+var db *gorm.DB
 
-func InitDb(state *sqlite.DB) error {
-	db = state.DB()
-	if err := createRvInfoTable(); err != nil {
-		slog.Error("Failed to create table")
-		return err
-	}
-	if err := createOwnerInfoTable(); err != nil {
-		slog.Error("Failed to create table")
-		return err
-	}
-	return nil
-}
-
-func createRvInfoTable() error {
-	query := `CREATE TABLE IF NOT EXISTS rvinfo (
-		id INTEGER PRIMARY KEY CHECK (id = 1),
-		value TEXT
-	);`
-	_, err := db.Exec(query)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func createOwnerInfoTable() error {
-	query := `CREATE TABLE IF NOT EXISTS owner_info (
-		id INTEGER PRIMARY KEY CHECK (id = 1),
-		value TEXT
-	);`
-	_, err := db.Exec(query)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// FetchVoucher doesn't take into account mfg_voucher where go-fdo stores vouchers that have not been extended yet
-// we don't need it right now, but for use cases where manufacturers just initializes empty devices (tpm) this is going to be needed.
-//
 // FetchVoucher returns a single voucher filtered by provided fields.
 // Supported filters (keys):
 // - "guid" (expects []byte)
 // - "device_info" (expects string)
 // If more than one voucher matches, an error is returned.
-// Note: This does not query mfg_voucher (unextended vouchers).
 func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
 	if len(filters) == 0 {
 		return nil, fmt.Errorf("no filters provided")
@@ -76,7 +32,7 @@ func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
 		return nil, err
 	}
 	if len(list) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, gorm.ErrRecordNotFound
 	}
 	if len(list) > 1 {
 		return nil, fmt.Errorf("multiple vouchers matched filters")
@@ -88,81 +44,42 @@ func FetchVoucher(filters map[string]interface{}) (*Voucher, error) {
 // If includeCBOR is true, the CBOR column is selected and populated.
 // Results are ordered by updated_at DESC.
 func QueryVouchers(filters map[string]interface{}, includeCBOR bool) ([]Voucher, error) {
-	var query, fields string
-	fields = "guid, device_info, created_at, updated_at"
-	if includeCBOR {
-		fields += ", cbor"
-	}
-	query = fmt.Sprintf("SELECT %s FROM owner_vouchers WHERE 1=1", fields)
-	args := make([]interface{}, 0, 2)
+	query := db.Model(&Voucher{})
+
+	// Apply filters
 	if v, ok := filters["guid"]; ok {
 		b, ok := v.([]byte)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for guid filter; want []byte")
 		}
-		query += " AND guid = ?"
-		args = append(args, b)
+		query = query.Where("guid = ?", b)
 	}
 	if v, ok := filters["device_info"]; ok {
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for device_info filter; want string")
 		}
-		query += " AND device_info = ?"
-		args = append(args, s)
+		query = query.Where("device_info = ?", s)
 	}
-	query += " ORDER BY updated_at DESC"
 
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		return nil, err
+	// Omit CBOR if not needed
+	if !includeCBOR {
+		query = query.Omit("cbor")
 	}
-	defer func() { _ = rows.Close() }()
+
+	// Order by updated_at DESC
+	query = query.Order("updated_at DESC")
 
 	var list []Voucher
-	for rows.Next() {
-		var v Voucher
-		var createdAt, updatedAt int64
-		dest := []any{&v.GUID, &v.DeviceInfo, &createdAt, &updatedAt}
-		if includeCBOR {
-			dest = append(dest, &v.CBOR)
-		}
-		if err := rows.Scan(dest...); err != nil {
-			return nil, err
-		}
-		v.CreatedAt = time.UnixMicro(createdAt)
-		v.UpdatedAt = time.UnixMicro(updatedAt)
-		list = append(list, v)
+	if err := query.Find(&list).Error; err != nil {
+		return nil, err
 	}
+
 	return list, nil
 }
 
 func InsertVoucher(voucher Voucher) error {
-	_, err := db.Exec(
-		"INSERT INTO owner_vouchers (guid, device_info, cbor, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		voucher.GUID,
-		voucher.DeviceInfo,
-		voucher.CBOR,
-		voucher.CreatedAt.UnixMicro(),
-		voucher.UpdatedAt.UnixMicro(),
-	)
-	return err
-}
-
-func insertData(data []byte, tableName string) error {
-	query := fmt.Sprintf("INSERT INTO %s (id, value) VALUES (1, ?)", tableName)
-	if _, err := db.Exec(query, data); err != nil {
-		return fmt.Errorf("error inserting data: %w", err)
-	}
-	return nil
-}
-
-func updateData(data []byte, tableName string) error {
-	query := fmt.Sprintf("UPDATE %s SET value = ? WHERE id = 1", tableName)
-	if _, err := db.Exec(query, data); err != nil {
-		return fmt.Errorf("error updating data: %w", err)
-	}
-	return nil
+	return db.Create(&voucher).Error
 }
 
 func InsertOwnerInfo(data []byte) error {
@@ -170,7 +87,12 @@ func InsertOwnerInfo(data []byte) error {
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
 	}
-	return insertData(data, "owner_info")
+
+	ownerInfo := OwnerInfo{
+		ID:    1,
+		Value: data,
+	}
+	return db.Create(&ownerInfo).Error
 }
 
 func UpdateOwnerInfo(data []byte) error {
@@ -178,15 +100,16 @@ func UpdateOwnerInfo(data []byte) error {
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
 		return fmt.Errorf("error parsing ownerinfo data: %w", err)
 	}
-	return updateData(data, "owner_info")
+
+	return db.Model(&OwnerInfo{}).Where("id = ?", 1).Update("value", data).Error
 }
 
 func FetchOwnerInfoJSON() ([]byte, error) {
-	var value []byte
-	if err := db.QueryRow("SELECT value FROM owner_info WHERE id = 1").Scan(&value); err != nil {
+	var ownerInfo OwnerInfo
+	if err := db.Where("id = ?", 1).First(&ownerInfo).Error; err != nil {
 		return nil, err
 	}
-	return value, nil
+	return ownerInfo.Value, nil
 }
 
 // FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
@@ -204,7 +127,12 @@ func InsertRvInfo(data []byte) error {
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
 	}
-	return insertData(data, "rvinfo")
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: data,
+	}
+	return db.Create(&rvInfo).Error
 }
 
 func UpdateRvInfo(data []byte) error {
@@ -212,15 +140,16 @@ func UpdateRvInfo(data []byte) error {
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
 		return fmt.Errorf("error parsing rvinfo data: %w", err)
 	}
-	return updateData(data, "rvinfo")
+
+	return db.Model(&RvInfo{}).Where("id = ?", 1).Update("value", data).Error
 }
 
 func FetchRvInfoJSON() ([]byte, error) {
-	var value []byte
-	if err := db.QueryRow("SELECT value FROM rvinfo WHERE id = 1").Scan(&value); err != nil {
+	var rvInfo RvInfo
+	if err := db.Where("id = ?", 1).First(&rvInfo).Error; err != nil {
 		return nil, err
 	}
-	return value, nil
+	return rvInfo.Value, nil
 }
 
 // FetchRvInfo reads the rvinfo JSON (stored as text) and converts it into
