@@ -9,51 +9,50 @@ import (
 	"strings"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // Structure to hold contents of the configuration file
 type FIDOServerConfig struct {
-	Debug         bool                 `mapstructure:"debug"`
+	Log           LogConfig            `mapstructure:"log"`
+	DB            DatabaseConfig       `mapstructure:"db"`
+	HTTP          HTTPConfig           `mapstructure:"http"`
 	Manufacturing *ManufacturingConfig `mapstructure:"manufacturing"`
-	Rendezvous    *RendezvousConfig    `mapstructure:"rendezvous"`
 	Owner         *OwnerConfig         `mapstructure:"owner"`
+}
+
+// Log configuration
+type LogConfig struct {
+	Level string `mapstructure:"level"`
 }
 
 // Configuration for the servers HTTP endpoing
 type HTTPConfig struct {
-	UseTLS      bool   `mapstructure:"ssl"`
-	InsecureTLS bool   `mapstructure:"insecure-tls"`
-	Listen      string `mapstructure:"listen"`
-	CertPath    string `mapstructure:"cert"`
-	KeyPath     string `mapstructure:"key"`
+	CertPath string `mapstructure:"cert"`
+	KeyPath  string `mapstructure:"key"`
+	IP       string `mapstructure:"ip"`
+	Port     string `mapstructure:"port"`
 }
 
-// Add command line and configuration file parameters to viper/cobra
-// for an HTTP server.
-func addHTTPConfig(cmd *cobra.Command, configPrefix string) error {
-	cmd.Flags().Bool("insecure-tls", false, "Listen with a self-signed TLS certificate")
-	cmd.Flags().String("server-cert-path", "", "Path to server certificate")
-	cmd.Flags().String("server-key-path", "", "Path to server private key")
-	if err := viper.BindPFlag(configPrefix+".insecure-tls", cmd.Flags().Lookup("insecure-tls")); err != nil {
-		return err
-	}
-	if err := viper.BindPFlag(configPrefix+".cert", cmd.Flags().Lookup("server-cert-path")); err != nil {
-		return err
-	}
-	if err := viper.BindPFlag(configPrefix+".key", cmd.Flags().Lookup("server-key-path")); err != nil {
-		return err
-	}
-	return nil
+// ListenAddress returns the concatenated IP:Port address for listening
+func (h *HTTPConfig) ListenAddress() string {
+	return h.IP + ":" + h.Port
+}
+
+// UseTLS returns true if TLS should be used (cert and key are both set)
+func (h *HTTPConfig) UseTLS() bool {
+	return h.CertPath != "" && h.KeyPath != ""
 }
 
 func (h *HTTPConfig) validate() error {
-	if h.Listen == "" {
-		return errors.New("the server's HTTP listen address is required")
+	if h.IP == "" {
+		return errors.New("the server's HTTP IP address is required")
 	}
-	if h.UseTLS && (h.CertPath == "" || h.KeyPath == "") {
-		return errors.New("TLS requires a server certificate and key")
+	if h.Port == "" {
+		return errors.New("the server's HTTP port is required")
+	}
+	// Both cert and key must be set together or both must be unset
+	if (h.CertPath == "" && h.KeyPath != "") || (h.CertPath != "" && h.KeyPath == "") {
+		return errors.New("both certificate and key must be provided together, or neither")
 	}
 	return nil
 }
@@ -62,19 +61,6 @@ func (h *HTTPConfig) validate() error {
 type DatabaseConfig struct {
 	Type string `mapstructure:"type"`
 	DSN  string `mapstructure:"dsn"`
-}
-
-// TODO(kgiusti): move database to top level config, fix this:
-func addDatabaseConfig(cmd *cobra.Command, configPrefix string) error {
-	cmd.Flags().String("db-type", "sqlite", "Database type (sqlite or postgres)")
-	cmd.Flags().String("db-dsn", "", "Database DSN (connection string)")
-	if err := viper.BindPFlag(configPrefix+".type", cmd.Flags().Lookup("db-type")); err != nil {
-		return err
-	}
-	if err := viper.BindPFlag(configPrefix+".dsn", cmd.Flags().Lookup("db-dsn")); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (dc *DatabaseConfig) getState() (*db.State, error) {

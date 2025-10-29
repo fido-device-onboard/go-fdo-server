@@ -38,12 +38,10 @@ import (
 
 // The owner server configuration
 type OwnerConfig struct {
-	ExternalAddress   string         `mapstructure:"external-address"`
-	OwnerDeviceCACert string         `mapstructure:"device-ca-cert"`
-	OwnerPrivateKey   string         `mapstructure:"owner-key"`
-	ReuseCred         bool           `mapstructure:"reuse-credentials"`
-	HTTP              HTTPConfig     `mapstructure:"http"`
-	DB                DatabaseConfig `mapstructure:"database"`
+	OwnerDeviceCACert string `mapstructure:"device_ca_cert"`
+	OwnerPrivateKey   string `mapstructure:"key"`
+	ReuseCred         bool   `mapstructure:"reuse_credentials"`
+	TO0InsecureTLS    bool   `mapstructure:"to0_insecure_tls"`
 }
 
 var (
@@ -60,19 +58,17 @@ var ownerCmd = &cobra.Command{
 	Use:   "owner http_address",
 	Short: "Serve an instance of the owner server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			viper.Set("owner.http.listen", args[0])
-		}
-
 		var fdoConfig FIDOServerConfig
 		if err := viper.Unmarshal(&fdoConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal owner config: %w", err)
 		}
-
 		if fdoConfig.Owner == nil {
 			return fmt.Errorf("failed to find Owner config")
 		}
-		return serveOwner(fdoConfig.Owner)
+		if err := fdoConfig.HTTP.validate(); err != nil {
+			return err
+		}
+		return serveOwner(fdoConfig.Owner, &fdoConfig.DB, &fdoConfig.HTTP)
 	},
 }
 
@@ -80,20 +76,15 @@ var ownerCmd = &cobra.Command{
 type OwnerServer struct {
 	handler http.Handler
 	config  HTTPConfig
-	extAddr string
 }
 
 // NewServer creates a new Server
-func NewOwnerServer(config HTTPConfig, extAddr string, handler http.Handler) *OwnerServer {
-	return &OwnerServer{handler: handler, config: config, extAddr: extAddr}
+func NewOwnerServer(config HTTPConfig, handler http.Handler) *OwnerServer {
+	return &OwnerServer{handler: handler, config: config}
 }
 
 // Start starts the HTTP server
 func (s *OwnerServer) Start() error {
-	err := s.config.validate()
-	if err != nil {
-		return err
-	}
 	srv := &http.Server{
 		Handler:           s.handler,
 		ReadHeaderTimeout: 3 * time.Second,
@@ -117,30 +108,25 @@ func (s *OwnerServer) Start() error {
 	}()
 
 	// Listen and serve
-	lis, err := net.Listen("tcp", s.config.Listen)
+	lis, err := net.Listen("tcp", s.config.ListenAddress())
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lis.Close() }()
-	slog.Info("Listening", "local", lis.Addr().String(), "external", s.extAddr)
+	slog.Info("Listening", "local", lis.Addr().String())
 
-	if s.config.UseTLS {
+	if s.config.UseTLS() {
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, // TLS v1.2
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS v1.2
 		}
-
-		if s.config.CertPath != "" && s.config.KeyPath != "" {
-			srv.TLSConfig = &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				CipherSuites: preferredCipherSuites,
-			}
-			return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
-		} else {
-			return fmt.Errorf("no TLS cert or key provided")
+		srv.TLSConfig = &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			CipherSuites: preferredCipherSuites,
 		}
+		return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
 	}
 	return srv.Serve(lis)
 }
@@ -152,8 +138,8 @@ type OwnerServerState struct {
 	chain        []*x509.Certificate
 }
 
-func getOwnerServerState(config *OwnerConfig) (*OwnerServerState, error) {
-	dbState, err := config.DB.getState()
+func getOwnerServerState(config *OwnerConfig, dbConfig *DatabaseConfig) (*OwnerServerState, error) {
+	dbState, err := dbConfig.getState()
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +172,8 @@ func getOwnerServerState(config *OwnerConfig) (*OwnerServerState, error) {
 	}, nil
 }
 
-func serveOwner(config *OwnerConfig) error {
-	state, err := getOwnerServerState(config)
+func serveOwner(config *OwnerConfig, dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
+	state, err := getOwnerServerState(config, dbConfig)
 	if err != nil {
 		return err
 	}
@@ -216,7 +202,7 @@ func serveOwner(config *OwnerConfig) error {
 	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&handlers.To0HandlerState{
 		VoucherState: state.DB,
 		KeyState:     state,
-		UseTLS:       config.HTTP.UseTLS,
+		InsecureTLS:  config.TO0InsecureTLS,
 	}))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
@@ -224,9 +210,9 @@ func serveOwner(config *OwnerConfig) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewOwnerServer(config.HTTP, config.ExternalAddress, httpHandler)
+	server := NewOwnerServer(*httpConfig, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", config.HTTP.Listen)
+	slog.Debug("Starting server on:", "addr", httpConfig.ListenAddress())
 	return server.Start()
 }
 
@@ -376,26 +362,20 @@ func ownerCmdInit() {
 	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
 	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
-	ownerCmd.Flags().String("external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
-	if err := viper.BindPFlag("owner.reuse-credentials", ownerCmd.Flags().Lookup("reuse-credentials")); err != nil {
+	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for TO0")
+	if err := viper.BindPFlag("owner.reuse_credentials", ownerCmd.Flags().Lookup("reuse-credentials")); err != nil {
 		panic(err)
 	}
-	if err := viper.BindPFlag("owner.device-ca-cert", ownerCmd.Flags().Lookup("device-ca-cert")); err != nil {
+	if err := viper.BindPFlag("owner.device_ca_cert", ownerCmd.Flags().Lookup("device-ca-cert")); err != nil {
 		panic(err)
 	}
-	if err := viper.BindPFlag("owner.owner-key", ownerCmd.Flags().Lookup("owner-key")); err != nil {
+	if err := viper.BindPFlag("owner.key", ownerCmd.Flags().Lookup("owner-key")); err != nil {
 		panic(err)
 	}
-	if err := viper.BindPFlag("owner.external-address", ownerCmd.Flags().Lookup("external-address")); err != nil {
+	if err := viper.BindPFlag("owner.to0_insecure_tls", ownerCmd.Flags().Lookup("to0-insecure-tls")); err != nil {
 		panic(err)
 	}
 
-	if err := addDatabaseConfig(ownerCmd, "owner.database"); err != nil {
-		panic(err)
-	}
-	if err := addHTTPConfig(ownerCmd, "owner.http"); err != nil {
-		panic(err)
-	}
 }
 
 func init() {

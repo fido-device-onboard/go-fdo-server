@@ -19,44 +19,45 @@ go-fdo-server rendezvous --debug --config config.toml
 
 ## Configuration Structure
 
-The configuration file uses a hierarchical structure with separate sections for each server type:
+The configuration file uses a hierarchical structure that defines the following sections:
 
-- `debug` - Global debug setting
-- `manufacturing` - Manufacturing server configuration
-- `owner` - Owner server configuration  
-- `rendezvous` - Rendezvous server configuration
+- `log` - Logging level configuration
+- `db` - Database configuration
+- `http` - HTTP server configuration
+- `manufacturing` - Manufacturing server-specific configuration
+- `owner` - Owner server-specific configuration
+- `rendezvous` - Rendezvous server-specific configuration
 
-
-## Common Configuration Sub-Types
-
-### HTTP Configuration
-
-HTTP configuration is used by all server types under the `[http]` section:
-
-| Key | Type | Description | Required |
-|-----|------|-------------|----------|
-| `listen` | string | HTTP server listen address (e.g., "127.0.0.1:8080") | Yes |
-| `ssl` | boolean | Enable SSL/TLS | No (default: false) |
-| `insecure-tls` | boolean | Use self-signed TLS certificate | No (default: false) |
-| `cert` | string | Path to server certificate file | No |
-| `key` | string | Path to server private key file | No |
-
-### Database Configuration
-
-Database configuration is used by all server types under the `[database]` section:
-
-| Key | Type | Description | Required |
-|-----|------|-------------|----------|
-| `path` | string | SQLite database file path | Yes |
-| `password` | string | Database encryption passphrase (min 8 chars, must include number, uppercase, special char) | Yes |
-
-
-## Global Configuration Options
+## Logging Configuration
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `debug` | boolean | Enable debug logging | false |
+| `log` | string | Set the logging level | info |
 
+## Database Configuration
+
+A database is used to persist server state and is required for all
+server roles. The database configuration is provided under the `[db]`
+section:
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `type` | string | Database type (e.g., "sqlite", "postgres") | Yes |
+| `dsn` | string | Database connection string | Yes |
+
+## HTTP Server Configuration
+
+All servers provide an HTTP endpoint. The HTTP server configuration is
+provided under the `[http]` section:
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `ip` | string | HTTP server IP address or hostname | Yes |
+| `port` | string | HTTP server port | Yes |
+| `cert` | string | Path to server certificate file | No |
+| `key` | string | Path to server private key file | No |
+
+**Note**: HTTPS (TLS) is automatically enabled when both `cert` and `key` are provided.
 
 ## Manufacturing Server Configuration
 
@@ -64,13 +65,11 @@ The manufacturing server configuration is under the `[manufacturing]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `private-key` | string | Manufacturing private key file path | Yes |
-| `owner-cert` | string | Owner certificate file path | Yes |
-| `http` | map | HTTP Server configuration | Yes |
-| `database` | map | Database configuration | Yes |
-| `device-ca` | map | Device CA certificate configuration | Yes |
+| `key` | string | Manufacturing private key file path | Yes |
+| `owner_cert` | string | Owner certificate file path | Yes |
+| `device_ca` | map | Device CA certificate configuration | Yes |
 
-### Device CA Configuration (`[manufacturing.device-ca]`)
+### Device CA Configuration (`[manufacturing.device_ca]`)
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
@@ -84,21 +83,16 @@ The owner server configuration is under the `[owner]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `external-address` | string | External address devices should connect to | No |
-| `device-ca-cert` | string | Device CA certificate file path | Yes |
-| `owner-key` | string | Owner private key file path | Yes |
-| `reuse-credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
-| `http` | map | HTTP Server configuration | Yes |
-| `database` | map | Database configuration | Yes |
+| `device_ca_cert` | string | Device CA certificate file path | Yes |
+| `key` | string | Owner private key file path | Yes |
+| `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
+| `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
 
 ## Rendezvous Server Configuration
 
 The rendezvous server configuration is under the `[rendezvous]` section:
 
-| Key | Type | Description | Required |
-|-----|------|-------------|----------|
-| `http` | map | HTTP Server configuration | Yes |
-| `database` | map | Database configuration | Yes |
+No specific configuration options are required for the rendezvous server beyond the common HTTP and database configurations.
 
 ## Configuration File Examples
 
@@ -107,22 +101,21 @@ The rendezvous server configuration is under the `[rendezvous]` section:
 ```toml
 debug = true
 
-[manufacturing]
-private-key = "/path/to/manufacturing.key"
-owner-cert = "/path/to/owner.crt"
-
-[manufacturing.http]
-listen = "127.0.0.1:8038"
-ssl = false
-insecure-tls = false
+[http]
+ip = "127.0.0.1"
+port = "8038"
 cert = "/path/to/manufacturing.crt"
 key = "/path/to/manufacturing.key"
 
-[manufacturing.database]
-path = "manufacturing.db"
-password = "ManufacturingPass123!"
+[db]
+type = "sqlite"
+dsn = "file:manufacturing.db"
 
-[manufacturing.device-ca]
+[manufacturing]
+key = "/path/to/manufacturing.key"
+owner_cert = "/path/to/owner.crt"
+
+[manufacturing.device_ca]
 cert = "/path/to/device.ca"
 key = "/path/to/device.key"
 ```
@@ -132,22 +125,21 @@ key = "/path/to/device.key"
 ```toml
 debug = true
 
-[owner]
-external-address = "0.0.0.0:8443"
-device-ca-cert = "/path/to/device.ca"
-owner-key = "/path/to/owner.key"
-reuse-credentials = true
-
-[owner.http]
-listen = "127.0.0.1:8043"
-ssl = false
-insecure-tls = false
+[http]
+ip = "127.0.0.1"
+port = "8043"
 cert = "/path/to/owner.crt"
 key = "/path/to/owner.key"
 
-[owner.database]
-path = "owner.db"
-password = "OwnerPass123!"
+[db]
+type = "sqlite"
+dsn = "file:owner.db"
+
+[owner]
+device_ca_cert = "/path/to/device.ca"
+key = "/path/to/owner.key"
+reuse_credentials = true
+to0_insecure_tls = false
 ```
 
 ### Rendezvous Server Configuration
@@ -155,18 +147,17 @@ password = "OwnerPass123!"
 ```toml
 debug = true
 
-[rendezvous]
-
-[rendezvous.http]
-listen = "127.0.0.1:8041"
-ssl = false
-insecure-tls = false
+[http]
+ip = "127.0.0.1"
+port = "8041"
 cert = "/path/to/rendezvous.crt"
 key = "/path/to/rendezvous.key"
 
-[rendezvous.database]
-path = "rendezvous.db"
-password = "RendezvousPass123!"
+[db]
+type = "sqlite"
+dsn = "file:rendezvous.db"
+
+[rendezvous]
 ```
 
 ### YAML Configuration Example
@@ -174,19 +165,20 @@ password = "RendezvousPass123!"
 ```yaml
 debug: true
 
+http:
+  ip: "127.0.0.1"
+  port: "8038"
+  cert: "/path/to/manufacturing.crt"
+  key: "/path/to/manufacturing.key"
+
+db:
+  type: "sqlite"
+  dsn: "file:manufacturing.db"
+
 manufacturing:
-  private-key: "/path/to/manufacturing.key"
-  owner-cert: "/path/to/owner.crt"
-  http:
-    listen: "127.0.0.1:8038"
-    ssl: false
-    insecure-tls: false
-    cert: "/path/to/manufacturing.crt"
-    key: "/path/to/manufacturing.key"
-  database:
-    path: "manufacturing.db"
-    password: "ManufacturingPass123!"
-  device-ca:
+  key: "/path/to/manufacturing.key"
+  owner_cert: "/path/to/owner.crt"
+  device_ca:
     cert: "/path/to/device.ca"
     key: "/path/to/device.key"
 ```
@@ -194,9 +186,8 @@ manufacturing:
 ## Notes
 
 - All file paths in the configuration should be absolute paths or paths relative to the current working directory
-- Database passwords have strict requirements: minimum 8 characters, must include at least one number, one uppercase letter, and one special character
 - Boolean values can be specified as `true`/`false` in TOML or `true`/`false` in YAML
 - The configuration file uses a hierarchical structure where each server type has its own section
-- Only the relevant server section will be processed when running a specific server type (e.g., only `[manufacturing]` section is used when running the manufacturing server)
 - Command-line arguments take precedence over configuration file values
-- The server listen address can be overridden by providing it as a positional argument to the command
+- The HTTP server listen address can be overridden by providing it as a positional argument to the command (e.g., `go-fdo-server owner 127.0.0.1:8080`)
+- Both `http.cert` and `http.key` MUST be provided in order to enable HTTP over TLS (HTTPS).

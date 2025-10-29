@@ -23,27 +23,19 @@ import (
 	"github.com/spf13/viper"
 )
 
-// The rendezvous server configuration
-type RendezvousConfig struct {
-	HTTP HTTPConfig     `mapstructure:"http"`
-	DB   DatabaseConfig `mapstructure:"database"`
-}
-
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			viper.Set("rendezvous.http.listen", args[0])
-		}
-
 		var fdoConfig FIDOServerConfig
 		if err := viper.Unmarshal(&fdoConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal rendezvous config: %w", err)
 		}
-
-		return serveRendezvous(fdoConfig.Rendezvous)
+		if err := fdoConfig.HTTP.validate(); err != nil {
+			return err
+		}
+		return serveRendezvous(&fdoConfig.DB, &fdoConfig.HTTP)
 	},
 }
 
@@ -60,10 +52,6 @@ func NewRendezvousServer(config HTTPConfig, handler http.Handler) *RendezvousSer
 
 // Start starts the HTTP server
 func (s *RendezvousServer) Start() error {
-	err := s.config.validate()
-	if err != nil {
-		return err
-	}
 	srv := &http.Server{
 		Handler:           s.handler,
 		ReadHeaderTimeout: 3 * time.Second,
@@ -87,30 +75,25 @@ func (s *RendezvousServer) Start() error {
 	}()
 
 	// Listen and serve
-	lis, err := net.Listen("tcp", s.config.Listen)
+	lis, err := net.Listen("tcp", s.config.ListenAddress())
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lis.Close() }()
 	slog.Info("Listening", "local", lis.Addr().String())
 
-	if s.config.UseTLS {
+	if s.config.UseTLS() {
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, // TLS v1.2
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS v1.2
 		}
-
-		if s.config.CertPath != "" && s.config.KeyPath != "" {
-			srv.TLSConfig = &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				CipherSuites: preferredCipherSuites,
-			}
-			return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
-		} else {
-			return fmt.Errorf("no TLS cert or key provided")
+		srv.TLSConfig = &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			CipherSuites: preferredCipherSuites,
 		}
+		return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
 	}
 	return srv.Serve(lis)
 }
@@ -119,8 +102,8 @@ type RendezvousServerState struct {
 	DB *db.State
 }
 
-func serveRendezvous(config *RendezvousConfig) error {
-	dbState, err := config.DB.getState()
+func serveRendezvous(dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
+	dbState, err := dbConfig.getState()
 	if err != nil {
 		return err
 	}
@@ -143,9 +126,9 @@ func serveRendezvous(config *RendezvousConfig) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
 
 	// Listen and serve
-	server := NewRendezvousServer(config.HTTP, httpHandler)
+	server := NewRendezvousServer(*httpConfig, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", config.HTTP.Listen)
+	slog.Debug("Starting server on:", "addr", httpConfig.ListenAddress())
 	return server.Start()
 }
 
@@ -153,12 +136,6 @@ func serveRendezvous(config *RendezvousConfig) error {
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
 
-	if err := addDatabaseConfig(rendezvousCmd, "rendezvous.database"); err != nil {
-		panic(err)
-	}
-	if err := addHTTPConfig(rendezvousCmd, "rendezvous.http"); err != nil {
-		panic(err)
-	}
 }
 
 func init() {

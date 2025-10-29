@@ -66,18 +66,6 @@ func stubRunE(t *testing.T, cmd *cobra.Command) {
 			return err
 		}
 
-		// Handle positional argument override (same as in actual commands)
-		if len(args) > 0 {
-			switch cmd {
-			case manufacturingCmd:
-				viper.Set("manufacturing.http.listen", args[0])
-			case ownerCmd:
-				viper.Set("owner.http.listen", args[0])
-			case rendezvousCmd:
-				viper.Set("rendezvous.http.listen", args[0])
-			}
-		}
-
 		// Capture the configuration that would be unmarshaled
 		var fdoConfig FIDOServerConfig
 		if err := viper.Unmarshal(&fdoConfig); err != nil {
@@ -91,21 +79,18 @@ func stubRunE(t *testing.T, cmd *cobra.Command) {
 			if fdoConfig.Manufacturing == nil {
 				return fmt.Errorf("failed to find manufacturing config")
 			}
-			if err := fdoConfig.Manufacturing.HTTP.validate(); err != nil {
+			if err := fdoConfig.HTTP.validate(); err != nil {
 				return err
 			}
 		case ownerCmd:
 			if fdoConfig.Owner == nil {
 				return fmt.Errorf("failed to find Owner config")
 			}
-			if err := fdoConfig.Owner.HTTP.validate(); err != nil {
+			if err := fdoConfig.HTTP.validate(); err != nil {
 				return err
 			}
 		case rendezvousCmd:
-			if fdoConfig.Rendezvous == nil {
-				return fmt.Errorf("failed to find rendezvous config")
-			}
-			if err := fdoConfig.Rendezvous.HTTP.validate(); err != nil {
+			if err := fdoConfig.HTTP.validate(); err != nil {
 				return err
 			}
 		}
@@ -137,7 +122,8 @@ func writeYAMLConfig(t *testing.T, contents string) string {
 
 func TestManufacturing_LoadsFromTOMLConfig(t *testing.T) {
 	type expectedConfig struct {
-		address         string
+		ip              string
+		port            string
 		dbType          string
 		dbDSN           string
 		manufacturerKey string
@@ -154,22 +140,22 @@ func TestManufacturing_LoadsFromTOMLConfig(t *testing.T) {
 		{
 			name: "basic configuration",
 			config: `
-[manufacturing]
-private-key = "/path/to/mfg.key"
-owner-cert = "/path/to/owner.crt"
-[manufacturing.http]
-listen = "127.0.0.1:8081"
-ssl = false
-insecure-tls = true
-[manufacturing.database]
+[http]
+ip = "127.0.0.1"
+port = "8081"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/bar.db"
-[manufacturing.device-ca]
+[manufacturing]
+key = "/path/to/mfg.key"
+owner_cert = "/path/to/owner.crt"
+[manufacturing.device_ca]
 cert = "/path/to/device.ca"
 key = "/path/to/device.key"
 `,
 			expected: expectedConfig{
-				address:         "127.0.0.1:8081",
+				ip:              "127.0.0.1",
+				port:            "8081",
 				dbType:          "sqlite",
 				dbDSN:           "file:/tmp/bar.db",
 				manufacturerKey: "/path/to/mfg.key",
@@ -181,22 +167,22 @@ key = "/path/to/device.key"
 		{
 			name: "toml-specific configuration",
 			config: `
-[manufacturing]
-private-key = "/path/to/toml-mfg.key"
-owner-cert = "/path/to/toml-owner.crt"
-[manufacturing.http]
-listen = "127.0.0.1:8082"
-ssl = false
-insecure-tls = true
-[manufacturing.database]
+[http]
+ip = "127.0.0.1"
+port = "8082"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
-[manufacturing.device-ca]
+[manufacturing]
+key = "/path/to/toml-mfg.key"
+owner_cert = "/path/to/toml-owner.crt"
+[manufacturing.device_ca]
 cert = "/path/to/toml-device.ca"
 key = "/path/to/toml-device.key"
 `,
 			expected: expectedConfig{
-				address:         "127.0.0.1:8082",
+				ip:              "127.0.0.1",
+				port:            "8082",
 				dbType:          "sqlite",
 				dbDSN:           "file:/tmp/database.db",
 				manufacturerKey: "/path/to/toml-mfg.key",
@@ -224,14 +210,17 @@ key = "/path/to/toml-device.key"
 			}
 
 			cfg := capturedConfig.Manufacturing
-			if cfg.HTTP.Listen != tt.expected.address {
-				t.Fatalf("HTTP.Listen=%q, want %q", cfg.HTTP.Listen, tt.expected.address)
+			if capturedConfig.HTTP.IP != tt.expected.ip {
+				t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, tt.expected.ip)
 			}
-			if cfg.DB.Type != tt.expected.dbType {
-				t.Fatalf("DB.Type=%q, want %q", cfg.DB.DSN, tt.expected.dbType)
+			if capturedConfig.HTTP.Port != tt.expected.port {
+				t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, tt.expected.port)
 			}
-			if cfg.DB.DSN != tt.expected.dbDSN {
-				t.Fatalf("DB.Type=%q, want %q", cfg.DB.DSN, tt.expected.dbDSN)
+			if capturedConfig.DB.Type != tt.expected.dbType {
+				t.Fatalf("DB.Type=%q, want %q", capturedConfig.DB.Type, tt.expected.dbType)
+			}
+			if capturedConfig.DB.DSN != tt.expected.dbDSN {
+				t.Fatalf("DB.DSN=%q, want %q", capturedConfig.DB.DSN, tt.expected.dbDSN)
 			}
 			if cfg.ManufacturerKeyPath != tt.expected.manufacturerKey {
 				t.Fatalf("ManufacturerKeyPath=%q, want %q", cfg.ManufacturerKeyPath, tt.expected.manufacturerKey)
@@ -251,12 +240,12 @@ key = "/path/to/toml-device.key"
 
 func TestOwner_LoadsFromTOMLConfig(t *testing.T) {
 	type expectedOwnerConfig struct {
-		address         string
-		dbType          string
-		dbDSN           string
-		externalAddress string
-		deviceCACert    string
-		ownerKey        string
+		ip           string
+		port         string
+		dbType       string
+		dbDSN        string
+		deviceCACert string
+		ownerKey     string
 	}
 
 	tests := []struct {
@@ -267,51 +256,50 @@ func TestOwner_LoadsFromTOMLConfig(t *testing.T) {
 		{
 			name: "basic owner configuration",
 			config: `
-[owner]
-external-address = "0.0.0.0:8443"
-reuse-credentials = true
-device-ca-cert = "/path/to/owner.device.ca"
-owner-key = "/path/to/owner.key"
-[owner.http]
-listen = "127.0.0.1:8082"
-ssl = false
-insecure-tls = true
-[owner.database]
+[http]
+ip = "127.0.0.1"
+port = "8082"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[owner]
+reuse_credentials = true
+device_ca_cert = "/path/to/owner.device.ca"
+key = "/path/to/owner.key"
+to0_insecure_tls = false
 `,
 			expected: expectedOwnerConfig{
-				address:         "127.0.0.1:8082",
-				dbType:          "sqlite",
-				dbDSN:           "file:/tmp/database.db",
-				externalAddress: "0.0.0.0:8443",
-				deviceCACert:    "/path/to/owner.device.ca",
-				ownerKey:        "/path/to/owner.key",
+				ip:           "127.0.0.1",
+				port:         "8082",
+				dbType:       "sqlite",
+				dbDSN:        "file:/tmp/database.db",
+				deviceCACert: "/path/to/owner.device.ca",
+				ownerKey:     "/path/to/owner.key",
 			},
 		},
 		{
 			name: "toml-specific owner configuration",
 			config: `
-[owner]
-external-address = "0.0.0.0:8444"
-reuse-credentials = true
-device-ca-cert = "/path/to/toml-owner.device.ca"
-owner-key = "/path/to/toml-owner.key"
-[owner.http]
-listen = "127.0.0.1:8083"
-ssl = false
-insecure-tls = true
-[owner.database]
+[http]
+ip = "127.0.0.1"
+port = "8083"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[owner]
+external-address = "0.0.0.0:8444"
+reuse_credentials = true
+device_ca_cert = "/path/to/toml-owner.device.ca"
+key = "/path/to/toml-owner.key"
+to0_insecure_tls = false
 `,
 			expected: expectedOwnerConfig{
-				address:         "127.0.0.1:8083",
-				dbType:          "sqlite",
-				dbDSN:           "file:/tmp/database.db",
-				externalAddress: "0.0.0.0:8444",
-				deviceCACert:    "/path/to/toml-owner.device.ca",
-				ownerKey:        "/path/to/toml-owner.key",
+				ip:           "127.0.0.1",
+				port:         "8083",
+				dbType:       "sqlite",
+				dbDSN:        "file:/tmp/database.db",
+				deviceCACert: "/path/to/toml-owner.device.ca",
+				ownerKey:     "/path/to/toml-owner.key",
 			},
 		},
 	}
@@ -333,17 +321,17 @@ dsn = "file:/tmp/database.db"
 			}
 
 			cfg := capturedConfig.Owner
-			if cfg.HTTP.Listen != tt.expected.address {
-				t.Fatalf("HTTP.Listen=%q, want %q", cfg.HTTP.Listen, tt.expected.address)
+			if capturedConfig.HTTP.IP != tt.expected.ip {
+				t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, tt.expected.ip)
 			}
-			if cfg.DB.Type != tt.expected.dbType {
-				t.Fatalf("DB.Type=%q, want %q", cfg.DB.DSN, tt.expected.dbType)
+			if capturedConfig.HTTP.Port != tt.expected.port {
+				t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, tt.expected.port)
 			}
-			if cfg.DB.DSN != tt.expected.dbDSN {
-				t.Fatalf("DB.Type=%q, want %q", cfg.DB.DSN, tt.expected.dbDSN)
+			if capturedConfig.DB.Type != tt.expected.dbType {
+				t.Fatalf("DB.Type=%q, want %q", capturedConfig.DB.Type, tt.expected.dbType)
 			}
-			if cfg.ExternalAddress != tt.expected.externalAddress {
-				t.Fatalf("ExternalAddress=%q, want %q", cfg.ExternalAddress, tt.expected.externalAddress)
+			if capturedConfig.DB.DSN != tt.expected.dbDSN {
+				t.Fatalf("DB.DSN=%q, want %q", capturedConfig.DB.DSN, tt.expected.dbDSN)
 			}
 			if cfg.OwnerDeviceCACert != tt.expected.deviceCACert {
 				t.Fatalf("OwnerDeviceCACert=%q, want %q", cfg.OwnerDeviceCACert, tt.expected.deviceCACert)
@@ -363,12 +351,10 @@ func TestRendezvous_LoadsFromTOMLConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-[rendezvous]
-[rendezvous.http]
-listen = "127.0.0.1:8083"
-ssl = false
-insecure-tls = true
-[rendezvous.database]
+[http]
+ip = "127.0.0.1"
+port = "8083"
+[db]
 type = "postgres"
 dsn = "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid"
 `
@@ -379,19 +365,21 @@ dsn = "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous po
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+	if capturedConfig == nil {
 		t.Fatalf("rendezvous config not captured")
 	}
 
-	cfgObj := capturedConfig.Rendezvous
-	if cfgObj.HTTP.Listen != "127.0.0.1:8083" {
-		t.Fatalf("HTTP.Listen=%q, want %q", cfgObj.HTTP.Listen, "127.0.0.1:8083")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, "127.0.0.1")
 	}
-	if cfgObj.DB.Type != "postgres" {
-		t.Fatalf("DB.Type=%q, want %q", cfgObj.DB.Type, "postgres")
+	if capturedConfig.HTTP.Port != "8083" {
+		t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, "8083")
 	}
-	if cfgObj.DB.DSN != "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid" {
-		t.Fatalf("DB.DSN=%q, want %q", cfgObj.DB.DSN, "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid")
+	if capturedConfig.DB.Type != "postgres" {
+		t.Fatalf("DB.Type=%q, want %q", capturedConfig.DB.Type, "postgres")
+	}
+	if capturedConfig.DB.DSN != "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid" {
+		t.Fatalf("DB.DSN=%q, want %q", capturedConfig.DB.DSN, "host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid")
 	}
 }
 
@@ -400,13 +388,13 @@ func TestManufacturing_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
-[manufacturing]
-[manufacturing.http]
-listen = "1.2.3.4:1111"
-ssl = false
-[manufacturing.database]
+[http]
+ip = "1.2.3.4"
+port = "1111"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[manufacturing]
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path, "127.0.0.1:9090"})
@@ -420,8 +408,11 @@ dsn = "file:/tmp/database.db"
 	}
 
 	// The positional argument should override the config file value
-	if capturedConfig.Manufacturing.HTTP.Listen != "127.0.0.1:9090" {
-		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Manufacturing.HTTP.Listen, "127.0.0.1:9090")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, "127.0.0.1")
+	}
+	if capturedConfig.HTTP.Port != "9090" {
+		t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, "9090")
 	}
 }
 
@@ -430,13 +421,13 @@ func TestOwner_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
-[owner]
-[owner.http]
-listen = "1.2.3.4:1111"
-ssl = false
-[owner.database]
+[http]
+ip = "1.2.3.4"
+port = "1111"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[owner]
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path, "127.0.0.1:9191"})
@@ -450,8 +441,11 @@ dsn = "file:/tmp/database.db"
 	}
 
 	// The positional argument should override the config file value
-	if capturedConfig.Owner.HTTP.Listen != "127.0.0.1:9191" {
-		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Owner.HTTP.Listen, "127.0.0.1:9191")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, "127.0.0.1")
+	}
+	if capturedConfig.HTTP.Port != "9191" {
+		t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, "9191")
 	}
 }
 
@@ -460,11 +454,10 @@ func TestRendezvous_PositionalArgOverridesAddressInConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-[rendezvous]
-[rendezvous.http]
-listen = "1.2.3.4:1111"
-ssl = false
-[rendezvous.database]
+[http]
+ip = "1.2.3.4"
+port = "1111"
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
 `
@@ -475,13 +468,16 @@ dsn = "file:/tmp/database.db"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+	if capturedConfig == nil {
 		t.Fatalf("rendezvous config not captured")
 	}
 
 	// The positional argument should override the config file value
-	if capturedConfig.Rendezvous.HTTP.Listen != "127.0.0.1:9292" {
-		t.Fatalf("HTTP.Listen=%q, want %q", capturedConfig.Rendezvous.HTTP.Listen, "127.0.0.1:9292")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, "127.0.0.1")
+	}
+	if capturedConfig.HTTP.Port != "9292" {
+		t.Fatalf("HTTP.Port=%q, want %q", capturedConfig.HTTP.Port, "9292")
 	}
 }
 
@@ -490,16 +486,15 @@ func TestManufacturing_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
-[manufacturing]
-[manufacturing.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[manufacturing]
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path})
 
 	if err := rootCmd.Execute(); err == nil {
-		fmt.Printf("VIPER: %s\n", viper.GetString("manufacturing.http.listen"))
 		t.Fatalf("expected error for missing address")
 	}
 }
@@ -509,10 +504,10 @@ func TestOwner_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
-[owner]
-[owner.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[owner]
 `
 	path := writeTOMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path})
@@ -527,8 +522,7 @@ func TestRendezvous_ErrorWhenNoAddress(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-[rendezvous]
-[rendezvous.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
 `
@@ -578,17 +572,16 @@ func TestManufacturing_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8081"
+db:
+  type: "sqlite"
+  dsn: "file:test-yaml.db"
 manufacturing:
-  http:
-    listen: "127.0.0.1:8081"
-    ssl: false
-    insecure-tls: true
-  database:
-    path: "test-yaml.db"
-    password: "YamlPass123!"
-  private-key: "/path/to/yaml-mfg.key"
-  owner-cert: "/path/to/yaml-owner.crt"
-  device-ca:
+  key: "/path/to/yaml-mfg.key"
+  owner_cert: "/path/to/yaml-owner.crt"
+  device_ca:
     cert: "/path/to/yaml-device.ca"
     key: "/path/to/yaml-device.key"
 `
@@ -623,18 +616,17 @@ func TestOwner_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, ownerCmd)
 
 	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:test-owner-yaml.db"
 owner:
-  http:
-    listen: "127.0.0.1:8082"
-    ssl: false
-    insecure-tls: true
-  database:
-    path: "test-owner-yaml.db"
-    password: "OwnerYaml123!"
-  external-address: "0.0.0.0:8443"
-  device-ca-cert: "/path/to/yaml-owner.device.ca"
-  owner-key: "/path/to/yaml-owner.key"
-  reuse-credentials: true
+  device_ca_cert: "/path/to/yaml-owner.device.ca"
+  key: "/path/to/yaml-owner.key"
+  reuse_credentials: true
+  to0_insecure_tls: false
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path})
@@ -648,9 +640,6 @@ owner:
 	}
 
 	cfgObj := capturedConfig.Owner
-	if cfgObj.ExternalAddress != "0.0.0.0:8443" {
-		t.Fatalf("ExternalAddress=%q", cfgObj.ExternalAddress)
-	}
 	if cfgObj.OwnerDeviceCACert != "/path/to/yaml-owner.device.ca" {
 		t.Fatalf("OwnerDeviceCACert=%q", cfgObj.OwnerDeviceCACert)
 	}
@@ -667,14 +656,12 @@ func TestRendezvous_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, rendezvousCmd)
 
 	cfg := `
-rendezvous:
-  http:
-    listen: "127.0.0.1:8083"
-    ssl: false
-    insecure-tls: true
-  database:
-    type: "sqlite"
-    dsn: "file:test-rendezvous-yaml.db"
+http:
+  ip: "127.0.0.1"
+  port: "8083"
+db:
+  type: "sqlite"
+  dsn: "file:test-rendezvous-yaml.db"
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"rendezvous", "--config", path})
@@ -683,19 +670,21 @@ rendezvous:
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+	if capturedConfig == nil {
 		t.Fatalf("rendezvous config not captured")
 	}
 
-	cfgObj := capturedConfig.Rendezvous
-	if cfgObj.HTTP.Listen != "127.0.0.1:8083" {
-		t.Fatalf("HTTP.Listen=%q", cfgObj.HTTP.Listen)
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q", capturedConfig.HTTP.IP)
 	}
-	if cfgObj.DB.DSN != "file:test-rendezvous-yaml.db" {
-		t.Fatalf("DB.DSN=%q", cfgObj.DB.DSN)
+	if capturedConfig.HTTP.Port != "8083" {
+		t.Fatalf("HTTP.Port=%q", capturedConfig.HTTP.Port)
 	}
-	if cfgObj.DB.Type != "sqlite" {
-		t.Fatalf("DB.Type=%q", cfgObj.DB.Type)
+	if capturedConfig.DB.DSN != "file:test-rendezvous-yaml.db" {
+		t.Fatalf("DB.DSN=%q", capturedConfig.DB.DSN)
+	}
+	if capturedConfig.DB.Type != "sqlite" {
+		t.Fatalf("DB.Type=%q", capturedConfig.DB.Type)
 	}
 }
 
@@ -705,19 +694,18 @@ func TestManufacturing_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 
 	// Create a configuration file with specific values
 	cfg := `
-[manufacturing]
-private-key = "/config/mfg.key"
-owner-cert = "/config/owner.crt"
-[manufacturing.http]
-listen = "127.0.0.1:8081"
-ssl = false
-insecure-tls = true
+[http]
+ip = "127.0.0.1"
+port = "8081"
 cert = "/config/server.crt"
 key = "/config/server.key"
-[manufacturing.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
-[manufacturing.device-ca]
+[manufacturing]
+key = "/config/mfg.key"
+owner_cert = "/config/owner.crt"
+[manufacturing.device_ca]
 cert = "/config/device.ca"
 key = "/config/device.key"
 `
@@ -733,7 +721,6 @@ key = "/config/device.key"
 		"--device-ca-cert", "/cli/device.ca",
 		"--device-ca-key", "/cli/device.key",
 		"--db-dsn", "file:cli.db",
-		"--insecure-tls=false",
 		"--server-cert-path", "/cli/server.crt",
 		"--server-key-path", "/cli/server.key",
 	})
@@ -749,8 +736,11 @@ key = "/config/device.key"
 	cfgObj := capturedConfig.Manufacturing
 
 	// Verify that command-line values overrode config file values
-	if cfgObj.HTTP.Listen != "127.0.0.1:9090" {
-		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9090")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q (positional arg should override config)", capturedConfig.HTTP.IP, "127.0.0.1")
+	}
+	if capturedConfig.HTTP.Port != "9090" {
+		t.Fatalf("HTTP.Port=%q, want %q (positional arg should override config)", capturedConfig.HTTP.Port, "9090")
 	}
 	if cfgObj.ManufacturerKeyPath != "/cli/mfg.key" {
 		t.Fatalf("ManufacturerKeyPath=%q, want %q (CLI flag should override config)", cfgObj.ManufacturerKeyPath, "/cli/mfg.key")
@@ -764,20 +754,14 @@ key = "/config/device.key"
 	if cfgObj.DeviceCACert.KeyPath != "/cli/device.key" {
 		t.Fatalf("DeviceCACert.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.DeviceCACert.KeyPath, "/cli/device.key")
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if capturedConfig.DB.DSN != "file:cli.db" {
+		t.Fatalf("DB.DSN=%q, want %q (CLI flag should override config)", capturedConfig.DB.DSN, "file:cli.db")
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if capturedConfig.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.CertPath, "/cli/server.crt")
 	}
-	if cfgObj.HTTP.InsecureTLS != false {
-		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
-	}
-	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
-		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
-	}
-	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
-		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
+	if capturedConfig.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.KeyPath, "/cli/server.key")
 	}
 }
 
@@ -787,20 +771,19 @@ func TestOwner_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 
 	// Create a configuration file with specific values
 	cfg := `
-[owner]
-external-address = "0.0.0.0:8443"
-device-ca-cert = "/config/owner.device.ca"
-owner-key = "/config/owner.key"
-reuse-credentials = true
-[owner.http]
-listen = "127.0.0.1:8082"
-ssl = false
-insecure-tls = true
+[http]
+ip = "127.0.0.1"
+port = "8082"
 cert = "/config/server.crt"
 key = "/config/server.key"
-[owner.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[owner]
+device_ca_cert = "/config/owner.device.ca"
+key = "/config/owner.key"
+reuse_credentials = true
+to0_insecure_tls = true
 `
 	path := writeTOMLConfig(t, cfg)
 
@@ -809,12 +792,11 @@ dsn = "file:/tmp/database.db"
 		"owner",
 		"--config", path,
 		"127.0.0.1:9091", // positional argument for listen address
-		"--external-address", "0.0.0.0:9443",
 		"--device-ca-cert", "/cli/owner.device.ca",
 		"--owner-key", "/cli/owner.key",
 		"--reuse-credentials=false",
 		"--db-dsn", "file:cli.db",
-		"--insecure-tls=false",
+		"--to0-insecure-tls=false",
 		"--server-cert-path", "/cli/server.crt",
 		"--server-key-path", "/cli/server.key",
 	})
@@ -830,11 +812,11 @@ dsn = "file:/tmp/database.db"
 	cfgObj := capturedConfig.Owner
 
 	// Verify that command-line values overrode config file values
-	if cfgObj.HTTP.Listen != "127.0.0.1:9091" {
-		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9091")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q (positional arg should override config)", capturedConfig.HTTP.IP, "127.0.0.1")
 	}
-	if cfgObj.ExternalAddress != "0.0.0.0:9443" {
-		t.Fatalf("ExternalAddress=%q, want %q (CLI flag should override config)", cfgObj.ExternalAddress, "0.0.0.0:9443")
+	if capturedConfig.HTTP.Port != "9091" {
+		t.Fatalf("HTTP.Port=%q, want %q (positional arg should override config)", capturedConfig.HTTP.Port, "9091")
 	}
 	if cfgObj.OwnerDeviceCACert != "/cli/owner.device.ca" {
 		t.Fatalf("OwnerDeviceCACert=%q, want %q (CLI flag should override config)", cfgObj.OwnerDeviceCACert, "/cli/owner.device.ca")
@@ -845,20 +827,17 @@ dsn = "file:/tmp/database.db"
 	if cfgObj.ReuseCred != false {
 		t.Fatalf("ReuseCred=%v, want %v (CLI flag should override config)", cfgObj.ReuseCred, false)
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if capturedConfig.DB.DSN != "file:cli.db" {
+		t.Fatalf("DB.DSN=%q, want %q (CLI flag should override config)", capturedConfig.DB.DSN, "file:cli.db")
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if cfgObj.TO0InsecureTLS != false {
+		t.Fatalf("Owner.TO0InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.TO0InsecureTLS, false)
 	}
-	if cfgObj.HTTP.InsecureTLS != false {
-		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
+	if capturedConfig.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.CertPath, "/cli/server.crt")
 	}
-	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
-		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
-	}
-	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
-		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
+	if capturedConfig.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.KeyPath, "/cli/server.key")
 	}
 }
 
@@ -868,14 +847,12 @@ func TestRendezvous_CommandLineFlagsOverrideConfigFile(t *testing.T) {
 
 	// Create a configuration file with specific values
 	cfg := `
-[rendezvous]
-[rendezvous.http]
-listen = "127.0.0.1:8083"
-ssl = false
-insecure-tls = true
+[http]
+ip = "127.0.0.1"
+port = "8083"
 cert = "/config/server.crt"
 key = "/config/server.key"
-[rendezvous.database]
+[db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
 `
@@ -887,7 +864,6 @@ dsn = "file:/tmp/database.db"
 		"--config", path,
 		"127.0.0.1:9092", // positional argument for listen address
 		"--db-dsn", "file:cli.db",
-		"--insecure-tls=false",
 		"--server-cert-path", "/cli/server.crt",
 		"--server-key-path", "/cli/server.key",
 	})
@@ -896,29 +872,24 @@ dsn = "file:/tmp/database.db"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Rendezvous == nil {
+	if capturedConfig == nil {
 		t.Fatalf("rendezvous config not captured")
 	}
 
-	cfgObj := capturedConfig.Rendezvous
-
 	// Verify that command-line values overrode config file values
-	if cfgObj.HTTP.Listen != "127.0.0.1:9092" {
-		t.Fatalf("HTTP.Listen=%q, want %q (positional arg should override config)", cfgObj.HTTP.Listen, "127.0.0.1:9092")
+	if capturedConfig.HTTP.IP != "127.0.0.1" {
+		t.Fatalf("HTTP.IP=%q, want %q (positional arg should override config)", capturedConfig.HTTP.IP, "127.0.0.1")
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if capturedConfig.HTTP.Port != "9092" {
+		t.Fatalf("HTTP.Port=%q, want %q (positional arg should override config)", capturedConfig.HTTP.Port, "9092")
 	}
-	if cfgObj.DB.DSN != "file:cli.db" {
-		t.Fatalf("DB.Type=%q, want %q (CLI flag should override config)", cfgObj.DB.DSN, "file:cli.db")
+	if capturedConfig.DB.DSN != "file:cli.db" {
+		t.Fatalf("DB.DSN=%q, want %q (CLI flag should override config)", capturedConfig.DB.DSN, "file:cli.db")
 	}
-	if cfgObj.HTTP.InsecureTLS != false {
-		t.Fatalf("HTTP.InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.HTTP.InsecureTLS, false)
+	if capturedConfig.HTTP.CertPath != "/cli/server.crt" {
+		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.CertPath, "/cli/server.crt")
 	}
-	if cfgObj.HTTP.CertPath != "/cli/server.crt" {
-		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.CertPath, "/cli/server.crt")
-	}
-	if cfgObj.HTTP.KeyPath != "/cli/server.key" {
-		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.HTTP.KeyPath, "/cli/server.key")
+	if capturedConfig.HTTP.KeyPath != "/cli/server.key" {
+		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.KeyPath, "/cli/server.key")
 	}
 }
