@@ -44,7 +44,7 @@ var rendezvousCmd = &cobra.Command{
 			return err
 		}
 
-		return serveRendezvous(state, insecureTLS)
+		return serveRendezvous(state)
 	},
 }
 
@@ -57,8 +57,8 @@ type RendezvousServer struct {
 }
 
 // NewServer creates a new Server
-func NewRendezvousServer(addr string, extAddr string, handler http.Handler, useTLS bool) *RendezvousServer {
-	return &RendezvousServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
+func NewRendezvousServer(addr string, extAddr string, handler http.Handler) *RendezvousServer {
+	return &RendezvousServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS()}
 }
 
 // Start starts the HTTP server
@@ -118,7 +118,7 @@ type RendezvousServerState struct {
 	DB *db.State
 }
 
-func serveRendezvous(dbState *db.State, useTLS bool) error {
+func serveRendezvous(dbState *db.State) error {
 	state := &RendezvousServerState{
 		DB: dbState,
 	}
@@ -137,7 +137,7 @@ func serveRendezvous(dbState *db.State, useTLS bool) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
 
 	// Listen and serve
-	server := NewRendezvousServer(address, externalAddress, httpHandler, useTLS)
+	server := NewRendezvousServer(address, externalAddress, httpHandler)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
