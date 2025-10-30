@@ -1,4 +1,7 @@
 LISTEN_IP="0.0.0.0"
 LISTEN_PORT="8041"
+ADDITIONAL_OPTS=""
 DATABASE_TYPE="sqlite"
 DATABASE_DSN="file:/var/lib/go-fdo-server-rendezvous/db.sqlite"
+# Example to enable TLS:
+# ADDITIONAL_OPTS="--server-cert-path=/etc/go-fdo-server/rendezvous-http.crt --server-key-path=/etc/go-fdo-server/rendezvous-http.key"

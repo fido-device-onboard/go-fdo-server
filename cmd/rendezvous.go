@@ -44,21 +44,20 @@ var rendezvousCmd = &cobra.Command{
 			return err
 		}
 
-		return serveRendezvous(state, insecureTLS)
+		return serveRendezvous(state)
 	},
 }
 
 // Server represents the HTTP server
 type RendezvousServer struct {
 	addr    string
-	extAddr string
 	handler http.Handler
 	useTLS  bool
 }
 
 // NewServer creates a new Server
-func NewRendezvousServer(addr string, extAddr string, handler http.Handler, useTLS bool) *RendezvousServer {
-	return &RendezvousServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
+func NewRendezvousServer(addr string, handler http.Handler) *RendezvousServer {
+	return &RendezvousServer{addr: addr, handler: handler, useTLS: useTLS()}
 }
 
 // Start starts the HTTP server
@@ -91,7 +90,7 @@ func (s *RendezvousServer) Start() error {
 		return err
 	}
 	defer func() { _ = lis.Close() }()
-	slog.Info("Listening", "local", lis.Addr().String(), "external", s.extAddr)
+	slog.Info("Listening", "local", lis.Addr().String(), "external", s.addr)
 
 	if s.useTLS {
 		preferredCipherSuites := []uint16{
@@ -118,7 +117,7 @@ type RendezvousServerState struct {
 	DB *db.State
 }
 
-func serveRendezvous(dbState *db.State, useTLS bool) error {
+func serveRendezvous(dbState *db.State) error {
 	state := &RendezvousServerState{
 		DB: dbState,
 	}
@@ -137,7 +136,7 @@ func serveRendezvous(dbState *db.State, useTLS bool) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
 
 	// Listen and serve
-	server := NewRendezvousServer(address, externalAddress, httpHandler, useTLS)
+	server := NewRendezvousServer(address, httpHandler)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()

@@ -37,7 +37,9 @@ manufacturer_pub="${manufacturer_key/\.key/.pub}"
 #shellcheck disable=SC2034
 manufacturer_subj="/C=US/O=FDO/CN=Manufacturer"
 manufacturer_service="${manufacturer_dns}:${manufacturer_port}"
-manufacturer_url="http://${manufacturer_service}"
+# Default per-service protocol; caller may override
+manufacturer_protocol=http
+manufacturer_url="${manufacturer_protocol}://${manufacturer_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
 manufacturer_health_url="${manufacturer_url}/health"
@@ -51,7 +53,9 @@ rendezvous_port=8041
 rendezvous_pid_file="${pid_dir}/rendezvous.pid"
 rendezvous_log="${logs_dir}/${rendezvous_dns}.log"
 rendezvous_service="${rendezvous_dns}:${rendezvous_port}"
-rendezvous_url="http://${rendezvous_service}"
+# Default per-service protocol; caller may override
+rendezvous_protocol=http
+rendezvous_url="${rendezvous_protocol}://${rendezvous_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
 rendezvous_health_url="${rendezvous_url}/health"
@@ -72,12 +76,27 @@ owner_pub="${owner_key/\.key/.pub}"
 #shellcheck disable=SC2034
 owner_subj="/C=US/O=FDO/CN=Owner"
 owner_service="${owner_dns}:${owner_port}"
-owner_url="http://${owner_service}"
+# Default per-service protocol; caller may override
+owner_protocol=http
+owner_url="${owner_protocol}://${owner_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
 owner_health_url="${owner_url}/health"
 #shellcheck disable=SC2034
 owner_ov="${base_dir}/owner.ov"
+
+# Define HTTPS certificate subjects per service (passed down to cert generator)
+manufacturer_https_subj="/C=US/O=FDO/CN=manufacturer"
+rendezvous_https_subj="/C=US/O=FDO/CN=rendezvous"
+owner_https_subj="/C=US/O=FDO/CN=owner"
+
+# HTTPS transport cert paths
+manufacturer_https_key="${certs_dir}/manufacturer-http.key"
+manufacturer_https_crt="${certs_dir}/manufacturer-http.crt"
+rendezvous_https_key="${certs_dir}/rendezvous-http.key"
+rendezvous_https_crt="${certs_dir}/rendezvous-http.crt"
+owner_https_key="${certs_dir}/owner-http.key"
+owner_https_crt="${certs_dir}/owner-http.crt"
 
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
@@ -157,9 +176,10 @@ wait_for_url() {
   local -r interval=2
   local -r max_retries=5
   local url=$1
+  echo "url: ${url}"
   echo -n "❓ Waiting for ${url} to be healthy "
   while true; do
-    [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
+    [[ "$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
     status=$?
     ((retry += 1))
     if [ $retry -gt $max_retries ]; then
@@ -199,7 +219,7 @@ run_go_fdo_client() {
 
 run_device_initialization() {
   [ ! -f "${device_credentials}" ] || rm -f "${device_credentials}"
-  run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256
+  run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256 --insecure-tls=true
 }
 
 get_device_guid() {
@@ -213,7 +233,7 @@ get_device_onboard_log() {
 run_fido_device_onboard() {
   log="$(get_device_onboard_log)"
   >"${log}"
-  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 "$@" | tee "${log}"
+  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee "${log}"
   find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
 
@@ -231,21 +251,36 @@ run_go_fdo_server() {
 }
 
 start_service_manufacturer() {
+  local extra_opts=()
+  if [ "${manufacturer_protocol}" = "https" ]; then
+    extra_opts+=(--server-cert-path "${manufacturer_https_crt}" --server-key-path "${manufacturer_https_key}")
+  fi
   run_go_fdo_server manufacturing ${manufacturer_service} manufacturer ${manufacturer_pid_file} ${manufacturer_log} \
     --manufacturing-key="${manufacturer_key}" \
     --owner-cert="${owner_crt}" \
     --device-ca-cert="${device_ca_crt}" \
-    --device-ca-key="${device_ca_key}"
+    --device-ca-key="${device_ca_key}" \
+    "${extra_opts[@]}"
 }
 
 start_service_rendezvous() {
-  run_go_fdo_server rendezvous ${rendezvous_service} rendezvous ${rendezvous_pid_file} ${rendezvous_log}
+  local extra_opts=()
+  if [ "${rendezvous_protocol}" = "https" ]; then
+    extra_opts+=(--server-cert-path "${rendezvous_https_crt}" --server-key-path "${rendezvous_https_key}")
+  fi
+  run_go_fdo_server rendezvous ${rendezvous_service} rendezvous ${rendezvous_pid_file} ${rendezvous_log} \
+    "${extra_opts[@]}"
 }
 
 start_service_owner() {
+  local extra_opts=()
+  if [ "${owner_protocol}" = "https" ]; then
+    extra_opts+=(--server-cert-path "${owner_https_crt}" --server-key-path "${owner_https_key}")
+  fi
   run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
     --owner-key="${owner_key}" \
-    --device-ca-cert="${device_ca_crt}"
+    --device-ca-cert="${device_ca_crt}" \
+    "${extra_opts[@]}"
 }
 
 start_service() {
@@ -321,15 +356,16 @@ set_or_update_rendezvous_info() {
   local rendezvous_service_name=$2
   local rendezvous_dns=$3
   local rendezvous_port=$4
+  
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
   if [ -z "$(get_rendezvous_info "${manufacturer_url}")" ]; then
     echo "🚧 'RendezvousInfo' not found, creating it..."
-    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}"
+    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   else
     echo "⚙ 'RendezvousInfo; found, updating it..."
-    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}"
+    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   fi
   echo
 }
@@ -350,24 +386,15 @@ set_or_update_owner_redirect_info() {
   local owner_service_name=$2
   local owner_dns=$3
   local owner_port=$4
-  # TransportProtocol /= (
-  #     ProtTCP:    1,     ;; bare TCP stream
-  #     ProtTLS:    2,     ;; bare TLS stream
-  #     ProtHTTP:   3,
-  #     ProtCoAP:   4,
-  #     ProtHTTPS:  5,
-  #     ProtCoAPS:  6,
-  # )
-  local tprotocol=${5:-http}
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   echo "❓ Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
   if [ -z "$(get_owner_redirect_info "${owner_url}")" ]; then
     echo "🚧 'RVTO2Addr' not found, creating it..."
-    set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${tprotocol}"
+    set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   else
     echo "⚙ 'RVTO2Addr' found, updating it..."
-    update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${tprotocol}"
+    update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   fi
   echo
 }

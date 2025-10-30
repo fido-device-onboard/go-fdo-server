@@ -1,6 +1,9 @@
 LISTEN_IP="0.0.0.0"
 LISTEN_PORT="8043"
+ADDITIONAL_OPTS=""
 DATABASE_TYPE="sqlite"
 DATABASE_DSN="file:/var/lib/go-fdo-server-owner/db.sqlite"
 OWNER_KEY="/etc/go-fdo-server/owner.key"
 DEVICE_CA_CRT="/etc/go-fdo-server/device-ca.crt"
+# Example to enable TLS:
+# ADDITIONAL_OPTS="--server-cert-path=/etc/go-fdo-server/owner-http.crt --server-key-path=/etc/go-fdo-server/owner-http.key"

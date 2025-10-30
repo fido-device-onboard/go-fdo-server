@@ -7,7 +7,11 @@ Type=simple
 PrivateDevices=yes
 CacheDirectory=go-fdo-server-rendezvous
 StateDirectory=go-fdo-server-rendezvous
-ExecStart=/usr/bin/go-fdo-server --db-type ${DATABASE_TYPE} --db-dsn ${DATABASE_DSN} rendezvous ${LISTEN_IP}:${LISTEN_PORT}
+ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server \
+                                 --db-type ${DATABASE_TYPE} \
+                                 --db-dsn ${DATABASE_DSN} \
+                                 ${ADDITIONAL_OPTS} \
+                                 rendezvous ${LISTEN_IP}:${LISTEN_PORT}'
 User=go-fdo-server-rendezvous
 
 EnvironmentFile=-/etc/sysconfig/go-fdo-server-rendezvous

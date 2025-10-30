@@ -169,3 +169,18 @@ Cleanup:
 ```bash
 rm -rf /tmp/fdo
 ```
+
+## TLS configuration
+
+1. Generate key and certificate for the server
+
+```bash
+openssl ecparam -genkey -name prime256v1 -out server.key
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650 -subj "/C=US/O=Example/CN=example"
+```
+
+2. Run go-fdo-server
+
+```bash
+go-fdo-server --server-cert-path <cert-path> --server-key-path <key-path> ...
+```

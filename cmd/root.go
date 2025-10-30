@@ -24,7 +24,6 @@ var (
 	dbDSN          string
 	debug          bool
 	logLevel       slog.LevelVar
-	insecureTLS    bool
 	serverCertPath string
 	serverKeyPath  string
 )
@@ -65,9 +64,13 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dbType, "db-type", "sqlite", "Database type (sqlite or postgres)")
 	rootCmd.PersistentFlags().StringVar(&dbDSN, "db-dsn", "", "Database DSN (connection string)")
 	rootCmd.MarkPersistentFlagRequired("db-dsn")
-	rootCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
 	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
 	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
+}
+
+// useTLS returns true if both server cert and key paths are provided
+func useTLS() bool {
+	return serverCertPath != "" && serverKeyPath != ""
 }
 
 func getDBConfig() (string, string, error) {

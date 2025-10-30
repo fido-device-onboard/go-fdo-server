@@ -84,7 +84,7 @@ var ownerCmd = &cobra.Command{
 		// }
 		// port := uint16(portNum)
 
-		return serveOwner(state, insecureTLS)
+		return serveOwner(state)
 	},
 }
 
@@ -97,8 +97,8 @@ type OwnerServer struct {
 }
 
 // NewServer creates a new Server
-func NewOwnerServer(addr string, extAddr string, handler http.Handler, useTLS bool) *OwnerServer {
-	return &OwnerServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS}
+func NewOwnerServer(addr string, extAddr string, handler http.Handler) *OwnerServer {
+	return &OwnerServer{addr: addr, extAddr: extAddr, handler: handler, useTLS: useTLS()}
 }
 
 // Start starts the HTTP server
@@ -191,7 +191,7 @@ func getOwnerServerState(dbState *db.State) (*OwnerServerState, error) {
 	}, nil
 }
 
-func serveOwner(dbState *db.State, useTLS bool) error {
+func serveOwner(dbState *db.State) error {
 	state, err := getOwnerServerState(dbState)
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func serveOwner(dbState *db.State, useTLS bool) error {
 	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&handlers.To0HandlerState{
 		VoucherState: state.DB,
 		KeyState:     state,
-		UseTLS:       useTLS,
+		UseTLS:       useTLS(),
 	}))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
@@ -229,7 +229,7 @@ func serveOwner(dbState *db.State, useTLS bool) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewOwnerServer(address, externalAddress, httpHandler, useTLS)
+	server := NewOwnerServer(address, externalAddress, httpHandler)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()
@@ -367,7 +367,6 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 func init() {
 	rootCmd.AddCommand(ownerCmd)
 
-	// serveCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
 	ownerCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
 	ownerCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
 	ownerCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
@@ -376,5 +375,5 @@ func init() {
 	ownerCmd.Flags().BoolVar(&reuseCred, "reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
 	ownerCmd.Flags().StringVar(&ownerDeviceCACert, "device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().StringVar(&ownerPrivateKey, "owner-key", "", "Owner private key path")
-	manufacturingCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default \"127.0.0.1:${LISTEN_PORT}\")")
+	ownerCmd.Flags().StringVar(&externalAddress, "external-address", "", "External `addr`ess devices should connect to (default to the listening address)")
 }
