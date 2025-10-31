@@ -159,7 +159,7 @@ wait_for_url() {
   local url=$1
   echo -n "❓ Waiting for ${url} to be healthy "
   while true; do
-    [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
+    [[ "$(curl --silent ${CURL_INSECURE_FLAG} --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
     status=$?
     ((retry += 1))
     if [ $retry -gt $max_retries ]; then
@@ -199,7 +199,8 @@ run_go_fdo_client() {
 
 run_device_initialization() {
   [ ! -f "${device_credentials}" ] || rm -f "${device_credentials}"
-  run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256
+  local insecure_tls="${USE_TLS:-false}"
+  run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256 --insecure-tls=${insecure_tls}
 }
 
 get_device_guid() {
@@ -213,7 +214,8 @@ get_device_onboard_log() {
 run_fido_device_onboard() {
   log="$(get_device_onboard_log)"
   >"${log}"
-  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 "$@" | tee "${log}"
+  local insecure_tls="${USE_TLS:-false}"
+  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=${insecure_tls} "$@" | tee "${log}"
   find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
 
@@ -321,15 +323,22 @@ set_or_update_rendezvous_info() {
   local rendezvous_service_name=$2
   local rendezvous_dns=$3
   local rendezvous_port=$4
+  
+  # Determine protocol based on USE_TLS
+  local rendezvous_protocol="http"
+  if [ "${USE_TLS:-false}" = "true" ]; then
+    rendezvous_protocol="https"
+  fi
+  
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
   if [ -z "$(get_rendezvous_info "${manufacturer_url}")" ]; then
     echo "🚧 'RendezvousInfo' not found, creating it..."
-    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}"
+    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   else
     echo "⚙ 'RendezvousInfo; found, updating it..."
-    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}"
+    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   fi
   echo
 }
@@ -358,7 +367,13 @@ set_or_update_owner_redirect_info() {
   #     ProtHTTPS:  5,
   #     ProtCoAPS:  6,
   # )
-  local tprotocol=${5:-http}
+  
+  # Determine protocol based on USE_TLS
+  local tprotocol="http"
+  if [ "${USE_TLS:-false}" = "true" ]; then
+    tprotocol="https"
+  fi
+  
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   echo "❓ Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"

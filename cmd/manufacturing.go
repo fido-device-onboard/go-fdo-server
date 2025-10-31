@@ -60,7 +60,7 @@ var manufacturingCmd = &cobra.Command{
 			return err
 		}
 
-		return serveManufacturing(state, insecureTLS)
+		return serveManufacturing(state)
 	},
 }
 
@@ -72,8 +72,8 @@ type ManufacturingServer struct {
 }
 
 // NewServer creates a new Server
-func NewManufacturingServer(addr string, handler http.Handler, useTLS bool) *ManufacturingServer {
-	return &ManufacturingServer{addr: addr, handler: handler, useTLS: useTLS}
+func NewManufacturingServer(addr string, handler http.Handler) *ManufacturingServer {
+	return &ManufacturingServer{addr: addr, handler: handler, useTLS: useTLS()}
 }
 
 // Start starts the HTTP server
@@ -129,7 +129,7 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(dbState *db.State, useTLS bool) error {
+func serveManufacturing(dbState *db.State) error {
 	mfgKey, err := parsePrivateKey(manufacturerKeyPath)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func serveManufacturing(dbState *db.State, useTLS bool) error {
 	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewManufacturingServer(address, httpHandler, useTLS)
+	server := NewManufacturingServer(address, httpHandler)
 
 	slog.Debug("Starting server on:", "addr", address)
 	return server.Start()

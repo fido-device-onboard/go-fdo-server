@@ -1,5 +1,6 @@
 LISTEN_IP="0.0.0.0"
 LISTEN_PORT="8043"
+TLS_OPTS=""
 DATABASE_TYPE="sqlite"
 DATABASE_DSN="file:/var/lib/go-fdo-server-owner/db.sqlite"
 OWNER_KEY="/etc/go-fdo-server/owner.key"
