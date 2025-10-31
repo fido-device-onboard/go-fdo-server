@@ -35,7 +35,11 @@ SOURCE_DIR                 := $(CURDIR)/build/package/rpm
 SOURCE_TARBALL_FILENAME    := go-fdo-server-$(VERSION).tar.gz
 SOURCE_TARBALL             := $(SOURCE_DIR)/${SOURCE_TARBALL_FILENAME}
 $(SOURCE_TARBALL):
-	git archive --prefix=go-fdo-server-$(VERSION)/ --format=tar.gz HEAD > $(SOURCE_TARBALL)
+	@echo "Creating source tarball with vendor/ directory..."
+	rm -rf vendor; \
+	go mod vendor; \
+	git ls-files | tar --transform='s,^,go-fdo-server-$(VERSION)/,' -czf - -T - vendor/ > $(SOURCE_TARBALL); \
+	rm -rf vendor
 
 .PHONY: source-tarball
 source-tarball: $(SOURCE_TARBALL)
@@ -155,13 +159,14 @@ rpm: $(RPMBUILD_SPECFILE) $(RPMBUILD_TARBALL) $(RPMBUILD_GOLANG_VENDOR_TOOLS_FIL
 #
 
 .PHONY: packit-create-archive
-packit-create-archive: $(SOURCE_TARBALL) $(VENDOR_TARBALL)
+packit-create-archive: $(SOURCE_TARBALL)
 	ls -1 $(SOURCE_TARBALL)
 
 .PHONY: clean
 clean:
 	rm -rf $(RPMBUILD_TOP_DIR)
 	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.{gz,bz2}
+	rm -rf vendor
 
 # Default target
 all: build test
