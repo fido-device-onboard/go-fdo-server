@@ -6,8 +6,6 @@ files_to_sync:
   - src:
       - ".packit.yaml"
       - "build/package/rpm/go-fdo-server.spec"
-      - "build/package/rpm/go-vendor-tools.toml"
-      - "build/package/rpm/go-fdo-server-*-vendor.tar.bz2"
     dest: .
 
 upstream_package_name: go-fdo-server
@@ -24,8 +22,6 @@ srpm_build_deps:
   - gcc
   - glibc-devel
   - golang
-  - go-vendor-tools
-  - python3-tomlkit
 
 packages:
   go-fdo-server-fedora:
@@ -126,14 +122,7 @@ jobs:
     packages: [go-fdo-server-centos]
     trigger: pull_request
     targets:
-      epel-9:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-9-$basearch/
-        additional_packages:
-          - golang
-      epel-10:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-10-$basearch/
+      centos-stream-10:
         additional_packages:
           - golang
 
@@ -151,5 +140,4 @@ jobs:
     tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-centos]
     targets:
-      - epel-9
-      - epel-10
+      - centos-stream-10
