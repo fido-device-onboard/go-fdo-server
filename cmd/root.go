@@ -11,22 +11,24 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
 )
 
 var (
-	dbType         string
-	dbDSN          string
-	debug          bool
-	logLevel       slog.LevelVar
-	insecureTLS    bool
-	serverCertPath string
-	serverKeyPath  string
+	debug             bool
+	logLevel          slog.LevelVar
+	configSearchPaths = []string{ // searched starting with index 0
+		"$HOME/.config/go-fdo-server/",
+		"/etc/go-fdo-server/",
+		"/usr/share/go-fdo-server/",
+	}
 )
 
 var rootCmd = &cobra.Command{
@@ -40,10 +42,66 @@ var rootCmd = &cobra.Command{
 
 	The server also provides APIs to interact with the various servers implementations.
 `,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// bootstrap debug logging early to include configuration loading
+		debug, _ = cmd.Flags().GetBool("debug")
 		if debug {
 			logLevel.Set(slog.LevelDebug)
 		}
+
+		configFilePath, err := cmd.Flags().GetString("config")
+		if err != nil {
+			return fmt.Errorf("failed to get config flag: %w", err)
+		}
+		if configFilePath != "" {
+			slog.Debug("Loading server configuration file", "path", configFilePath)
+			viper.SetConfigFile(configFilePath)
+			err = viper.ReadInConfig()
+			if err != nil {
+				return fmt.Errorf("configuration file read failed: %w", err)
+			}
+		} else {
+			filename := cmd.Name() // base filename, no suffix e.g. "manufacturing"
+			viper.SetConfigName(filename)
+			for _, path := range configSearchPaths {
+				viper.AddConfigPath(path)
+			}
+			err = viper.ReadInConfig()
+			if err != nil {
+				if errors.As(err, &viper.ConfigFileNotFoundError{}) {
+					// Config file not found is acceptable - try command-line flags
+					slog.Info("no configuration file not found")
+				} else {
+					return fmt.Errorf("configuration file read failed: %w", err)
+				}
+			}
+		}
+
+		if !debug { // CLI --debug flag takes precedence
+			logLevelStr := strings.ToLower(viper.GetString("log.level"))
+			switch logLevelStr {
+			case "debug":
+				logLevel.Set(slog.LevelDebug)
+			case "info":
+				logLevel.Set(slog.LevelInfo)
+			case "warn":
+				logLevel.Set(slog.LevelWarn)
+			case "error":
+				logLevel.Set(slog.LevelError)
+			}
+		}
+
+		// Parse HTTP address from positional argument if provided
+		if len(args) > 0 {
+			ip, port, err := parseHTTPAddress(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid http_address: %w", err)
+			}
+			viper.Set("http.ip", ip)
+			viper.Set("http.port", port)
+		}
+
+		return nil
 	},
 }
 
@@ -56,32 +114,38 @@ func Execute() {
 	}
 }
 
-func init() {
-	slog.SetDefault(slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
-		Level: &logLevel,
-	})))
-
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print debug contents")
-	rootCmd.PersistentFlags().StringVar(&dbType, "db-type", "sqlite", "Database type (sqlite or postgres)")
-	rootCmd.PersistentFlags().StringVar(&dbDSN, "db-dsn", "", "Database DSN (connection string)")
-	rootCmd.MarkPersistentFlagRequired("db-dsn")
-	rootCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure-tls", false, "Listen with a self-signed TLS certificate")
-	rootCmd.PersistentFlags().StringVar(&serverCertPath, "server-cert-path", "", "Path to server certificate")
-	rootCmd.PersistentFlags().StringVar(&serverKeyPath, "server-key-path", "", "Path to server private key")
+// Setup the root command line. Used by the unit tests to reset state between tests.
+func rootCmdInit() {
+	rootCmd.PersistentFlags().String("config", "", "Pathname of the configuration file")
+	rootCmd.PersistentFlags().Bool("debug", false, "Enable verbose debug logging")
+	rootCmd.PersistentFlags().String("db-type", "sqlite", "Database type (sqlite or postgres)")
+	rootCmd.PersistentFlags().String("db-dsn", "", "Database DSN (connection string)")
+	rootCmd.PersistentFlags().String("server-cert-path", "", "Path to server certificate")
+	rootCmd.PersistentFlags().String("server-key-path", "", "Path to server private key")
+	if err := viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("db.type", rootCmd.PersistentFlags().Lookup("db-type")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("db.dsn", rootCmd.PersistentFlags().Lookup("db-dsn")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("http.cert", rootCmd.PersistentFlags().Lookup("server-cert-path")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("http.key", rootCmd.PersistentFlags().Lookup("server-key-path")); err != nil {
+		panic(err)
+	}
 }
 
-func getDBConfig() (string, string, error) {
-	if dbDSN == "" {
-		return "", "", errors.New("db-dsn flag is required")
-	}
-
-	// Validate database type
-	normalizedType := strings.ToLower(dbType)
-	if normalizedType != "sqlite" && normalizedType != "postgres" {
-		return "", "", fmt.Errorf("unsupported database type: %s (must be 'sqlite' or 'postgres')", dbType)
-	}
-
-	return normalizedType, dbDSN, nil
+func init() {
+	rootLogger := slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
+		Level: &logLevel,
+	}))
+	slog.SetDefault(rootLogger)
+	viper.SetOptions(viper.WithLogger(rootLogger))
+	rootCmdInit()
 }
 
 func parsePrivateKey(keyPath string) (crypto.Signer, error) {
@@ -127,4 +191,21 @@ func getPrivateKeyType(key any) (protocol.KeyType, error) {
 		}
 	}
 	return 0, fmt.Errorf("unsupported key provided")
+}
+
+// parseHTTPAddress parses an address string in the format "host:port" and returns
+// the host and port components. Supports IPv4, IPv6 addresses, and DNS names.
+// Returns an error if the format is invalid.
+func parseHTTPAddress(addr string) (ip, port string, err error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid address format: %w", err)
+	}
+	if host == "" {
+		return "", "", fmt.Errorf("invalid address format: host cannot be empty")
+	}
+	if portStr == "" {
+		return "", "", fmt.Errorf("invalid address format: port cannot be empty")
+	}
+	return host, portStr, nil
 }

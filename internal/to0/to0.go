@@ -30,7 +30,7 @@ var (
 	fetchOwnerInfo = db.FetchOwnerInfo
 )
 
-func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, useTLS bool) error { // Parse to0-guid flag
+func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, insecureTLS bool) error { // Parse to0-guid flag
 	guidBytes, err := hex.DecodeString(to0Guid)
 	if err != nil {
 		return fmt.Errorf("error parsing hex GUID of device to register RV blob: %w", err)
@@ -59,7 +59,7 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 		}
 		for _, url := range rv.URLs {
 			refresh, err := newTO0Client(voucherState, keyState).RegisterBlob(
-				context.Background(), makeTransport(url.String(), nil, useTLS), guid, to2Addrs,
+				context.Background(), makeTransport(url.String(), nil, insecureTLS), guid, to2Addrs,
 			)
 			if err != nil {
 				slog.Error("failed to", "connect", url.String())

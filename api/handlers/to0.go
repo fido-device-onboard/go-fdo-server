@@ -17,7 +17,7 @@ import (
 type To0HandlerState struct {
 	VoucherState fdo.OwnerVoucherPersistentState
 	KeyState     fdo.OwnerKeyPersistentState
-	UseTLS       bool
+	InsecureTLS  bool // true == skip TLS verification of rendezvous server
 }
 
 func To0Handler(state *To0HandlerState) http.HandlerFunc {
@@ -45,7 +45,7 @@ func To0Handler(state *To0HandlerState) http.HandlerFunc {
 			return
 		}
 
-		if err := to0.RegisterRvBlob(voucher.Header.Val.RvInfo, to0Guid, state.VoucherState, state.KeyState, state.UseTLS); err != nil {
+		if err := to0.RegisterRvBlob(voucher.Header.Val.RvInfo, to0Guid, state.VoucherState, state.KeyState, state.InsecureTLS); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

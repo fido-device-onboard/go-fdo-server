@@ -20,6 +20,9 @@ run_test () {
   echo "⭐ Build and install 'go-fdo-server' binary"
   install_server
 
+  echo "⭐ Generating service configuration files"
+  generate_service_configs
+
   echo "⭐ Start services"
   start_services
 
