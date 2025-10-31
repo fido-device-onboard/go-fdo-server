@@ -13,18 +13,12 @@ device_uploads_dir="${credentials_dir}"
 #upload_files=("relative1" "${device_uploads_dir}/absolute1" "${device_uploads_dir}/subdir1/absolute2")
 upload_files=("file1" "subdir1/file2" "subdir1/subdir2/file3")
 
-# Overwrite the owner service start function to configure upload FSIM
-start_service_owner() {
-  upload_commands=()
+# Add the proper FSIM configuration via the owner server command line
+setup_owner_cmdline() {
+  owner_cmdline+=("--upload-directory=${owner_uploads_dir}")
   for file in "${upload_files[@]}"; do
-    upload_commands+=("--command-upload=${file}")
+    owner_cmdline+=("--command-upload=${file}")
   done
-
-  run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
-    --owner-key="${owner_key}" \
-    --device-ca-cert="${device_ca_crt}" \
-    --upload-directory="${owner_uploads_dir}" \
-    "${upload_commands[@]}"
 }
 
 generate_upload_files() {
@@ -60,6 +54,12 @@ run_test() {
 
   echo "⭐ Build and install 'go-fdo-server' binary"
   install_server
+
+  echo "⭐ Generating service configuration files"
+  generate_service_configs
+
+  echo "⭐ Set the owner server command line"
+  setup_owner_cmdline
 
   echo "⭐ Start services"
   start_services

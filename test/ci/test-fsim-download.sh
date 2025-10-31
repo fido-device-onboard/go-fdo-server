@@ -20,9 +20,7 @@ start_service_owner() {
     download_commands+=("--command-download=${file}")
   done
   cd ${owner_download_dir}
-  run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
-    --owner-key="${owner_key}" \
-    --device-ca-cert="${device_ca_crt}" \
+  run_go_fdo_server owner ${owner_pid_file} ${owner_log} ${owner_cmdline[@]} \
     "${download_commands[@]}"
   cd - >/dev/null
 }
@@ -59,6 +57,9 @@ run_test() {
 
   echo "⭐ Build and install 'go-fdo-server' binary"
   install_server
+
+  echo "⭐ Generating service configuration files"
+  generate_service_configs
 
   echo "⭐ Start services"
   start_services

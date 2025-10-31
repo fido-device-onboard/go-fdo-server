@@ -1,15 +1,9 @@
 services:
   manufacturer:
     command:
-     - --db-type=postgres
-     - --db-dsn=host=manufacturer-db user=manufacturer password=Passw0rd dbname=manufacturer port=5432 sslmode=disable TimeZone=Europe/Madrid
      - --debug
      - manufacturing
-     - manufacturer:8038
-     - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
-     - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
-     - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
-     - --device-ca-key=${container_working_dir:-/workdir}/certs/device_ca.key
+     - --config=${container_working_dir:-/workdir}/configs/manufacturing.yaml
     depends_on:
       manufacturer-db:
         condition: service_healthy
@@ -41,11 +35,9 @@ services:
 
   rendezvous:
     command:
-      - --db-type=postgres
-      - --db-dsn=host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid
       - --debug
       - rendezvous
-      - rendezvous:8041
+      - --config=${container_working_dir:-/workdir}/configs/rendezvous.yaml
     depends_on:
       rendezvous-db:
         condition: service_healthy
@@ -77,13 +69,9 @@ services:
 
   owner:
     command:
-      - --db-type=postgres
-      - --db-dsn=host=owner-db user=owner password=Passw0rd dbname=owner port=5432 sslmode=disable TimeZone=Europe/Madrid
       - --debug
       - owner
-      - owner:8043
-      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
-      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+      - --config=${container_working_dir:-/workdir}/configs/owner.yaml
     depends_on:
       owner-db:
         condition: service_healthy

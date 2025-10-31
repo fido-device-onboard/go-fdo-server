@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -21,8 +22,13 @@ import (
 )
 
 var (
-	debug    bool
-	logLevel slog.LevelVar
+	debug             bool
+	logLevel          slog.LevelVar
+	configSearchPaths = []string{ // searched starting with index 0
+		"$HOME/.config/go-fdo-server/",
+		"/etc/go-fdo-server/",
+		"/usr/share/go-fdo-server/",
+	}
 )
 
 var rootCmd = &cobra.Command{
@@ -50,8 +56,24 @@ var rootCmd = &cobra.Command{
 		if configFilePath != "" {
 			slog.Debug("Loading server configuration file", "path", configFilePath)
 			viper.SetConfigFile(configFilePath)
-			if err := viper.ReadInConfig(); err != nil {
+			err = viper.ReadInConfig()
+			if err != nil {
 				return fmt.Errorf("configuration file read failed: %w", err)
+			}
+		} else {
+			filename := cmd.Name() // base filename, no suffix e.g. "manufacturing"
+			viper.SetConfigName(filename)
+			for _, path := range configSearchPaths {
+				viper.AddConfigPath(path)
+			}
+			err = viper.ReadInConfig()
+			if err != nil {
+				if errors.As(err, &viper.ConfigFileNotFoundError{}) {
+					// Config file not found is acceptable - try command-line flags
+					slog.Info("no configuration file not found")
+				} else {
+					return fmt.Errorf("configuration file read failed: %w", err)
+				}
 			}
 		}
 
@@ -118,9 +140,11 @@ func rootCmdInit() {
 }
 
 func init() {
-	slog.SetDefault(slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
+	rootLogger := slog.New(devlog.NewHandler(os.Stdout, &devlog.Options{
 		Level: &logLevel,
-	})))
+	}))
+	slog.SetDefault(rootLogger)
+	viper.SetOptions(viper.WithLogger(rootLogger))
 	rootCmdInit()
 }
 
