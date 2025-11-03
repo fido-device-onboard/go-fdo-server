@@ -1,0 +1,19 @@
+summary: Complete FDO bootc end-to-end testing
+description: |
+    Comprehensive FDO testing covering:
+    - Certificate infrastructure setup
+    - Multi-server orchestration (manufacturer, rendezvous, owner)
+    - Provision device with bootc image
+    - Device initialization and onboarding
+
+test: ../../bootc/test-onboarding.sh
+
+framework: shell
+
+duration: 60m
+
+tag:
+  - fdo
+  - e2e
+  - onboarding
+  - bootc
