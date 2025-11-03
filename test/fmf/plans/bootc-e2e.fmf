@@ -1,0 +1,43 @@
+summary: FDO bootc test plan
+description: FDO device onboarding in bootc image
+
+discover:
+    how: fmf
+    filter: tag:bootc
+
+provision:
+    hardware:
+        virtualization:
+            is-supported: true
+        cpu:
+            processors: ">= 2"
+        memory: ">= 6 GB"
+
+prepare:
+  - how: shell
+    script: |
+      . /etc/os-release
+      if [ "${ID}" = "centos" ]; then
+        dnf install -y epel-release
+      fi
+
+  - how: install
+    package:
+      - golang
+      - make
+      - openssl
+      - curl
+      - git
+      - jq
+      - podman
+      - qemu-img
+      - qemu-kvm
+      - libvirt-client
+      - libvirt-daemon-kvm
+      - virt-install
+      - firewalld
+      - lorax
+      - gobject-introspection
+
+execute:
+    how: tmt
