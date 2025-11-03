@@ -15,7 +15,7 @@ all: build test
 # Build the Go project
 .PHONY: build
 build: tidy fmt vet
-	CGO_ENABLED=1 go build
+	CGO_ENABLED=1 go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version/version.VERSION=${VERSION}"
 
 .PHONY: tidy
 tidy:

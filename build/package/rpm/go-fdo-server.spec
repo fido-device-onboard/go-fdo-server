@@ -46,6 +46,7 @@ devices when they are first powered on in their final location.
 
 %build
 %global gomodulesmode GO111MODULE=on
+export LDFLAGS="-X %{goipath}/internal/version/version.VERSION=%{commit}"
 %gobuild -o %{gobuilddir}/bin/go-fdo-server %{goipath}
 
 %install
