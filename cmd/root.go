@@ -70,7 +70,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				if errors.As(err, &viper.ConfigFileNotFoundError{}) {
 					// Config file not found is acceptable - try command-line flags
-					slog.Info("no configuration file not found")
+					slog.Info("configuration file not found")
 				} else {
 					return fmt.Errorf("configuration file read failed: %w", err)
 				}

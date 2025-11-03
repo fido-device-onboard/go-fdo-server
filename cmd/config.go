@@ -25,7 +25,7 @@ type LogConfig struct {
 	Level string `mapstructure:"level"`
 }
 
-// Configuration for the servers HTTP endpoing
+// Configuration for the server's HTTP endpoint
 type HTTPConfig struct {
 	CertPath string `mapstructure:"cert"`
 	KeyPath  string `mapstructure:"key"`

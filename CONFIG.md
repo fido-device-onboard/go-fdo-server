@@ -32,7 +32,7 @@ The configuration file uses a hierarchical structure that defines the following 
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `log` | string | Set the logging level | info |
+| `level` | string | Set the logging level. Allowed values: "debug", "info", "warn", or "error" | info |
 
 ## Database Configuration
 
