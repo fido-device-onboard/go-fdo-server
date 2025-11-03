@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
+	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 	"github.com/fido-device-onboard/go-fdo/http"
 )
 
@@ -31,7 +32,7 @@ func TlsTransport(baseURL string, conf *tls.Config, insecureTLS bool) fdo.Transp
 
 	return &http.Transport{
 		BaseURL: baseURL,
-		Client: &net_http.Client{Transport: &net_http.Transport{
+		Client: &net_http.Client{Transport: &userAgentTransport{&net_http.Transport{
 			Proxy: net_http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
 				Timeout:   30 * time.Second,
@@ -43,6 +44,20 @@ func TlsTransport(baseURL string, conf *tls.Config, insecureTLS bool) fdo.Transp
 			TLSClientConfig:       conf,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
-		}},
+		}, "go-fdo-server/" + version.VERSION}},
 	}
+}
+
+type userAgentTransport struct {
+	next      net_http.RoundTripper
+	userAgent string
+}
+
+func (t *userAgentTransport) RoundTrip(req *net_http.Request) (*net_http.Response, error) {
+	r := req.Clone(req.Context())
+	if r.Header == nil {
+		r.Header = make(net_http.Header)
+	}
+	r.Header.Set("User-Agent", t.userAgent)
+	return t.next.RoundTrip(r)
 }

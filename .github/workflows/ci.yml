@@ -166,7 +166,7 @@ jobs:
           source test/ci/test-fsim-wget.sh
           run_test
 
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+      - name: Get Manufacturer, Rendezvous and Owner server logs
         if: always()
         run: |
           source test/ci/test-fsim-wget.sh
@@ -195,7 +195,7 @@ jobs:
           source test/ci/test-fsim-upload.sh
           run_test
 
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+      - name: Get Manufacturer, Rendezvous and Owner server logs
         if: always()
         run: |
           source test/ci/test-fsim-upload.sh
@@ -224,7 +224,7 @@ jobs:
           source test/ci/test-fsim-download.sh
           run_test
 
-      - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
+      - name: Get Manufacturer, Rendezvous and Owner server logs
         if: always()
         run: |
           source test/ci/test-fsim-download.sh
