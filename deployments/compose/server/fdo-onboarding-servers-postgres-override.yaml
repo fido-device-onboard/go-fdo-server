@@ -1,7 +1,7 @@
 services:
   manufacturer:
     command:
-     - --debug
+     - --log-level=debug
      - manufacturing
      - --config=${container_working_dir:-/workdir}/configs/manufacturing.yaml
     depends_on:
@@ -35,7 +35,7 @@ services:
 
   rendezvous:
     command:
-      - --debug
+      - --log-level=debug
       - rendezvous
       - --config=${container_working_dir:-/workdir}/configs/rendezvous.yaml
     depends_on:
@@ -69,7 +69,7 @@ services:
 
   owner:
     command:
-      - --debug
+      - --log-level=debug
       - owner
       - --config=${container_working_dir:-/workdir}/configs/owner.yaml
     depends_on:

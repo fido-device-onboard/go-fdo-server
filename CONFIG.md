@@ -14,7 +14,7 @@ go-fdo-server manufacturing --config config.toml
 go-fdo-server owner --config config.yaml 127.0.0.1:8080
 
 # Using TOML, enable debug logging
-go-fdo-server rendezvous --debug --config config.toml
+go-fdo-server rendezvous --log-level=debug --config config.toml
 ```
 
 ## Configuration Structure

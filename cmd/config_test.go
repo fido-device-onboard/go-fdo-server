@@ -48,7 +48,6 @@ func resetState(t *testing.T) {
 	uploads = nil
 	uploadDir = ""
 	downloads = nil
-	debug = false
 
 	// Reset captured config
 	capturedConfig = nil
@@ -721,8 +720,8 @@ key = "/config/device.key"
 		"--device-ca-cert", "/cli/device.ca",
 		"--device-ca-key", "/cli/device.key",
 		"--db-dsn", "file:cli.db",
-		"--server-cert-path", "/cli/server.crt",
-		"--server-key-path", "/cli/server.key",
+		"--http-cert", "/cli/server.crt",
+		"--http-key", "/cli/server.key",
 	})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -797,8 +796,8 @@ to0_insecure_tls = true
 		"--reuse-credentials=false",
 		"--db-dsn", "file:cli.db",
 		"--to0-insecure-tls=false",
-		"--server-cert-path", "/cli/server.crt",
-		"--server-key-path", "/cli/server.key",
+		"--http-cert", "/cli/server.crt",
+		"--http-key", "/cli/server.key",
 	})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -864,8 +863,8 @@ dsn = "file:/tmp/database.db"
 		"--config", path,
 		"127.0.0.1:9092", // positional argument for listen address
 		"--db-dsn", "file:cli.db",
-		"--server-cert-path", "/cli/server.crt",
-		"--server-key-path", "/cli/server.key",
+		"--http-cert", "/cli/server.crt",
+		"--http-key", "/cli/server.key",
 	})
 
 	if err := rootCmd.Execute(); err != nil {

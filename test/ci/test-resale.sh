@@ -27,7 +27,7 @@ new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
 new_owner_config_file="${configs_dir}/new_owner.yaml"
-declare -a new_owner_cmdline=("--debug" "--config=${new_owner_config_file}")
+declare -a new_owner_cmdline=("--log-level=debug" "--config=${new_owner_config_file}")
 
 generate_new_owner_config() {
   cat <<EOF

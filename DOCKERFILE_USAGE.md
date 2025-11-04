@@ -149,7 +149,7 @@ docker run -d \
   -p 8041:8041 \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
-  --debug rendezvous 0.0.0.0:8041 \
+  --log-level=debug rendezvous 0.0.0.0:8041 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/rendezvous.db"
 ```
 
@@ -162,7 +162,7 @@ podman run -d \
   -p 8041:8041 \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
-  --debug rendezvous 0.0.0.0:8041 \
+  --log-level=debug rendezvous 0.0.0.0:8041 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/rendezvous.db"
 ```
 
@@ -178,7 +178,7 @@ docker run -d \
   -p 8038:8038 \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
-  --debug manufacturing 0.0.0.0:8038 \
+  --log-level=debug manufacturing 0.0.0.0:8038 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/manufacturer.db" \
   --manufacturing-key /tmp/fdo/certs/manufacturer.key \
   --owner-cert /tmp/fdo/certs/owner.crt \
@@ -195,7 +195,7 @@ podman run -d \
   -p 8038:8038 \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
-  --debug manufacturing 0.0.0.0:8038 \
+  --log-level=debug manufacturing 0.0.0.0:8038 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/manufacturer.db" \
   --manufacturing-key /tmp/fdo/certs/manufacturer.key \
   --owner-cert /tmp/fdo/certs/owner.crt \
@@ -213,7 +213,7 @@ docker run -d \
   -p 8043:8043 \
   -v /tmp/fdo:/tmp/fdo \
   go-fdo-server:latest \
-  --debug owner 0.0.0.0:8043 \
+  --log-level=debug owner 0.0.0.0:8043 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/owner.db" \
   --owner-key /tmp/fdo/certs/owner.key \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt
@@ -228,7 +228,7 @@ podman run -d \
   -p 8043:8043 \
   -v /tmp/fdo:/tmp/fdo:z \
   go-fdo-server:latest \
-  --debug owner 0.0.0.0:8043 \
+  --log-level=debug owner 0.0.0.0:8043 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/owner.db" \
   --owner-key /tmp/fdo/certs/owner.key \
   --device-ca-cert /tmp/fdo/certs/device_ca.crt

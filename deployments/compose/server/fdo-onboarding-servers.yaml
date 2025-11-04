@@ -10,7 +10,7 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-     - --debug
+     - --log-level=debug
      - manufacturing
      - --config=${container_working_dir:-/workdir}/configs/manufacturing.yaml
     working_dir: ${container_working_dir:-/workdir}
@@ -37,7 +37,7 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --debug
+      - --log-level=debug
       - rendezvous
       - --config=${container_working_dir:-/workdir}/configs/rendezvous.yaml
     working_dir: ${container_working_dir:-/workdir}
@@ -64,7 +64,7 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --debug
+      - --log-level=debug
       - owner
       - --config=${container_working_dir:-/workdir}/configs/owner.yaml
     working_dir: ${container_working_dir:-/workdir}

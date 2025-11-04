@@ -10,7 +10,7 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
-      - --debug
+      - --log-level=debug
       - owner
       - --config=${container_working_dir:-/workdir}/configs/new_owner.yaml
     working_dir: ${container_working_dir:-/workdir}

@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	debug             bool
 	logLevel          slog.LevelVar
 	configSearchPaths = []string{ // searched starting with index 0
 		"$HOME/.config/go-fdo-server/",
@@ -44,8 +43,8 @@ var rootCmd = &cobra.Command{
 `,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// bootstrap debug logging early to include configuration loading
-		debug, _ = cmd.Flags().GetBool("debug")
-		if debug {
+		level, _ := cmd.Flags().GetString("log-level")
+		if strings.ToLower(level) == "debug" {
 			logLevel.Set(slog.LevelDebug)
 		}
 
@@ -77,18 +76,15 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		if !debug { // CLI --debug flag takes precedence
-			logLevelStr := strings.ToLower(viper.GetString("log.level"))
-			switch logLevelStr {
-			case "debug":
-				logLevel.Set(slog.LevelDebug)
-			case "info":
-				logLevel.Set(slog.LevelInfo)
-			case "warn":
-				logLevel.Set(slog.LevelWarn)
-			case "error":
-				logLevel.Set(slog.LevelError)
-			}
+		switch strings.ToLower(viper.GetString("log.level")) {
+		case "debug":
+			logLevel.Set(slog.LevelDebug)
+		case "info":
+			logLevel.Set(slog.LevelInfo)
+		case "warn":
+			logLevel.Set(slog.LevelWarn)
+		case "error":
+			logLevel.Set(slog.LevelError)
 		}
 
 		// Parse HTTP address from positional argument if provided
@@ -117,12 +113,12 @@ func Execute() {
 // Setup the root command line. Used by the unit tests to reset state between tests.
 func rootCmdInit() {
 	rootCmd.PersistentFlags().String("config", "", "Pathname of the configuration file")
-	rootCmd.PersistentFlags().Bool("debug", false, "Enable verbose debug logging")
+	rootCmd.PersistentFlags().String("log-level", "info", "Set logging level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().String("db-type", "sqlite", "Database type (sqlite or postgres)")
 	rootCmd.PersistentFlags().String("db-dsn", "", "Database DSN (connection string)")
-	rootCmd.PersistentFlags().String("server-cert-path", "", "Path to server certificate")
-	rootCmd.PersistentFlags().String("server-key-path", "", "Path to server private key")
-	if err := viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug")); err != nil {
+	rootCmd.PersistentFlags().String("http-cert", "", "Path to server certificate")
+	rootCmd.PersistentFlags().String("http-key", "", "Path to server private key")
+	if err := viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
 		panic(err)
 	}
 	if err := viper.BindPFlag("db.type", rootCmd.PersistentFlags().Lookup("db-type")); err != nil {
@@ -131,10 +127,10 @@ func rootCmdInit() {
 	if err := viper.BindPFlag("db.dsn", rootCmd.PersistentFlags().Lookup("db-dsn")); err != nil {
 		panic(err)
 	}
-	if err := viper.BindPFlag("http.cert", rootCmd.PersistentFlags().Lookup("server-cert-path")); err != nil {
+	if err := viper.BindPFlag("http.cert", rootCmd.PersistentFlags().Lookup("http-cert")); err != nil {
 		panic(err)
 	}
-	if err := viper.BindPFlag("http.key", rootCmd.PersistentFlags().Lookup("server-key-path")); err != nil {
+	if err := viper.BindPFlag("http.key", rootCmd.PersistentFlags().Lookup("http-key")); err != nil {
 		panic(err)
 	}
 }

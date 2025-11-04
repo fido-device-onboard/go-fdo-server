@@ -51,11 +51,11 @@ Start the services in three terminals (or background them). Use distinct databas
 mkdir -p /tmp/fdo/db /tmp/fdo/keys /tmp/fdo/ov
 
 # Rendezvous (127.0.0.1:8041)
-go-fdo-server --debug rendezvous 127.0.0.1:8041 \
+go-fdo-server --log-level=debug rendezvous 127.0.0.1:8041 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/rv.db"
 
 # Manufacturing (127.0.0.1:8038)
-go-fdo-server --debug manufacturing 127.0.0.1:8038 \
+go-fdo-server --log-level=debug manufacturing 127.0.0.1:8038 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/mfg.db" \
   --manufacturing-key /tmp/fdo/keys/manufacturer_key.der \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
@@ -63,7 +63,7 @@ go-fdo-server --debug manufacturing 127.0.0.1:8038 \
   --owner-cert     /tmp/fdo/keys/owner_cert.pem
 
 # Owner (127.0.0.1:8043)
-go-fdo-server --debug owner 127.0.0.1:8043 \
+go-fdo-server --log-level=debug owner 127.0.0.1:8043 \
   --db-type sqlite --db-dsn "file:/tmp/fdo/db/own.db" \
   --device-ca-cert /tmp/fdo/keys/device_ca_cert.pem \
   --owner-key      /tmp/fdo/keys/owner_key.der

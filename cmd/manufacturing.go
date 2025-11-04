@@ -244,7 +244,7 @@ func manufacturingCmdInit() {
 
 	manufacturingCmd.Flags().String("manufacturing-key", "", "Manufacturing private key path")
 	manufacturingCmd.Flags().String("owner-cert", "", "Owner certificate path")
-	manufacturingCmd.Flags().String("device-ca-cert", "", "Device certificate path")
+	manufacturingCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	manufacturingCmd.Flags().String("device-ca-key", "", "Device CA private key path")
 	if err := viper.BindPFlag("manufacturing.key", manufacturingCmd.Flags().Lookup("manufacturing-key")); err != nil {
 		panic(err)

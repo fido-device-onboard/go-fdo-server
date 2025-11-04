@@ -1,7 +1,7 @@
 services:
   owner:
     command:
-      - --debug
+      - --log-level=debug
       - owner
       - --config=${container_working_dir:-/workdir}/configs/owner.yaml
       - --command-download=file1
