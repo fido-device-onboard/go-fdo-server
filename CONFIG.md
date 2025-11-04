@@ -43,7 +43,7 @@ section:
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `type` | string | Database type (e.g., "sqlite", "postgres") | Yes |
-| `dsn` | string | Database connection string | Yes |
+| `dsn` | string | Database connection string (e.g., `file:database.db` for SQLite, `host=localhost port=5432 user=postgres password=secret dbname=mydb` for PostgreSQL) | Yes |
 
 ## HTTP Server Configuration
 
