@@ -23,19 +23,37 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Rendezvous server configuration (TBD)
+type RendezvousConfig struct {
+}
+
+// Rendezvous server configuration file structure
+type RendezvousServerConfig struct {
+	FDOServerConfig `mapstructure:",squash"`
+	Rendezvous      RendezvousConfig `mapstructure:"rendezvous"`
+}
+
+// validate checks that required configuration is present
+func (rv *RendezvousServerConfig) validate() error {
+	if err := rv.HTTP.validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var fdoConfig FIDOServerConfig
-		if err := viper.Unmarshal(&fdoConfig); err != nil {
+		var rvConfig RendezvousServerConfig
+		if err := viper.Unmarshal(&rvConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal rendezvous config: %w", err)
 		}
-		if err := fdoConfig.HTTP.validate(); err != nil {
+		if err := rvConfig.validate(); err != nil {
 			return err
 		}
-		return serveRendezvous(&fdoConfig.DB, &fdoConfig.HTTP)
+		return serveRendezvous(&rvConfig)
 	},
 }
 
@@ -102,8 +120,8 @@ type RendezvousServerState struct {
 	DB *db.State
 }
 
-func serveRendezvous(dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
-	dbState, err := dbConfig.getState()
+func serveRendezvous(config *RendezvousServerConfig) error {
+	dbState, err := config.DB.getState()
 	if err != nil {
 		return err
 	}
@@ -126,9 +144,9 @@ func serveRendezvous(dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
 
 	// Listen and serve
-	server := NewRendezvousServer(*httpConfig, httpHandler)
+	server := NewRendezvousServer(config.HTTP, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", httpConfig.ListenAddress())
+	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()
 }
 

@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -31,34 +32,68 @@ import (
 	"github.com/spf13/viper"
 )
 
-type DeviceCACertConfig struct {
-	CertPath string `mapstructure:"cert"` // path to certificate file
-	KeyPath  string `mapstructure:"key"`  // path to key file
-}
-
 // The manufacturer server configuration
 type ManufacturingConfig struct {
-	ManufacturerKeyPath string             `mapstructure:"key"`
-	OwnerPublicKeyPath  string             `mapstructure:"owner_cert"`
-	DeviceCACert        DeviceCACertConfig `mapstructure:"device_ca"`
+	ManufacturerKeyPath string `mapstructure:"key"`
+}
+
+// Manufacturer server configuration file structure
+type ManufacturingServerConfig struct {
+	FDOServerConfig `mapstructure:",squash"`
+	DeviceCA        DeviceCAConfig      `mapstructure:"device_ca"`
+	Manufacturer    ManufacturingConfig `mapstructure:"manufacturing"`
+	Owner           OwnerConfig         `mapstructure:"owner"`
+}
+
+// validate checks that required configuration is present
+func (m *ManufacturingServerConfig) validate() error {
+	if err := m.HTTP.validate(); err != nil {
+		return err
+	}
+	if m.Manufacturer.ManufacturerKeyPath == "" {
+		return errors.New("manufacturing key path is required")
+	}
+	if m.DeviceCA.KeyPath == "" {
+		return errors.New("device CA key path is required")
+	}
+	if m.DeviceCA.CertPath == "" {
+		return errors.New("device CA certificate path is required")
+	}
+	return nil
 }
 
 // manufacturingCmd represents the manufacturing command
 var manufacturingCmd = &cobra.Command{
 	Use:   "manufacturing http_address",
 	Short: "Serve an instance of the manufacturing server",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var fdoConfig FIDOServerConfig
-		if err := viper.Unmarshal(&fdoConfig); err != nil {
-			return fmt.Errorf("failed to unmarshal manufacturing config: %w", err)
-		}
-		if fdoConfig.Manufacturing == nil {
-			return fmt.Errorf("failed to find manufacturing config")
-		}
-		if err := fdoConfig.HTTP.validate(); err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Rebind only those keys needed by the manufacturing
+		// command. This is necessary because Viper cannot bind the
+		// same key twice and the other sub commands use the same
+		// keys.
+		if err := viper.BindPFlag("manufacturing.key", cmd.Flags().Lookup("manufacturing-key")); err != nil {
 			return err
 		}
-		return serveManufacturing(fdoConfig.Manufacturing, &fdoConfig.DB, &fdoConfig.HTTP)
+		if err := viper.BindPFlag("owner.cert", cmd.Flags().Lookup("owner-cert")); err != nil {
+			return err
+		}
+		if err := viper.BindPFlag("device_ca.cert", cmd.Flags().Lookup("device-ca-cert")); err != nil {
+			return err
+		}
+		if err := viper.BindPFlag("device_ca.key", cmd.Flags().Lookup("device-ca-key")); err != nil {
+			return err
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var mfgConfig ManufacturingServerConfig
+		if err := viper.Unmarshal(&mfgConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal manufacturing config: %w", err)
+		}
+		if err := mfgConfig.validate(); err != nil {
+			return err
+		}
+		return serveManufacturing(&mfgConfig)
 	},
 }
 
@@ -121,23 +156,23 @@ func (s *ManufacturingServer) Start() error {
 	return srv.Serve(lis)
 }
 
-func serveManufacturing(config *ManufacturingConfig, dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
+func serveManufacturing(config *ManufacturingServerConfig) error {
 	// Database
-	dbState, err := dbConfig.getState()
+	dbState, err := config.DB.getState()
 	if err != nil {
 		return err
 	}
 
 	// Load Certs
-	mfgKey, err := parsePrivateKey(config.ManufacturerKeyPath)
+	mfgKey, err := parsePrivateKey(config.Manufacturer.ManufacturerKeyPath)
 	if err != nil {
 		return err
 	}
-	deviceKey, err := parsePrivateKey(config.DeviceCACert.KeyPath)
+	deviceKey, err := parsePrivateKey(config.DeviceCA.KeyPath)
 	if err != nil {
 		return err
 	}
-	deviceCA, err := os.ReadFile(config.DeviceCACert.CertPath)
+	deviceCA, err := os.ReadFile(config.DeviceCA.CertPath)
 	if err != nil {
 		return err
 	}
@@ -150,7 +185,7 @@ func serveManufacturing(config *ManufacturingConfig, dbConfig *DatabaseConfig, h
 	deviceCAChain := []*x509.Certificate{parsedDeviceCACert}
 
 	// Parse
-	ownerPublicKey, err := os.ReadFile(config.OwnerPublicKeyPath)
+	ownerPublicKey, err := os.ReadFile(config.Owner.OwnerCertificate)
 	if err != nil {
 		return err
 	}
@@ -203,9 +238,9 @@ func serveManufacturing(config *ManufacturingConfig, dbConfig *DatabaseConfig, h
 	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewManufacturingServer(*httpConfig, httpHandler)
+	server := NewManufacturingServer(config.HTTP, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", httpConfig.ListenAddress())
+	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()
 }
 
@@ -239,25 +274,12 @@ func encodePublicKey(keyType protocol.KeyType, keyEncoding protocol.KeyEncoding,
 func manufacturingCmdInit() {
 	rootCmd.AddCommand(manufacturingCmd)
 
-	// Declare any CLI flags for overriding configuration file settings and bind
-	// them into the proper fields of the configuration structure
-
+	// Declare any CLI flags for overriding configuration file settings.
+	// These flags are bound to Viper in the manufacturingCmd PreRun handler.
 	manufacturingCmd.Flags().String("manufacturing-key", "", "Manufacturing private key path")
 	manufacturingCmd.Flags().String("owner-cert", "", "Owner certificate path")
 	manufacturingCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	manufacturingCmd.Flags().String("device-ca-key", "", "Device CA private key path")
-	if err := viper.BindPFlag("manufacturing.key", manufacturingCmd.Flags().Lookup("manufacturing-key")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("manufacturing.owner_cert", manufacturingCmd.Flags().Lookup("owner-cert")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("manufacturing.device_ca.cert", manufacturingCmd.Flags().Lookup("device-ca-cert")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("manufacturing.device_ca.key", manufacturingCmd.Flags().Lookup("device-ca-key")); err != nil {
-		panic(err)
-	}
 }
 
 func init() {

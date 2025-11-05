@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"iter"
 	"log"
@@ -38,10 +39,31 @@ import (
 
 // The owner server configuration
 type OwnerConfig struct {
-	OwnerDeviceCACert string `mapstructure:"device_ca_cert"`
-	OwnerPrivateKey   string `mapstructure:"key"`
-	ReuseCred         bool   `mapstructure:"reuse_credentials"`
-	TO0InsecureTLS    bool   `mapstructure:"to0_insecure_tls"`
+	OwnerCertificate string `mapstructure:"cert"`
+	OwnerPrivateKey  string `mapstructure:"key"`
+	ReuseCred        bool   `mapstructure:"reuse_credentials"`
+	TO0InsecureTLS   bool   `mapstructure:"to0_insecure_tls"`
+}
+
+// Owner server configuration file structure
+type OwnerServerConfig struct {
+	FDOServerConfig `mapstructure:",squash"`
+	DeviceCA        DeviceCAConfig `mapstructure:"device_ca"`
+	Owner           OwnerConfig    `mapstructure:"owner"`
+}
+
+// validate checks that required configuration is present
+func (o *OwnerServerConfig) validate() error {
+	if err := o.HTTP.validate(); err != nil {
+		return err
+	}
+	if o.Owner.OwnerPrivateKey == "" {
+		return errors.New("owner private key path is required")
+	}
+	if o.DeviceCA.CertPath == "" {
+		return errors.New("device CA certificate path is required")
+	}
+	return nil
 }
 
 var (
@@ -57,18 +79,33 @@ var (
 var ownerCmd = &cobra.Command{
 	Use:   "owner http_address",
 	Short: "Serve an instance of the owner server",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var fdoConfig FIDOServerConfig
-		if err := viper.Unmarshal(&fdoConfig); err != nil {
-			return fmt.Errorf("failed to unmarshal owner config: %w", err)
-		}
-		if fdoConfig.Owner == nil {
-			return fmt.Errorf("failed to find Owner config")
-		}
-		if err := fdoConfig.HTTP.validate(); err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Rebind only those keys needed by the owner command. This is
+		// necessary because Viper cannot bind the same key twice and
+		// the other sub commands use the same keys.
+		if err := viper.BindPFlag("owner.reuse_credentials", cmd.Flags().Lookup("reuse-credentials")); err != nil {
 			return err
 		}
-		return serveOwner(fdoConfig.Owner, &fdoConfig.DB, &fdoConfig.HTTP)
+		if err := viper.BindPFlag("device_ca.cert", cmd.Flags().Lookup("device-ca-cert")); err != nil {
+			return err
+		}
+		if err := viper.BindPFlag("owner.key", cmd.Flags().Lookup("owner-key")); err != nil {
+			return err
+		}
+		if err := viper.BindPFlag("owner.to0_insecure_tls", cmd.Flags().Lookup("to0-insecure-tls")); err != nil {
+			return err
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var ownerConfig OwnerServerConfig
+		if err := viper.Unmarshal(&ownerConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal owner config: %w", err)
+		}
+		if err := ownerConfig.validate(); err != nil {
+			return err
+		}
+		return serveOwner(&ownerConfig)
 	},
 }
 
@@ -138,12 +175,12 @@ type OwnerServerState struct {
 	chain        []*x509.Certificate
 }
 
-func getOwnerServerState(config *OwnerConfig, dbConfig *DatabaseConfig) (*OwnerServerState, error) {
-	dbState, err := dbConfig.getState()
+func getOwnerServerState(config *OwnerServerConfig) (*OwnerServerState, error) {
+	dbState, err := config.DB.getState()
 	if err != nil {
 		return nil, err
 	}
-	ownerKey, err := parsePrivateKey(config.OwnerPrivateKey)
+	ownerKey, err := parsePrivateKey(config.Owner.OwnerPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +188,7 @@ func getOwnerServerState(config *OwnerConfig, dbConfig *DatabaseConfig) (*OwnerS
 	if err != nil {
 		return nil, err
 	}
-	deviceCA, err := os.ReadFile(config.OwnerDeviceCACert)
+	deviceCA, err := os.ReadFile(config.DeviceCA.CertPath)
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +209,8 @@ func getOwnerServerState(config *OwnerConfig, dbConfig *DatabaseConfig) (*OwnerS
 	}, nil
 }
 
-func serveOwner(config *OwnerConfig, dbConfig *DatabaseConfig, httpConfig *HTTPConfig) error {
-	state, err := getOwnerServerState(config, dbConfig)
+func serveOwner(config *OwnerServerConfig) error {
+	state, err := getOwnerServerState(config)
 	if err != nil {
 		return err
 	}
@@ -186,7 +223,7 @@ func serveOwner(config *OwnerConfig, dbConfig *DatabaseConfig, httpConfig *HTTPC
 			return voucher.Header.Val.RvInfo, nil
 		},
 		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
-		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.ReuseCred, nil },
+		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
 			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
 		},
@@ -202,7 +239,7 @@ func serveOwner(config *OwnerConfig, dbConfig *DatabaseConfig, httpConfig *HTTPC
 	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&handlers.To0HandlerState{
 		VoucherState: state.DB,
 		KeyState:     state,
-		InsecureTLS:  config.TO0InsecureTLS,
+		InsecureTLS:  config.Owner.TO0InsecureTLS,
 	}))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
@@ -210,9 +247,9 @@ func serveOwner(config *OwnerConfig, dbConfig *DatabaseConfig, httpConfig *HTTPC
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve
-	server := NewOwnerServer(*httpConfig, httpHandler)
+	server := NewOwnerServer(config.HTTP, httpHandler)
 
-	slog.Debug("Starting server on:", "addr", httpConfig.ListenAddress())
+	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()
 }
 
@@ -356,26 +393,12 @@ func ownerCmdInit() {
 	ownerCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
 	ownerCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
 
-	// Declare any CLI flags for overriding configuration file settings and bind
-	// them into the proper fields of the configuration structure
-
+	// Declare any CLI flags for overriding configuration file settings.
+	// These flags are bound to Viper in the ownerCmd PreRun handler.
 	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
 	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
 	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for TO0")
-	if err := viper.BindPFlag("owner.reuse_credentials", ownerCmd.Flags().Lookup("reuse-credentials")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("owner.device_ca_cert", ownerCmd.Flags().Lookup("device-ca-cert")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("owner.key", ownerCmd.Flags().Lookup("owner-key")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("owner.to0_insecure_tls", ownerCmd.Flags().Lookup("to0-insecure-tls")); err != nil {
-		panic(err)
-	}
-
 }
 
 func init() {

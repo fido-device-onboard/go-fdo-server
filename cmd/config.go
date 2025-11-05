@@ -11,15 +11,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
-// Structure to hold contents of the configuration file
-type FIDOServerConfig struct {
-	Log           LogConfig            `mapstructure:"log"`
-	DB            DatabaseConfig       `mapstructure:"db"`
-	HTTP          HTTPConfig           `mapstructure:"http"`
-	Manufacturing *ManufacturingConfig `mapstructure:"manufacturing"`
-	Owner         *OwnerConfig         `mapstructure:"owner"`
-}
-
 // Log configuration
 type LogConfig struct {
 	Level string `mapstructure:"level"`
@@ -31,6 +22,19 @@ type HTTPConfig struct {
 	KeyPath  string `mapstructure:"key"`
 	IP       string `mapstructure:"ip"`
 	Port     string `mapstructure:"port"`
+}
+
+// Device Certificate Authority
+type DeviceCAConfig struct {
+	CertPath string `mapstructure:"cert"` // path to certificate file
+	KeyPath  string `mapstructure:"key"`  // path to key file
+}
+
+// Structure to hold the common contents of the configuration file
+type FDOServerConfig struct {
+	Log  LogConfig      `mapstructure:"log"`
+	DB   DatabaseConfig `mapstructure:"db"`
+	HTTP HTTPConfig     `mapstructure:"http"`
 }
 
 // ListenAddress returns the concatenated IP:Port address for listening

@@ -20,10 +20,11 @@ http:
   port: ${manufacturer_port}
 manufacturing:
   key: "${manufacturer_key}"
-  owner_cert: "${owner_crt}"
-  device_ca:
-    cert: "${device_ca_crt}"
-    key: "${device_ca_key}"
+device_ca:
+  cert: "${device_ca_crt}"
+  key: "${device_ca_key}"
+owner:
+  cert: "${owner_crt}"
 EOF
 }
 
@@ -50,8 +51,9 @@ db:
 http:
   ip: "${owner_dns}"
   port: ${owner_port}
+device_ca:
+  cert: "${device_ca_crt}"
 owner:
-  device_ca_cert: "${device_ca_crt}"
   key: "${owner_key}"
   to0_insecure_tls: true
 EOF

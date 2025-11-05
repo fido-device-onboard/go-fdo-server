@@ -24,6 +24,7 @@ The configuration file uses a hierarchical structure that defines the following 
 - `log` - Logging level configuration
 - `db` - Database configuration
 - `http` - HTTP server configuration
+- `device_ca` - Device Certificate Authority configuration
 - `manufacturing` - Manufacturing server-specific configuration
 - `owner` - Owner server-specific configuration
 - `rendezvous` - Rendezvous server-specific configuration
@@ -59,6 +60,17 @@ provided under the `[http]` section:
 
 **Note**: HTTPS (TLS) is automatically enabled when both `cert` and `key` are provided.
 
+## Device CA Configuration
+
+The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both manufacturing and owner servers:
+
+| Key | Type | Description | Required |
+|-----|------|-------------|----------|
+| `cert` | string | Device CA certificate file path | Yes |
+| `key` | string | Device CA private key file path | Yes (for manufacturing server) |
+
+**Note**: For the owner server, only the `cert` field is required. The `key` field is only needed for the manufacturing server.
+
 ## Manufacturing Server Configuration
 
 The manufacturing server configuration is under the `[manufacturing]` section:
@@ -66,16 +78,10 @@ The manufacturing server configuration is under the `[manufacturing]` section:
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `key` | string | Manufacturing private key file path | Yes |
-| `owner_cert` | string | Owner certificate file path | Yes |
-| `device_ca` | map | Device CA certificate configuration | Yes |
 
-### Device CA Configuration (`[manufacturing.device_ca]`)
-
-| Key | Type | Description | Required |
-|-----|------|-------------|----------|
-| `cert` | string | Device CA certificate file path | Yes |
-| `key` | string | Device CA private key file path | Yes |
-
+The manufacturing server also requires:
+- `[device_ca]` section with both `cert` and `key` (see Device CA Configuration above)
+- `[owner]` section with `cert` field (see Owner Configuration below)
 
 ## Owner Server Configuration
 
@@ -83,10 +89,15 @@ The owner server configuration is under the `[owner]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `device_ca_cert` | string | Device CA certificate file path | Yes |
-| `key` | string | Owner private key file path | Yes |
+| `cert` | string | Owner certificate file path | Yes (for manufacturing server) |
+| `key` | string | Owner private key file path | Yes (for owner server) |
 | `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
+
+The owner server also requires:
+- `[device_ca]` section with `cert` field (see Device CA Configuration above)
+
+**Note**: The `owner.cert` field is used by the manufacturing server to specify the owner certificate. The `owner.key` field is used by the owner server to specify its private key.
 
 ## Rendezvous Server Configuration
 
@@ -113,11 +124,13 @@ dsn = "file:manufacturing.db"
 
 [manufacturing]
 key = "/path/to/manufacturing.key"
-owner_cert = "/path/to/owner.crt"
 
-[manufacturing.device_ca]
+[device_ca]
 cert = "/path/to/device.ca"
 key = "/path/to/device.key"
+
+[owner]
+cert = "/path/to/owner.crt"
 ```
 
 ### Owner Server Configuration
@@ -132,11 +145,13 @@ cert = "/path/to/owner.crt"
 key = "/path/to/owner.key"
 
 [db]
-type = "sqlite"
-dsn = "file:owner.db"
+type = "postgres"
+dsn = "host=localhost user=owner password=Passw0rd dbname=owner port=5432 sslmode=disable TimeZone=Europe/Madrid"
+
+[device_ca]
+cert = "/path/to/device.ca"
 
 [owner]
-device_ca_cert = "/path/to/device.ca"
 key = "/path/to/owner.key"
 reuse_credentials = true
 to0_insecure_tls = false
@@ -177,10 +192,13 @@ db:
 
 manufacturing:
   key: "/path/to/manufacturing.key"
-  owner_cert: "/path/to/owner.crt"
-  device_ca:
-    cert: "/path/to/device.ca"
-    key: "/path/to/device.key"
+
+device_ca:
+  cert: "/path/to/device.ca"
+  key: "/path/to/device.key"
+
+owner:
+  cert: "/path/to/owner.crt"
 ```
 
 ## Notes

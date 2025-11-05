@@ -39,8 +39,9 @@ db:
 http:
   ip: "${new_owner_dns}"
   port: ${new_owner_port}
+device_ca:
+  cert: "${device_ca_crt}"
 owner:
-  device_ca_cert: "${device_ca_crt}"
   key: "${new_owner_key}"
   to0_insecure_tls: true
 EOF

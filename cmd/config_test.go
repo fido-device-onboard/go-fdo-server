@@ -4,7 +4,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +13,15 @@ import (
 )
 
 // Configuration capture for testing
-var capturedConfig *FIDOServerConfig
+type TestFullConfig struct {
+	FDOServerConfig `mapstructure:",squash"`
+	DeviceCA        DeviceCAConfig      `mapstructure:"device_ca"`
+	Manufacturer    ManufacturingConfig `mapstructure:"manufacturing"`
+	Owner           OwnerConfig         `mapstructure:"owner"`
+	Rendezvous      RendezvousConfig    `mapstructure:"rendezvous"`
+}
+
+var capturedConfig *TestFullConfig
 
 func resetState(t *testing.T) {
 	t.Helper()
@@ -59,39 +66,18 @@ func stubRunE(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
 	orig := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-
-		// Parse flags to ensure viper gets the command-line values
-		if err := cmd.ParseFlags(args); err != nil {
-			return err
-		}
-
 		// Capture the configuration that would be unmarshaled
-		var fdoConfig FIDOServerConfig
+		// Note: flags are already parsed by cobra before RunE is called,
+		// and PersistentPreRunE has already loaded the config file into viper
+		var fdoConfig TestFullConfig
 		if err := viper.Unmarshal(&fdoConfig); err != nil {
 			return err
 		}
 		capturedConfig = &fdoConfig
 
 		// Validate the configuration (same as in actual commands)
-		switch cmd {
-		case manufacturingCmd:
-			if fdoConfig.Manufacturing == nil {
-				return fmt.Errorf("failed to find manufacturing config")
-			}
-			if err := fdoConfig.HTTP.validate(); err != nil {
-				return err
-			}
-		case ownerCmd:
-			if fdoConfig.Owner == nil {
-				return fmt.Errorf("failed to find Owner config")
-			}
-			if err := fdoConfig.HTTP.validate(); err != nil {
-				return err
-			}
-		case rendezvousCmd:
-			if err := fdoConfig.HTTP.validate(); err != nil {
-				return err
-			}
+		if err := fdoConfig.HTTP.validate(); err != nil {
+			return err
 		}
 
 		return nil
@@ -145,12 +131,13 @@ port = "8081"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/bar.db"
-[manufacturing]
-key = "/path/to/mfg.key"
-owner_cert = "/path/to/owner.crt"
-[manufacturing.device_ca]
+[device_ca]
 cert = "/path/to/device.ca"
 key = "/path/to/device.key"
+[manufacturing]
+key = "/path/to/mfg.key"
+[owner]
+cert = "/path/to/owner.crt"
 `,
 			expected: expectedConfig{
 				ip:              "127.0.0.1",
@@ -172,12 +159,13 @@ port = "8082"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
-[manufacturing]
-key = "/path/to/toml-mfg.key"
-owner_cert = "/path/to/toml-owner.crt"
-[manufacturing.device_ca]
+[device_ca]
 cert = "/path/to/toml-device.ca"
 key = "/path/to/toml-device.key"
+[manufacturing]
+key = "/path/to/toml-mfg.key"
+[owner]
+cert = "/path/to/toml-owner.crt"
 `,
 			expected: expectedConfig{
 				ip:              "127.0.0.1",
@@ -204,11 +192,10 @@ key = "/path/to/toml-device.key"
 				t.Fatalf("execute failed: %v", err)
 			}
 
-			if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+			if capturedConfig == nil {
 				t.Fatalf("manufacturing config not captured")
 			}
 
-			cfg := capturedConfig.Manufacturing
 			if capturedConfig.HTTP.IP != tt.expected.ip {
 				t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, tt.expected.ip)
 			}
@@ -221,17 +208,17 @@ key = "/path/to/toml-device.key"
 			if capturedConfig.DB.DSN != tt.expected.dbDSN {
 				t.Fatalf("DB.DSN=%q, want %q", capturedConfig.DB.DSN, tt.expected.dbDSN)
 			}
-			if cfg.ManufacturerKeyPath != tt.expected.manufacturerKey {
-				t.Fatalf("ManufacturerKeyPath=%q, want %q", cfg.ManufacturerKeyPath, tt.expected.manufacturerKey)
+			if capturedConfig.Manufacturer.ManufacturerKeyPath != tt.expected.manufacturerKey {
+				t.Fatalf("Manufacturer.ManufacturerKeyPath=%q, want %q", capturedConfig.Manufacturer.ManufacturerKeyPath, tt.expected.manufacturerKey)
 			}
-			if cfg.DeviceCACert.CertPath != tt.expected.deviceCACert {
-				t.Fatalf("DeviceCACert.CertPath=%q, want %q", cfg.DeviceCACert.CertPath, tt.expected.deviceCACert)
+			if capturedConfig.DeviceCA.CertPath != tt.expected.deviceCACert {
+				t.Fatalf("DeviceCA.CertPath=%q, want %q", capturedConfig.DeviceCA.CertPath, tt.expected.deviceCACert)
 			}
-			if cfg.DeviceCACert.KeyPath != tt.expected.deviceCAKey {
-				t.Fatalf("DeviceCACert.KeyPath=%q, want %q", cfg.DeviceCACert.KeyPath, tt.expected.deviceCAKey)
+			if capturedConfig.DeviceCA.KeyPath != tt.expected.deviceCAKey {
+				t.Fatalf("DeviceCA.KeyPath=%q, want %q", capturedConfig.DeviceCA.KeyPath, tt.expected.deviceCAKey)
 			}
-			if cfg.OwnerPublicKeyPath != tt.expected.ownerCert {
-				t.Fatalf("OwnerPublicKeyPath=%q, want %q", cfg.OwnerPublicKeyPath, tt.expected.ownerCert)
+			if capturedConfig.Owner.OwnerCertificate != tt.expected.ownerCert {
+				t.Fatalf("Owner.OwnerCertificate=%q, want %q", capturedConfig.Owner.OwnerCertificate, tt.expected.ownerCert)
 			}
 		})
 	}
@@ -261,9 +248,10 @@ port = "8082"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[device_ca]
+cert = "/path/to/owner.device.ca"
 [owner]
 reuse_credentials = true
-device_ca_cert = "/path/to/owner.device.ca"
 key = "/path/to/owner.key"
 to0_insecure_tls = false
 `,
@@ -285,10 +273,11 @@ port = "8083"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[device_ca]
+cert = "/path/to/toml-owner.device.ca"
 [owner]
 external-address = "0.0.0.0:8444"
 reuse_credentials = true
-device_ca_cert = "/path/to/toml-owner.device.ca"
 key = "/path/to/toml-owner.key"
 to0_insecure_tls = false
 `,
@@ -315,11 +304,10 @@ to0_insecure_tls = false
 				t.Fatalf("execute failed: %v", err)
 			}
 
-			if capturedConfig == nil || capturedConfig.Owner == nil {
+			if capturedConfig == nil {
 				t.Fatalf("owner config not captured")
 			}
 
-			cfg := capturedConfig.Owner
 			if capturedConfig.HTTP.IP != tt.expected.ip {
 				t.Fatalf("HTTP.IP=%q, want %q", capturedConfig.HTTP.IP, tt.expected.ip)
 			}
@@ -332,11 +320,11 @@ to0_insecure_tls = false
 			if capturedConfig.DB.DSN != tt.expected.dbDSN {
 				t.Fatalf("DB.DSN=%q, want %q", capturedConfig.DB.DSN, tt.expected.dbDSN)
 			}
-			if cfg.OwnerDeviceCACert != tt.expected.deviceCACert {
-				t.Fatalf("OwnerDeviceCACert=%q, want %q", cfg.OwnerDeviceCACert, tt.expected.deviceCACert)
+			if capturedConfig.DeviceCA.CertPath != tt.expected.deviceCACert {
+				t.Fatalf("DeviceCA.CertPath=%q, want %q", capturedConfig.DeviceCA.CertPath, tt.expected.deviceCACert)
 			}
-			if cfg.OwnerPrivateKey != tt.expected.ownerKey {
-				t.Fatalf("OwnerPrivateKey=%q, want %q", cfg.OwnerPrivateKey, tt.expected.ownerKey)
+			if capturedConfig.Owner.OwnerPrivateKey != tt.expected.ownerKey {
+				t.Fatalf("Owner.OwnerPrivateKey=%q, want %q", capturedConfig.Owner.OwnerPrivateKey, tt.expected.ownerKey)
 			}
 
 			// Note: wgets, uploads, downloads, uploadDir are command-line only arguments
@@ -402,7 +390,7 @@ dsn = "file:/tmp/database.db"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+	if capturedConfig == nil {
 		t.Fatalf("manufacturing config not captured")
 	}
 
@@ -435,7 +423,7 @@ dsn = "file:/tmp/database.db"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Owner == nil {
+	if capturedConfig == nil {
 		t.Fatalf("owner config not captured")
 	}
 
@@ -577,12 +565,13 @@ http:
 db:
   type: "sqlite"
   dsn: "file:test-yaml.db"
+device_ca:
+  cert: "/path/to/yaml-device.ca"
+  key: "/path/to/yaml-device.key"
 manufacturing:
   key: "/path/to/yaml-mfg.key"
-  owner_cert: "/path/to/yaml-owner.crt"
-  device_ca:
-    cert: "/path/to/yaml-device.ca"
-    key: "/path/to/yaml-device.key"
+owner:
+  cert: "/path/to/yaml-owner.crt"
 `
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"manufacturing", "--config", path})
@@ -591,22 +580,21 @@ manufacturing:
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+	if capturedConfig == nil {
 		t.Fatalf("manufacturing config not captured")
 	}
 
-	cfgObj := capturedConfig.Manufacturing
-	if cfgObj.ManufacturerKeyPath != "/path/to/yaml-mfg.key" {
-		t.Fatalf("ManufacturerKeyPath=%q", cfgObj.ManufacturerKeyPath)
+	if capturedConfig.Manufacturer.ManufacturerKeyPath != "/path/to/yaml-mfg.key" {
+		t.Fatalf("Manufacturer.ManufacturerKeyPath=%q", capturedConfig.Manufacturer.ManufacturerKeyPath)
 	}
-	if cfgObj.DeviceCACert.CertPath != "/path/to/yaml-device.ca" {
-		t.Fatalf("DeviceCACert.CertPath=%q", cfgObj.DeviceCACert.CertPath)
+	if capturedConfig.DeviceCA.CertPath != "/path/to/yaml-device.ca" {
+		t.Fatalf("DeviceCA.CertPath=%q", capturedConfig.DeviceCA.CertPath)
 	}
-	if cfgObj.DeviceCACert.KeyPath != "/path/to/yaml-device.key" {
-		t.Fatalf("DeviceCACert.KeyPath=%q", cfgObj.DeviceCACert.KeyPath)
+	if capturedConfig.DeviceCA.KeyPath != "/path/to/yaml-device.key" {
+		t.Fatalf("DeviceCA.KeyPath=%q", capturedConfig.DeviceCA.KeyPath)
 	}
-	if cfgObj.OwnerPublicKeyPath != "/path/to/yaml-owner.crt" {
-		t.Fatalf("OwnerPublicKeyPath=%q", cfgObj.OwnerPublicKeyPath)
+	if capturedConfig.Owner.OwnerCertificate != "/path/to/yaml-owner.crt" {
+		t.Fatalf("Owner.OwnerCertificate=%q", capturedConfig.Owner.OwnerCertificate)
 	}
 }
 
@@ -621,8 +609,9 @@ http:
 db:
   type: "sqlite"
   dsn: "file:test-owner-yaml.db"
+device_ca:
+  cert: "/path/to/yaml-owner.device.ca"
 owner:
-  device_ca_cert: "/path/to/yaml-owner.device.ca"
   key: "/path/to/yaml-owner.key"
   reuse_credentials: true
   to0_insecure_tls: false
@@ -634,16 +623,15 @@ owner:
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Owner == nil {
+	if capturedConfig == nil {
 		t.Fatalf("owner config not captured")
 	}
 
-	cfgObj := capturedConfig.Owner
-	if cfgObj.OwnerDeviceCACert != "/path/to/yaml-owner.device.ca" {
-		t.Fatalf("OwnerDeviceCACert=%q", cfgObj.OwnerDeviceCACert)
+	if capturedConfig.DeviceCA.CertPath != "/path/to/yaml-owner.device.ca" {
+		t.Fatalf("DeviceCA.CertPath=%q", capturedConfig.DeviceCA.CertPath)
 	}
-	if cfgObj.OwnerPrivateKey != "/path/to/yaml-owner.key" {
-		t.Fatalf("OwnerPrivateKey=%q", cfgObj.OwnerPrivateKey)
+	if capturedConfig.Owner.OwnerPrivateKey != "/path/to/yaml-owner.key" {
+		t.Fatalf("Owner.OwnerPrivateKey=%q", capturedConfig.Owner.OwnerPrivateKey)
 	}
 
 	// Note: command-line only options (wgets, uploads, downloads, uploadDir, date) are not loaded from configuration files
@@ -701,12 +689,13 @@ key = "/config/server.key"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
-[manufacturing]
-key = "/config/mfg.key"
-owner_cert = "/config/owner.crt"
-[manufacturing.device_ca]
+[device_ca]
 cert = "/config/device.ca"
 key = "/config/device.key"
+[manufacturing]
+key = "/config/mfg.key"
+[owner]
+cert = "/config/owner.crt"
 `
 	path := writeTOMLConfig(t, cfg)
 
@@ -728,11 +717,9 @@ key = "/config/device.key"
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Manufacturing == nil {
+	if capturedConfig == nil {
 		t.Fatalf("manufacturing config not captured")
 	}
-
-	cfgObj := capturedConfig.Manufacturing
 
 	// Verify that command-line values overrode config file values
 	if capturedConfig.HTTP.IP != "127.0.0.1" {
@@ -741,17 +728,17 @@ key = "/config/device.key"
 	if capturedConfig.HTTP.Port != "9090" {
 		t.Fatalf("HTTP.Port=%q, want %q (positional arg should override config)", capturedConfig.HTTP.Port, "9090")
 	}
-	if cfgObj.ManufacturerKeyPath != "/cli/mfg.key" {
-		t.Fatalf("ManufacturerKeyPath=%q, want %q (CLI flag should override config)", cfgObj.ManufacturerKeyPath, "/cli/mfg.key")
+	if capturedConfig.Manufacturer.ManufacturerKeyPath != "/cli/mfg.key" {
+		t.Fatalf("Manufacturer.ManufacturerKeyPath=%q, want %q (CLI flag should override config)", capturedConfig.Manufacturer.ManufacturerKeyPath, "/cli/mfg.key")
 	}
-	if cfgObj.OwnerPublicKeyPath != "/cli/owner.crt" {
-		t.Fatalf("OwnerPublicKeyPath=%q, want %q (CLI flag should override config)", cfgObj.OwnerPublicKeyPath, "/cli/owner.crt")
+	if capturedConfig.Owner.OwnerCertificate != "/cli/owner.crt" {
+		t.Fatalf("Owner.OwnerCertificate=%q, want %q (CLI flag should override config)", capturedConfig.Owner.OwnerCertificate, "/cli/owner.crt")
 	}
-	if cfgObj.DeviceCACert.CertPath != "/cli/device.ca" {
-		t.Fatalf("DeviceCACert.CertPath=%q, want %q (CLI flag should override config)", cfgObj.DeviceCACert.CertPath, "/cli/device.ca")
+	if capturedConfig.DeviceCA.CertPath != "/cli/device.ca" {
+		t.Fatalf("DeviceCA.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.DeviceCA.CertPath, "/cli/device.ca")
 	}
-	if cfgObj.DeviceCACert.KeyPath != "/cli/device.key" {
-		t.Fatalf("DeviceCACert.KeyPath=%q, want %q (CLI flag should override config)", cfgObj.DeviceCACert.KeyPath, "/cli/device.key")
+	if capturedConfig.DeviceCA.KeyPath != "/cli/device.key" {
+		t.Fatalf("DeviceCA.KeyPath=%q, want %q (CLI flag should override config)", capturedConfig.DeviceCA.KeyPath, "/cli/device.key")
 	}
 	if capturedConfig.DB.DSN != "file:cli.db" {
 		t.Fatalf("DB.DSN=%q, want %q (CLI flag should override config)", capturedConfig.DB.DSN, "file:cli.db")
@@ -778,8 +765,9 @@ key = "/config/server.key"
 [db]
 type = "sqlite"
 dsn = "file:/tmp/database.db"
+[device_ca]
+cert = "/config/owner.device.ca"
 [owner]
-device_ca_cert = "/config/owner.device.ca"
 key = "/config/owner.key"
 reuse_credentials = true
 to0_insecure_tls = true
@@ -804,11 +792,9 @@ to0_insecure_tls = true
 		t.Fatalf("execute failed: %v", err)
 	}
 
-	if capturedConfig == nil || capturedConfig.Owner == nil {
+	if capturedConfig == nil {
 		t.Fatalf("owner config not captured")
 	}
-
-	cfgObj := capturedConfig.Owner
 
 	// Verify that command-line values overrode config file values
 	if capturedConfig.HTTP.IP != "127.0.0.1" {
@@ -817,20 +803,20 @@ to0_insecure_tls = true
 	if capturedConfig.HTTP.Port != "9091" {
 		t.Fatalf("HTTP.Port=%q, want %q (positional arg should override config)", capturedConfig.HTTP.Port, "9091")
 	}
-	if cfgObj.OwnerDeviceCACert != "/cli/owner.device.ca" {
-		t.Fatalf("OwnerDeviceCACert=%q, want %q (CLI flag should override config)", cfgObj.OwnerDeviceCACert, "/cli/owner.device.ca")
+	if capturedConfig.DeviceCA.CertPath != "/cli/owner.device.ca" {
+		t.Fatalf("DeviceCA.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.DeviceCA.CertPath, "/cli/owner.device.ca")
 	}
-	if cfgObj.OwnerPrivateKey != "/cli/owner.key" {
-		t.Fatalf("OwnerPrivateKey=%q, want %q (CLI flag should override config)", cfgObj.OwnerPrivateKey, "/cli/owner.key")
+	if capturedConfig.Owner.OwnerPrivateKey != "/cli/owner.key" {
+		t.Fatalf("Owner.OwnerPrivateKey=%q, want %q (CLI flag should override config)", capturedConfig.Owner.OwnerPrivateKey, "/cli/owner.key")
 	}
-	if cfgObj.ReuseCred != false {
-		t.Fatalf("ReuseCred=%v, want %v (CLI flag should override config)", cfgObj.ReuseCred, false)
+	if capturedConfig.Owner.ReuseCred != false {
+		t.Fatalf("Owner.ReuseCred=%v, want %v (CLI flag should override config)", capturedConfig.Owner.ReuseCred, false)
 	}
 	if capturedConfig.DB.DSN != "file:cli.db" {
 		t.Fatalf("DB.DSN=%q, want %q (CLI flag should override config)", capturedConfig.DB.DSN, "file:cli.db")
 	}
-	if cfgObj.TO0InsecureTLS != false {
-		t.Fatalf("Owner.TO0InsecureTLS=%v, want %v (CLI flag should override config)", cfgObj.TO0InsecureTLS, false)
+	if capturedConfig.Owner.TO0InsecureTLS != false {
+		t.Fatalf("Owner.TO0InsecureTLS=%v, want %v (CLI flag should override config)", capturedConfig.Owner.TO0InsecureTLS, false)
 	}
 	if capturedConfig.HTTP.CertPath != "/cli/server.crt" {
 		t.Fatalf("HTTP.CertPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.CertPath, "/cli/server.crt")
