@@ -40,9 +40,12 @@ start_service_wget_httpd() {
   cd - >/dev/null
 }
 
-# Add the proper FSIM configuration via the owner server command line
-setup_owner_cmdline() {
-  owner_cmdline+=("--command-wget ${wget_source_url}")
+# Modified run_services function that adds wget support for owner service
+start_service_owner() {
+  run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
+    --owner-key="${owner_key}" \
+    --device-ca-cert="${device_ca_crt}" \
+    --command-wget "${wget_source_url}"
 }
 
 run_test() {
@@ -61,12 +64,6 @@ run_test() {
 
   echo "⭐ Build and install 'go-fdo-server' binary"
   install_server
-
-  echo "⭐ Generating service configuration files"
-  generate_service_configs
-
-  echo "⭐ Set the owner server command line"
-  setup_owner_cmdline
 
   echo "⭐ Start services"
   start_services

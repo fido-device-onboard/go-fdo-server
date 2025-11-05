@@ -10,8 +10,8 @@ StateDirectory=go-fdo-server-rendezvous
 ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server \
                                  --db-type ${DATABASE_TYPE} \
                                  --db-dsn ${DATABASE_DSN} \
-                                 ${ADDITIONAL_OPTS} \
-                                 rendezvous ${LISTEN_IP}:${LISTEN_PORT}'
+                                 rendezvous ${LISTEN_IP}:${LISTEN_PORT} \
+                                 ${ADDITIONAL_OPTS}'
 User=go-fdo-server-rendezvous
 
 EnvironmentFile=-/etc/sysconfig/go-fdo-server-rendezvous

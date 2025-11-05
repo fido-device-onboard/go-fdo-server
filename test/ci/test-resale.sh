@@ -26,29 +26,11 @@ new_owner_url="http://${new_owner_service}"
 new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
-new_owner_config_file="${configs_dir}/new_owner.yaml"
-declare -a new_owner_cmdline=("--log-level=debug" "--config=${new_owner_config_file}")
-
-generate_new_owner_config() {
-  cat <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/new_owner.db"
-http:
-  ip: "${new_owner_dns}"
-  port: ${new_owner_port}
-device_ca:
-  cert: "${device_ca_crt}"
-owner:
-  key: "${new_owner_key}"
-  to0_insecure_tls: true
-EOF
-}
 
 start_service_new_owner() {
-  run_go_fdo_server owner ${new_owner_pid_file} ${new_owner_log} ${new_owner_cmdline[@]}
+  run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
+    --owner-key="${new_owner_key}" \
+    --device-ca-cert="${device_ca_crt}"
 }
 
 run_test() {
@@ -66,9 +48,6 @@ run_test() {
 
   echo "⭐ Build and install 'go-fdo-server' binary"
   install_server
-
-  echo "⭐ Generating service configuration files"
-  generate_service_configs
 
   echo "⭐ Start services"
   start_services

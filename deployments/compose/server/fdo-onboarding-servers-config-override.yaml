@@ -1,0 +1,15 @@
+services:
+  manufacturer:
+    command:
+     - manufacturing
+     - --config=${container_working_dir:-/workdir}/configs/manufacturing.yaml
+
+  rendezvous:
+    command:
+      - rendezvous
+      - --config=${container_working_dir:-/workdir}/configs/rendezvous.yaml
+
+  owner:
+    command:
+      - owner
+      - --config=${container_working_dir:-/workdir}/configs/owner.yaml

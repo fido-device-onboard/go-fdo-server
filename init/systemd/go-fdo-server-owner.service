@@ -11,10 +11,10 @@ ExecStartPre=/usr/share/go-fdo-server/generate-owner-certs.sh
 ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server \
                                  --db-type ${DATABASE_TYPE} \
                                  --db-dsn ${DATABASE_DSN} \
-                                 ${ADDITIONAL_OPTS} \
                                  owner ${LISTEN_IP}:${LISTEN_PORT} \
                                  --owner-key ${OWNER_KEY} \
-                                 --device-ca-cert ${DEVICE_CA_CRT}'
+                                 --device-ca-cert ${DEVICE_CA_CRT} \
+                                 ${ADDITIONAL_OPTS}'
 User=go-fdo-server-owner
 
 EnvironmentFile=-/etc/sysconfig/go-fdo-server-owner

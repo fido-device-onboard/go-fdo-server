@@ -6,4 +6,4 @@ DATABASE_DSN="file:/var/lib/go-fdo-server-owner/db.sqlite"
 OWNER_KEY="/etc/go-fdo-server/owner.key"
 DEVICE_CA_CRT="/etc/go-fdo-server/device-ca.crt"
 # Example to enable TLS:
-# ADDITIONAL_OPTS="--server-cert-path=/etc/go-fdo-server/owner-http.crt --server-key-path=/etc/go-fdo-server/owner-http.key"
+# ADDITIONAL_OPTS="--http-cert=/etc/go-fdo-server/owner-http.crt --http-key=/etc/go-fdo-server/owner-http.key"

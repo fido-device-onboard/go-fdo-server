@@ -10,9 +10,15 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+     - --db-type=sqlite
+     - --db-dsn=file:${container_working_dir:-/workdir}/manufacturer.db
      - --log-level=debug
      - manufacturing
-     - --config=${container_working_dir:-/workdir}/configs/manufacturing.yaml
+     - manufacturer:8038
+     - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
+     - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
+     - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+     - --device-ca-key=${container_working_dir:-/workdir}/certs/device_ca.key
     working_dir: ${container_working_dir:-/workdir}
     volumes:
       - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
@@ -37,9 +43,11 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/rendezvous.db
       - --log-level=debug
       - rendezvous
-      - --config=${container_working_dir:-/workdir}/configs/rendezvous.yaml
+      - rendezvous:8041
     working_dir: ${container_working_dir:-/workdir}
     volumes:
       - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
@@ -64,9 +72,13 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/owner.db
       - --log-level=debug
       - owner
-      - --config=${container_working_dir:-/workdir}/configs/owner.yaml
+      - owner:8043
+      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
     working_dir: ${container_working_dir:-/workdir}
     volumes:
       - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}

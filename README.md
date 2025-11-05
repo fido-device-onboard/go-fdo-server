@@ -183,7 +183,7 @@ openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650 -subj 
 2. Run go-fdo-server
 
 ```bash
-go-fdo-server --server-cert-path <cert-path> --server-key-path <key-path> ...
+go-fdo-server --http-cert <cert-path> --http-key <key-path> ...
 ```
 
 

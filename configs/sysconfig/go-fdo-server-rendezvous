@@ -4,4 +4,4 @@ ADDITIONAL_OPTS=""
 DATABASE_TYPE="sqlite"
 DATABASE_DSN="file:/var/lib/go-fdo-server-rendezvous/db.sqlite"
 # Example to enable TLS:
-# ADDITIONAL_OPTS="--server-cert-path=/etc/go-fdo-server/rendezvous-http.crt --server-key-path=/etc/go-fdo-server/rendezvous-http.key"
+# ADDITIONAL_OPTS="--http-cert=/etc/go-fdo-server/rendezvous-http.crt --http-key=/etc/go-fdo-server/rendezvous-http.key"

@@ -209,3 +209,32 @@ jobs:
         run: |
           source test/ci/test-fsim-download.sh
           cleanup
+
+  test-onboarding-config:
+    name: Test FIDO device onboarding using a configuration file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test FIDO device onboarding
+        run: |
+          source test/ci/test-onboarding-config.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs after a failure
+        if: failure()
+        run: |
+          source test/ci/test-onboarding-config.sh
+          get_server_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-onboarding-config.sh
+          cleanup

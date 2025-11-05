@@ -8,4 +8,4 @@ OWNER_CRT="/etc/go-fdo-server/owner.crt"
 DEVICE_CA_CRT="/etc/go-fdo-server/device-ca.crt"
 DEVICE_CA_KEY="/etc/go-fdo-server/device-ca.key"
 # Example to enable TLS:
-# ADDITIONAL_OPTS="--server-cert-path=/etc/go-fdo-server/manufacturer-http.crt --server-key-path=/etc/go-fdo-server/manufacturer-http.key"
+# ADDITIONAL_OPTS="--http-cert=/etc/go-fdo-server/manufacturer-http.crt --http-key=/etc/go-fdo-server/manufacturer-http.key"

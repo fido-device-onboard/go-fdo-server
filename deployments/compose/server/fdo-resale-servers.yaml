@@ -10,9 +10,13 @@ services:
       TZ: Europe/Madrid
     user: ${container_user}
     command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/new_owner.db
       - --log-level=debug
       - owner
-      - --config=${container_working_dir:-/workdir}/configs/new_owner.yaml
+      - new_owner:8045
+      - --owner-key=${container_working_dir:-/workdir}/certs/new_owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
     working_dir: ${container_working_dir:-/workdir}
     networks:
       - fdo

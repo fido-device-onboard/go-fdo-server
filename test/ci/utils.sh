@@ -13,7 +13,6 @@ pid_dir="${base_dir}/run"
 logs_dir="${base_dir}/logs"
 certs_dir="${base_dir}/certs"
 credentials_dir="${base_dir}/device-credentials"
-configs_dir="${base_dir}/configs"
 device_credentials="${credentials_dir}/creds.bin"
 
 device_ca_key="${certs_dir}/device_ca.key"
@@ -44,8 +43,6 @@ manufacturer_url="${manufacturer_protocol}://${manufacturer_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
 manufacturer_health_url="${manufacturer_url}/health"
-manufacturer_config_file="${configs_dir}/manufacturing.yaml"
-declare -a manufacturer_cmdline=("--log-level=debug" "--config=${manufacturer_config_file}")
 
 rendezvous_service_name="rendezvous"
 rendezvous_dns=rendezvous
@@ -62,8 +59,6 @@ rendezvous_url="${rendezvous_protocol}://${rendezvous_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
 rendezvous_health_url="${rendezvous_url}/health"
-rendezvous_config_file="${configs_dir}/rendezvous.yaml"
-declare -a rendezvous_cmdline=("--log-level=debug" "--config=${rendezvous_config_file}")
 
 owner_service_name="owner"
 owner_dns=owner
@@ -89,8 +84,6 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 #shellcheck disable=SC2034
 owner_ov="${base_dir}/owner.ov"
-owner_config_file="${configs_dir}/owner.yaml"
-declare -a owner_cmdline=("--log-level=debug" "--config=${owner_config_file}")
 
 # Define HTTPS certificate subjects per service (passed down to cert generator)
 manufacturer_https_subj="/C=US/O=FDO/CN=manufacturer"
@@ -106,7 +99,7 @@ owner_https_key="${certs_dir}/owner-http.key"
 owner_https_crt="${certs_dir}/owner-http.crt"
 
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
-declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}" "${configs_dir}")
+declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
 find_in_log_or_fail() {
   local log=$1
@@ -246,39 +239,21 @@ run_fido_device_onboard() {
 
 run_go_fdo_server() {
   local role=$1
-  local pid_file=$2
-  local log=$3
-  shift 3
+  local address_port=$2
+  local name=$3
+  local pid_file=$4
+  local log=$5
+  shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${@}" &> "${log}" &
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &> "${log}" &
   echo -n $! > "${pid_file}"
-}
-
-generate_manufacturer_config() {
-  cat <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/manufacturer.db"
-http:
-  ip: "${manufacturer_dns}"
-  port: ${manufacturer_port}
-manufacturing:
-  key: "${manufacturer_key}"
-device_ca:
-  cert: "${device_ca_crt}"
-  key: "${device_ca_key}"
-owner:
-  cert: "${owner_crt}"
-EOF
 }
 
 start_service_manufacturer() {
   local extra_opts=()
   if [ "${manufacturer_protocol}" = "https" ]; then
-    extra_opts+=(--server-cert-path "${manufacturer_https_crt}" --server-key-path "${manufacturer_https_key}")
+    extra_opts+=(--http-cert "${manufacturer_https_crt}" --http-key "${manufacturer_https_key}")
   fi
   run_go_fdo_server manufacturing ${manufacturer_service} manufacturer ${manufacturer_pid_file} ${manufacturer_log} \
     --manufacturing-key="${manufacturer_key}" \
@@ -304,7 +279,7 @@ EOF
 start_service_rendezvous() {
   local extra_opts=()
   if [ "${rendezvous_protocol}" = "https" ]; then
-    extra_opts+=(--server-cert-path "${rendezvous_https_crt}" --server-key-path "${rendezvous_https_key}")
+    extra_opts+=(--http-cert "${rendezvous_https_crt}" --http-key "${rendezvous_https_key}")
   fi
   run_go_fdo_server rendezvous ${rendezvous_service} rendezvous ${rendezvous_pid_file} ${rendezvous_log} \
     "${extra_opts[@]}"
@@ -331,7 +306,7 @@ EOF
 start_service_owner() {
   local extra_opts=()
   if [ "${owner_protocol}" = "https" ]; then
-    extra_opts+=(--server-cert-path "${owner_https_crt}" --server-key-path "${owner_https_key}")
+    extra_opts+=(--http-cert "${owner_https_crt}" --http-key "${owner_https_key}")
   fi
   run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
     --owner-key="${owner_key}" \
@@ -371,16 +346,6 @@ stop_services() {
   echo "⭐ Stopping services"
   for service in "${services[@]}"; do
     stop_service ${service}
-  done
-}
-
-generate_service_configs() {
-  for service in "${services[@]}"; do
-    local gen_func="generate_${service}_config"
-    local conf_file="${service}_config_file"
-    if declare -F "${gen_func}" > /dev/null; then
-      "${gen_func}" > "${!conf_file}"
-    fi
   done
 }
 
