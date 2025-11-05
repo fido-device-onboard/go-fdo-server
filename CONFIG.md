@@ -110,7 +110,8 @@ No specific configuration options are required for the rendezvous server beyond 
 ### Manufacturing Server Configuration
 
 ```toml
-debug = true
+[log]
+level = "debug"
 
 [http]
 ip = "127.0.0.1"
@@ -136,7 +137,8 @@ cert = "/path/to/owner.crt"
 ### Owner Server Configuration
 
 ```toml
-debug = true
+[log]
+level = "debug"
 
 [http]
 ip = "127.0.0.1"
@@ -160,7 +162,8 @@ to0_insecure_tls = false
 ### Rendezvous Server Configuration
 
 ```toml
-debug = true
+[log]
+level = "debug"
 
 [http]
 ip = "127.0.0.1"
@@ -178,7 +181,8 @@ dsn = "file:rendezvous.db"
 ### YAML Configuration Example
 
 ```yaml
-debug: true
+log:
+  level: "debug"
 
 http:
   ip: "127.0.0.1"

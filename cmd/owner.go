@@ -58,10 +58,10 @@ func (o *OwnerServerConfig) validate() error {
 		return err
 	}
 	if o.Owner.OwnerPrivateKey == "" {
-		return errors.New("owner private key path is required")
+		return errors.New("an owner private key file is required")
 	}
 	if o.DeviceCA.CertPath == "" {
-		return errors.New("device CA certificate path is required")
+		return errors.New("a device CA certificate file is required")
 	}
 	return nil
 }

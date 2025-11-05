@@ -51,13 +51,16 @@ func (m *ManufacturingServerConfig) validate() error {
 		return err
 	}
 	if m.Manufacturer.ManufacturerKeyPath == "" {
-		return errors.New("manufacturing key path is required")
+		return errors.New("a manufacturing key file is required")
 	}
 	if m.DeviceCA.KeyPath == "" {
-		return errors.New("device CA key path is required")
+		return errors.New("a device CA key file is required")
 	}
 	if m.DeviceCA.CertPath == "" {
-		return errors.New("device CA certificate path is required")
+		return errors.New("a device CA certificate file is required")
+	}
+	if m.Owner.OwnerCertificate == "" {
+		return errors.New("an owner certificate file is required")
 	}
 	return nil
 }
@@ -193,6 +196,7 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 	if block == nil {
 		return fmt.Errorf("unable to decode owner public key")
 	}
+
 	// TODO: Support PKIX public keys
 	// TODO: Support certificate chains > 1
 	var ownerCert *x509.Certificate

@@ -115,6 +115,7 @@ func TestManufacturing_LoadsFromTOMLConfig(t *testing.T) {
 		deviceCACert    string
 		deviceCAKey     string
 		ownerCert       string
+		logLevel        string
 	}
 
 	tests := []struct {
@@ -125,6 +126,8 @@ func TestManufacturing_LoadsFromTOMLConfig(t *testing.T) {
 		{
 			name: "basic configuration",
 			config: `
+[log]
+level = "warn"
 [http]
 ip = "127.0.0.1"
 port = "8081"
@@ -148,11 +151,14 @@ cert = "/path/to/owner.crt"
 				deviceCACert:    "/path/to/device.ca",
 				deviceCAKey:     "/path/to/device.key",
 				ownerCert:       "/path/to/owner.crt",
+				logLevel:        "warn",
 			},
 		},
 		{
 			name: "toml-specific configuration",
 			config: `
+[log]
+level = "warn"
 [http]
 ip = "127.0.0.1"
 port = "8082"
@@ -176,6 +182,7 @@ cert = "/path/to/toml-owner.crt"
 				deviceCACert:    "/path/to/toml-device.ca",
 				deviceCAKey:     "/path/to/toml-device.key",
 				ownerCert:       "/path/to/toml-owner.crt",
+				logLevel:        "warn",
 			},
 		},
 	}
@@ -219,6 +226,9 @@ cert = "/path/to/toml-owner.crt"
 			}
 			if capturedConfig.Owner.OwnerCertificate != tt.expected.ownerCert {
 				t.Fatalf("Owner.OwnerCertificate=%q, want %q", capturedConfig.Owner.OwnerCertificate, tt.expected.ownerCert)
+			}
+			if capturedConfig.Log.Level != tt.expected.logLevel {
+				t.Fatalf("Log.Level=%q, want %q", capturedConfig.Log.Level, tt.expected.logLevel)
 			}
 		})
 	}
@@ -559,6 +569,8 @@ func TestManufacturing_LoadsFromYAMLConfig(t *testing.T) {
 	stubRunE(t, manufacturingCmd)
 
 	cfg := `
+log:
+  level: "error"
 http:
   ip: "127.0.0.1"
   port: "8081"
@@ -595,6 +607,9 @@ owner:
 	}
 	if capturedConfig.Owner.OwnerCertificate != "/path/to/yaml-owner.crt" {
 		t.Fatalf("Owner.OwnerCertificate=%q", capturedConfig.Owner.OwnerCertificate)
+	}
+	if capturedConfig.Log.Level != "error" {
+		t.Fatalf("Log.Level=%q, want %q", capturedConfig.Log.Level, "error")
 	}
 }
 
