@@ -66,17 +66,25 @@ func (o *OwnerServerConfig) validate() error {
 	if o.DeviceCA.CertPath == "" {
 		return errors.New("a device CA certificate file is required")
 	}
+
+	// Validate FSIM parameters
+	if err := validateFSIMParameters(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 var (
-	// FSIM configuration TBD
+	// FSIM command line flags
 	date          bool
 	wgets         []string
+	wgetURLs      []*url.URL // Parsed wget URLs
 	uploads       []string
 	uploadDir     string
 	downloads     []string
-	defaultTo0TTL uint32 = 300
+	downloadPaths []string // Cleaned download file paths
+	defaultTo0TTL uint32   = 300
 )
 
 // ownerCmd represents the owner command
@@ -211,6 +219,71 @@ func getOwnerServerState(config *OwnerServerConfig) (*OwnerServerState, error) {
 		ownerKey:     ownerKey,
 		ownerKeyType: ownerKeyType,
 	}, nil
+}
+
+func validateFSIMParameters() error {
+	// Only validate if FSIM parameters are actually being used
+	if !hasFSIMParameters() {
+		return nil // No FSIM parameters to validate
+	}
+
+	// Parse and validate wget URLs
+	wgetURLs = make([]*url.URL, 0, len(wgets))
+	for _, urlString := range wgets {
+		parsedURL, err := url.Parse(urlString)
+		if err != nil {
+			return fmt.Errorf("invalid wget URL %q: %w", urlString, err)
+		}
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return fmt.Errorf("wget URL %q must use http or https scheme, got %q", urlString, parsedURL.Scheme)
+		}
+		if parsedURL.Host == "" {
+			return fmt.Errorf("wget URL %q missing host", urlString)
+		}
+		wgetURLs = append(wgetURLs, parsedURL)
+	}
+
+	// Validate and store cleaned download file paths
+	downloadPaths = make([]string, 0, len(downloads))
+	for _, filePath := range downloads {
+		cleanPath := filepath.Clean(filePath)
+		if _, err := os.Stat(cleanPath); err != nil {
+			return fmt.Errorf("cannot access download file %q: %w", filePath, err)
+		}
+		downloadPaths = append(downloadPaths, cleanPath)
+	}
+
+	if len(uploads) > 0 && uploadDir == "" {
+		return fmt.Errorf("upload directory must be specified when using --command-upload")
+	}
+
+	if uploadDir != "" {
+		info, err := os.Stat(uploadDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("upload directory %q does not exist", uploadDir)
+			}
+			return fmt.Errorf("cannot access upload directory %q: %w", uploadDir, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("upload path %q is not a directory", uploadDir)
+		}
+
+		testFile, err := os.CreateTemp(uploadDir, ".fdo-write-test-*")
+		if err != nil {
+			return fmt.Errorf("upload directory %q is not writable: %w", uploadDir, err)
+		}
+
+		// Best effort cleanup after validation
+		testFile.Close()
+		os.Remove(testFile.Name())
+	}
+
+	return nil
+}
+
+func hasFSIMParameters() bool {
+	return len(wgets) > 0 || len(downloads) > 0 || len(uploads) > 0 || uploadDir != "" || date
 }
 
 func serveOwner(config *OwnerServerConfig) error {
@@ -377,15 +450,15 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if slices.Contains(modules, "fdo.download") {
-			for _, name := range downloads {
-				f, err := os.Open(filepath.Clean(name))
+			for i, cleanPath := range downloadPaths {
+				f, err := os.Open(cleanPath)
 				if err != nil {
-					log.Fatalf("error opening %q for download FSIM: %v", name, err)
+					log.Fatalf("error opening %q for download FSIM: %v", cleanPath, err)
 				}
 				defer func() { _ = f.Close() }()
 
 				if !yield("fdo.download", &fsim.DownloadContents[*os.File]{
-					Name:         name,
+					Name:         downloads[i], // Use original name for display
 					Contents:     f,
 					MustDownload: true,
 				}) {
@@ -409,11 +482,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 		}
 
 		if slices.Contains(modules, "fdo.wget") {
-			for _, urlString := range wgets {
-				url, err := url.Parse(urlString)
-				if err != nil || url.Path == "" {
-					continue
-				}
+			for _, url := range wgetURLs {
 				if !yield("fdo.wget", &fsim.WgetCommand{
 					Name: path.Base(url.Path),
 					URL:  url,

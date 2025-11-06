@@ -69,6 +69,9 @@ run_test() {
   echo "⭐ Configuring services"
   configure_services
 
+  echo "⭐ Generate the download payloads on owner side: ${download_files[*]}"
+  generate_download_files
+
   echo "⭐ Start services"
   start_services
 
@@ -92,9 +95,6 @@ run_test() {
 
   echo "⭐ Sleeping to allow TO0 to complete"
   sleep 20
-
-  echo "⭐ Generate the download payloads on owner side: ${download_files[*]}"
-  generate_download_files
 
   echo "⭐ Running FIDO Device Onboard with FSIM fdo.download"
   run_fido_device_onboard --download "${device_download_dir}"
