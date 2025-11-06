@@ -263,19 +263,6 @@ start_service_manufacturer() {
     "${extra_opts[@]}"
 }
 
-generate_rendezvous_config() {
-  cat <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/rendezvous.db"
-http:
-  ip: "${rendezvous_dns}"
-  port: ${rendezvous_port}
-EOF
-}
-
 start_service_rendezvous() {
   local extra_opts=()
   if [ "${rendezvous_protocol}" = "https" ]; then
@@ -285,28 +272,14 @@ start_service_rendezvous() {
     "${extra_opts[@]}"
 }
 
-generate_owner_config() {
-  cat <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/owner.db"
-http:
-  ip: "${owner_dns}"
-  port: ${owner_port}
-device_ca:
-  cert: "${device_ca_crt}"
-owner:
-  key: "${owner_key}"
-  to0_insecure_tls: true
-EOF
-}
-
 start_service_owner() {
   local extra_opts=()
   if [ "${owner_protocol}" = "https" ]; then
     extra_opts+=(--http-cert "${owner_https_crt}" --http-key "${owner_https_key}")
+  fi
+  if [ "${rendezvous_protocol}" = "https" ]; then
+    # skip verify of rendezvous cert (self signed)
+    extra_opts+=(--to0-insecure-tls)
   fi
   run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
     --owner-key="${owner_key}" \
