@@ -277,6 +277,11 @@ func ResellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
 			slog.Debug(err.Error())
+			if extended != nil {
+				if err := to2Server.Vouchers.AddVoucher(context.TODO(), extended); err != nil {
+					slog.Debug("Error adding voucher to database", "error", err.Error())
+				}
+			}
 			return
 		}
 		ovBytes, err := cbor.Marshal(extended)
