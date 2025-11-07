@@ -386,7 +386,8 @@ set_or_update_rendezvous_info() {
   local rendezvous_service_name=$2
   local rendezvous_dns=$3
   local rendezvous_port=$4
-  
+  local rendezvous_protocol=${5:-http}
+
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
@@ -416,6 +417,7 @@ set_or_update_owner_redirect_info() {
   local owner_service_name=$2
   local owner_dns=$3
   local owner_port=$4
+  local owner_protocol=${5:-http}
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   echo "❓ Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
