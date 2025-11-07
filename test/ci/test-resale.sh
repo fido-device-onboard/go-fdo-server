@@ -48,7 +48,7 @@ run_test() {
   create_directories
 
   echo "⭐ Generating service certificates"
-  generate_certs
+  generate_service_certs
 
   echo "⭐ Build and install the 'go-fdo-client' binary"
   install_client
