@@ -28,10 +28,20 @@ new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
 
+#shellcheck disable=SC2034
+new_owner_https_subj="/C=US/O=FDO/CN=new_owner"
+new_owner_https_key="${certs_dir}/new_owner-http.key"
+new_owner_https_crt="${certs_dir}/new_owner-http.crt"
+
 start_service_new_owner() {
+  local extra_opts=()
+  if [ "${new_owner_protocol}" = "https" ]; then
+    extra_opts+=(--http-cert "${new_owner_https_crt}" --http-key "${new_owner_https_key}" --to0-insecure-tls)
+  fi
   run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
     --owner-key="${new_owner_key}" \
     --device-ca-cert="${device_ca_crt}"
+    "${extra_opts[@]}"
 }
 
 run_test() {
