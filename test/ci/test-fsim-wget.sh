@@ -81,7 +81,7 @@ run_test() {
   prepare_payload "${wget_source_file}"
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   echo "⭐ Run Device Initialization for Device 1"
   run_device_initialization
@@ -90,7 +90,7 @@ run_test() {
   echo "⭐ Device 1 initialized with GUID: ${guid}"
 
   echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
+  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
 
   echo "⭐ Sending Device 1 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"

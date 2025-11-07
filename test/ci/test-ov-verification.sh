@@ -33,7 +33,7 @@ run_test () {
   wait_for_services_ready
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   echo "⭐ Run Device Initialization"
   run_device_initialization

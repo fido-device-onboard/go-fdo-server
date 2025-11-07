@@ -20,7 +20,8 @@ new_owner_pub="${new_owner_key/\.key/.pub}"
 #shellcheck disable=SC2034
 new_owner_subj="/C=US/O=FDO/CN=New Owner"
 new_owner_service="${new_owner_dns}:${new_owner_port}"
-new_owner_url="http://${new_owner_service}"
+new_owner_protocol="http"
+new_owner_url="${new_owner_protocol}://${new_owner_service}"
 # needed for 'wait_for_services_ready' do not remove
 #shellcheck disable=SC2034
 new_owner_health_url="${new_owner_url}/health"
@@ -62,7 +63,7 @@ run_test() {
   wait_for_services_ready
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   echo "⭐ Run Device Initialization"
   run_device_initialization
@@ -80,7 +81,7 @@ run_test() {
   resell "${owner_url}" "${guid}" "${new_owner_pub}" "${new_owner_ov}"
 
   echo "⭐ Setting or updating the New Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}"
+  set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}" "${new_owner_protocol}"
 
   echo "⭐ Sending the Ownership Voucher to the New Owner"
   send_ov_to_owner "${new_owner_url}" "${new_owner_ov}"

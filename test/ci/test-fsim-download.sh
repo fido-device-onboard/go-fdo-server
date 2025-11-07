@@ -73,7 +73,7 @@ run_test() {
   wait_for_services_ready
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   echo "⭐ Run Device Initialization"
   run_device_initialization
@@ -82,7 +82,7 @@ run_test() {
   echo "⭐ Device initialized with GUID: ${guid}"
 
   echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
+  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
 
   echo "⭐ Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
