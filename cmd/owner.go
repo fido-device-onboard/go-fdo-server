@@ -8,6 +8,7 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -29,6 +30,8 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
+	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -68,11 +71,12 @@ func (o *OwnerServerConfig) validate() error {
 
 var (
 	// FSIM configuration TBD
-	date      bool
-	wgets     []string
-	uploads   []string
-	uploadDir string
-	downloads []string
+	date          bool
+	wgets         []string
+	uploads       []string
+	uploadDir     string
+	downloads     []string
+	defaultTo0TTL uint32 = 300
 )
 
 // ownerCmd represents the owner command
@@ -237,11 +241,6 @@ func serveOwner(config *OwnerServerConfig) error {
 
 	// Handle messages
 	apiRouter := http.NewServeMux()
-	apiRouter.Handle("GET /to0/{guid}", handlers.To0Handler(&handlers.To0HandlerState{
-		VoucherState: state.DB,
-		KeyState:     state,
-		InsecureTLS:  config.Owner.TO0InsecureTLS,
-	}))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
@@ -249,6 +248,60 @@ func serveOwner(config *OwnerServerConfig) error {
 
 	// Listen and serve
 	server := NewOwnerServer(config.HTTP, httpHandler)
+
+	// Background TO0 scheduler: after restarts, continue attempting TO0 for any
+	// devices without completed TO2 as recorded in the database.
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		// nextTry holds per-GUID backoff based on TO0 refresh or fallback
+		nextTry := make(map[string]time.Time)
+		for {
+			// Fetch vouchers that still need TO2
+			vouchers, err := db.ListPendingTO0Vouchers(true)
+			if err != nil {
+				slog.Debug("to0 scheduler: list pending vouchers failed", "err", err)
+				<-ticker.C
+				continue
+			}
+			now := time.Now()
+			for _, v := range vouchers {
+				// Parse voucher to get GUID and RVInfo
+				var ov fdo.Voucher
+				if err := cbor.Unmarshal(v.CBOR, &ov); err != nil {
+					slog.Debug("to0 scheduler: unmarshal voucher failed", "err", err)
+					continue
+				}
+				guidHex := hex.EncodeToString(ov.Header.Val.GUID[:])
+				// Skip if already completed
+				completed, err := db.IsTO2Completed(ov.Header.Val.GUID[:])
+				if err != nil {
+					slog.Debug("to0 scheduler: to2 completion check failed", "guid", guidHex, "err", err)
+					continue
+				}
+				if completed {
+					delete(nextTry, guidHex)
+					continue
+				} // Respect backoff schedule
+				if t, ok := nextTry[guidHex]; ok && now.Before(t) {
+					continue
+				}
+				// Attempt TO0 once for this GUID
+				refresh, err := to0.RegisterRvBlob(ov.Header.Val.RvInfo, guidHex, state.DB, state, config.Owner.TO0InsecureTLS, defaultTo0TTL)
+				if err != nil {
+					// On failure, retry after 60s
+					nextTry[guidHex] = now.Add(60 * time.Second)
+					slog.Debug("to0 scheduler: to0 register failed", "guid", guidHex, "err", err)
+					continue
+				}
+				if refresh == 0 {
+					refresh = defaultTo0TTL
+				}
+				nextTry[guidHex] = now.Add(time.Duration(refresh) * time.Second)
+			}
+			<-ticker.C
+		}
+	}()
 
 	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()

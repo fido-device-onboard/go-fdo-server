@@ -105,12 +105,6 @@ send_ov_to_owner () {
        "${owner_url}/api/v1/owner/vouchers"
 }
 
-run_to0 () {
-  local owner_url=$1
-  local guid=$2
-  curl --fail --verbose --silent --insecure "${owner_url}/api/v1/to0/${guid}"
-}
-
 resell() {
   local owner_url=$1
   local guid=$2

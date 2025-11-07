@@ -70,14 +70,14 @@ run_test() {
   echo "⭐ Trigger the Resell protocol on the current owner"
   resell "${owner_url}" "${guid}" "${new_owner_pub}" "${new_owner_ov}"
 
-  echo "⭐ Sending the Ownership Voucher to the New Owner"
-  send_ov_to_owner "${new_owner_url}" "${new_owner_ov}"
-
   echo "⭐ Setting or updating the New Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}"
 
-  echo "⭐ Triggering TO0 on the New Owner"
-  run_to0 "${new_owner_url}" "${guid}" >/dev/null
+  echo "⭐ Sending the Ownership Voucher to the New Owner"
+  send_ov_to_owner "${new_owner_url}" "${new_owner_ov}"
+
+  echo "⭐ Sleeping to allow TO0 to complete"
+  sleep 20
 
   echo "⭐ Running FIDO Device Onboard"
   run_fido_device_onboard --debug

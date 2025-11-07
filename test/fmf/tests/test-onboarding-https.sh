@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-# Source the common CI test first (defines certs_dir via CI utils)
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/test-onboarding.sh"
 
 # Force all services to use HTTPS for this test

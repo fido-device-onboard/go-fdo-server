@@ -128,31 +128,50 @@ func (s *State) ReplaceVoucher(ctx context.Context, guid protocol.GUID, ov *fdo.
 		UpdatedAt:  now,
 	}
 
-	// Replace the old voucher
-	return s.DB.Where("guid = ?", guid[:]).Assign(voucher).FirstOrCreate(&voucher).Error
+	// Mark TO2 completion for this GUID and record new GUID that changed
+	completedAt := time.Now()
+	replacement := DeviceOnboarding{GUID: guid[:], NewGUID: ov.Header.Val.GUID[:], TO2Completed: true, TO2CompletedAt: &completedAt}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		// Delete the old voucher row (by original GUID), then create the new voucher
+		if err := tx.Where("guid = ?", guid[:]).Delete(&Voucher{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&voucher).Error; err != nil {
+			return err
+		}
+		// Update onboarding completion and new GUID
+		return tx.Where("guid = ?", guid[:]).
+			Assign(replacement).
+			FirstOrCreate(&DeviceOnboarding{}).Error
+	})
 }
 
 // RemoveVoucher untracks a voucher, possibly by deleting it or marking it as removed
+// TODO: we should mark the voucher as removed instead of deleting it
 func (s *State) RemoveVoucher(ctx context.Context, guid protocol.GUID) (*fdo.Voucher, error) {
-	var voucher Voucher
-	if err := s.DB.Where("guid = ?", guid[:]).First(&voucher).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fdo.ErrNotFound
-		}
-		return nil, err
-	}
-
-	// Parse the voucher before deleting
 	var ov fdo.Voucher
-	if err := cbor.Unmarshal(voucher.CBOR, &ov); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal voucher: %w", err)
-	}
-
-	// Delete the voucher
-	if err := s.DB.Where("guid = ?", guid[:]).Delete(&Voucher{}).Error; err != nil {
+	if err := s.DB.Transaction(func(tx *gorm.DB) error {
+		var voucher Voucher
+		if err := tx.Where("guid = ?", guid[:]).First(&voucher).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fdo.ErrNotFound
+			}
+			return err
+		}
+		// Parse the voucher before deleting
+		if err := cbor.Unmarshal(voucher.CBOR, &ov); err != nil {
+			return fmt.Errorf("failed to unmarshal voucher: %w", err)
+		}
+		// Delete the voucher
+		if err := tx.Where("guid = ?", guid[:]).Delete(&Voucher{}).Error; err != nil {
+			return err
+		}
+		// Delete the onboarding tracking row for this GUID (best-effort)
+		return tx.Where("guid = ?", guid[:]).Delete(&DeviceOnboarding{}).Error
+	}); err != nil {
 		return nil, err
 	}
-
 	return &ov, nil
 }
 

@@ -209,3 +209,16 @@ type RvInfo struct {
 func (RvInfo) TableName() string {
 	return "rvinfo"
 }
+
+// DeviceOnboarding tracks TO2 completion per device GUID
+type DeviceOnboarding struct {
+	GUID           []byte `gorm:"primaryKey"`
+	NewGUID        []byte `gorm:"index"`
+	TO2Completed   bool   `gorm:"type:boolean;not null;default:false"`
+	TO2CompletedAt *time.Time
+}
+
+// TableName specifies the table name for DeviceOnboarding model
+func (DeviceOnboarding) TableName() string {
+	return "device_onboarding"
+}

@@ -23,20 +23,20 @@ type to0Client interface {
 
 // Allow test-time injection of dependencies.
 var (
-	newTO0Client = func(vouchers fdo.OwnerVoucherPersistentState, keys fdo.OwnerKeyPersistentState) to0Client {
-		return &fdo.TO0Client{Vouchers: vouchers, OwnerKeys: keys}
+	newTO0Client = func(vouchers fdo.OwnerVoucherPersistentState, keys fdo.OwnerKeyPersistentState, defaultTTL uint32) to0Client {
+		return &fdo.TO0Client{Vouchers: vouchers, OwnerKeys: keys, TTL: defaultTTL}
 	}
 	makeTransport  = tls.TlsTransport
 	fetchOwnerInfo = db.FetchOwnerInfo
 )
 
-func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, insecureTLS bool) error { // Parse to0-guid flag
+func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, insecureTLS bool, defaultTTL uint32) (uint32, error) { // Parse to0-guid flag
 	guidBytes, err := hex.DecodeString(to0Guid)
 	if err != nil {
-		return fmt.Errorf("error parsing hex GUID of device to register RV blob: %w", err)
+		return 0, fmt.Errorf("error parsing hex GUID of device to register RV blob: %w", err)
 	}
 	if len(guidBytes) != 16 {
-		return fmt.Errorf("error parsing hex GUID of device to register RV blob: must be 16 bytes")
+		return 0, fmt.Errorf("error parsing hex GUID of device to register RV blob: must be 16 bytes")
 	}
 	var guid protocol.GUID
 	copy(guid[:], guidBytes)
@@ -44,12 +44,12 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	// Retrieve owner info from DB
 	to2Addrs, err := fetchOwnerInfo()
 	if err != nil {
-		return fmt.Errorf("error fetching ownerinfo: %w", err)
+		return 0, fmt.Errorf("error fetching ownerinfo: %w", err)
 	}
 
 	ownerRvInfo := protocol.ParseOwnerRvInfo(rvInfo)
 	if len(ownerRvInfo) == 0 {
-		return fmt.Errorf("no RV info found that is usable for the owner")
+		return 0, fmt.Errorf("no RV info found that is usable for the owner")
 	}
 
 	for _, rv := range ownerRvInfo {
@@ -58,7 +58,7 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 			continue
 		}
 		for _, url := range rv.URLs {
-			refresh, err := newTO0Client(voucherState, keyState).RegisterBlob(
+			refresh, err := newTO0Client(voucherState, keyState, defaultTTL).RegisterBlob(
 				context.Background(), makeTransport(url.String(), nil, insecureTLS), guid, to2Addrs,
 			)
 			if err != nil {
@@ -66,8 +66,8 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 				continue
 			}
 			slog.Info("to0 refresh", "duration", time.Duration(refresh)*time.Second)
-			return nil
+			return refresh, nil
 		}
 	}
-	return nil
+	return 0, nil
 }

@@ -83,14 +83,14 @@ run_test() {
   guid=$(get_device_guid ${device_credentials})
   echo "⭐ Device 1 initialized with GUID: ${guid}"
 
-  echo "⭐ Sending Device 1 Ownership Voucher to the Owner"
-  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
-
   echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
-  echo "⭐ Triggering TO0 on Owner server for Device 1 ${guid}"
-  run_to0 ${owner_url} "${guid}" >/dev/null
+  echo "⭐ Sending Device 1 Ownership Voucher to the Owner"
+  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
+
+  echo "⭐ Sleeping to allow TO0 to complete"
+  sleep 20
 
   echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
@@ -109,8 +109,8 @@ run_test() {
   echo "⭐ Sending Device 2 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  echo "⭐ Triggering TO0 on Owner server for Device 2 ${guid}"
-  run_to0 ${owner_url} "${guid}" >/dev/null
+  echo "⭐ Sleeping to allow TO0 to complete"
+  sleep 20
 
   echo "⭐ Stop HTTP Server to Simulate Loss of WGET Service"
   stop_service "${wget_httpd_service_name}"

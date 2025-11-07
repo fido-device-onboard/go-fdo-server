@@ -79,7 +79,46 @@ func QueryVouchers(filters map[string]interface{}, includeCBOR bool) ([]Voucher,
 }
 
 func InsertVoucher(voucher Voucher) error {
-	return db.Create(&voucher).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&voucher).Error; err != nil {
+			return err
+		}
+		// Ensure onboarding tracking row exists atomically with voucher insert
+		rec := DeviceOnboarding{GUID: voucher.GUID}
+		return tx.Where("guid = ?", voucher.GUID).FirstOrCreate(&rec).Error
+	})
+}
+
+// IsTO2Completed returns whether a device has completed TO2.
+func IsTO2Completed(guid []byte) (bool, error) {
+	var rec DeviceOnboarding
+	if err := db.Where("guid = ?", guid).First(&rec).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return rec.TO2Completed, nil
+}
+
+// ListPendingTO0Vouchers returns vouchers whose devices have not completed TO2 yet.
+// A voucher is considered pending if there is no corresponding device_onboarding row,
+// or if TO2Completed is false.
+func ListPendingTO0Vouchers(includeCBOR bool) ([]Voucher, error) {
+	query := db.Model(&Voucher{})
+	// Join with device_onboarding to filter by completion state
+	query = query.Joins("LEFT JOIN device_onboarding ON device_onboarding.guid = vouchers.guid").
+		Where("device_onboarding.to2_completed = ? OR device_onboarding.guid IS NULL", false)
+
+	if !includeCBOR {
+		query = query.Omit("cbor")
+	}
+
+	var list []Voucher
+	if err := query.Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func InsertOwnerInfo(data []byte) error {

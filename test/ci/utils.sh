@@ -233,7 +233,19 @@ get_device_onboard_log() {
 run_fido_device_onboard() {
   log="$(get_device_onboard_log)"
   >"${log}"
-  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee "${log}"
+  # This logic will be removed once the go-fdo-client supports polling for TO2 completion.
+  local attempts=5
+  local i=1
+  while [ ${i} -le ${attempts} ]; do
+    run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log}"
+    if grep -q 'FIDO Device Onboard Complete' "${log}"; then
+      break
+    fi
+    if [ ${i} -lt ${attempts} ]; then
+      sleep 10
+    fi
+    i=$((i+1))
+  done
   find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
 }
 

@@ -151,11 +151,9 @@ curl -v "http://localhost:8038/api/v1/vouchers?guid=${GUID}" > /tmp/fdo/ov/owner
 curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
 ```
 
-4. Trigger TO0 on Owner server:
+4. TO0 on Owner server:
 
-```bash
-curl --location --request GET "http://localhost:8043/api/v1/to0/${GUID}"
-```
+When importing a voucher, the owner automatically starts to0 with the rendezvous server and tries until the onboard is successful.
 
 5. Run onboarding (TO2) and verify success:
 

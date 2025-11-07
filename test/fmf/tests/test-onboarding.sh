@@ -37,17 +37,20 @@ run_test() {
   guid=$(get_device_guid ${device_credentials})
   echo "⭐ Device initialized with GUID: ${guid}"
 
-  echo "⭐ Sending Ownership Voucher to the Owner"
-  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
-
   echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
-  echo "⭐ Triggering TO0 on Owner server"
-  run_to0 ${owner_url} "${guid}" >/dev/null
+  echo "⭐ Sending Ownership Voucher to the Owner"
+  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
+
+  echo "⭐ Sleeping to allow TO0 to complete"
+  sleep 20
 
   echo "⭐ Running FIDO Device Onboard "
   run_fido_device_onboard --debug
+
+  echo "⭐ Cleaning up services configuration"
+  cleanup_services_configuration
 
   echo "⭐ Success! ✅"
   trap cleanup EXIT

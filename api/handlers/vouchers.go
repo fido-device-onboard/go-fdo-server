@@ -178,6 +178,7 @@ func VerifyVoucher(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) error {
 	return nil
 }
 
+// InsertVoucherHandler verifies and inserts vouchers. Background TO0 is handled by the owner server.
 func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)

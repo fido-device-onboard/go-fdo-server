@@ -1,0 +1,21 @@
+summary: Onboarding with rendezvous started late (device retries then succeeds)
+description: |
+    Sets up manufacturer and owner, leaves rendezvous stopped initially.
+    Confirms device onboarding attempts fail (not found / rendezvous unavailable),
+    then starts rendezvous and verifies TO0 completes and onboarding succeeds.
+
+test: ./test-onboarding-deferred-rendezvous.sh
+
+framework: shell
+
+duration: 10m
+
+tag:
+  - fdo
+  - e2e
+  - protocol
+  - onboarding
+  - rendezvous
+  - deferred
+
+
