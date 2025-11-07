@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-trap stop_services EXIT
+printenv|sort
+
+trap on_failure EXIT
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
@@ -162,6 +164,21 @@ unset_hostnames() {
     local service_dns=${service}_dns
     unset_hostname "${!service_dns}" "${!service_ip}"
   done
+}
+
+configure_services() {
+  generate_https_certs
+  echo "⭐ Configuring services"
+  for service in "${services[@]}"; do
+    configure_service "${service}"
+  done
+}
+
+configure_service() {
+  local service=$1
+  echo "  ⚙ Configuring service ${service}"
+  local configure_service="configure_service_${service}"
+  ! declare -F "${configure_service}" >/dev/null || ${configure_service}
 }
 
 get_real_ip() {
@@ -415,12 +432,19 @@ set_or_update_owner_redirect_info() {
   echo
 }
 
-get_server_logs() {
-  for log_file in "${logs_dir}"/*; do
-    if [[ -f "${log_file}" ]]; then
-      echo "❓ ${log_file}"
-      cat "$log_file"
-    fi
+get_service_logs() {
+  local service=$1
+  local service_log_var="${service}_log"
+  if [[ -v "${service_log_var}" ]]; then
+    echo "❓ '${service}' logs ('${!service_log_var}')"
+    [ ! -f "${!service_log_var}" ] || cat "${!service_log_var}"
+  fi
+}
+
+get_logs() {
+  echo "⭐ Retrieving logs"
+  for service in "${services[@]}"; do
+    get_service_logs ${service}
   done
 }
 
@@ -452,12 +476,25 @@ verify_equal_files() {
   fi
 }
 
+on_failure() {
+  trap - EXIT
+  stop_services
+  echo "❌ Test FAILED!"
+}
+
+remove_files() {
+  echo "⭐ Removing files from '${base_dir:?}'"
+  rm -rf "${base_dir:?}"/*
+}
+
 cleanup() {
+  trap - EXIT
   echo "⭐ Cleaning ..."
   stop_services
   unset_hostnames
   uninstall_server
   uninstall_client
-  rm -rf "${base_dir:?}"/*
+  remove_files
   echo "⭐ Done!"
+  echo "✅ Test OK!"
 }
