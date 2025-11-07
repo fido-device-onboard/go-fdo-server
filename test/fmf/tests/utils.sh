@@ -12,22 +12,37 @@ install_from_copr() {
   rpm -q --whatprovides 'dnf-command(copr)' &> /dev/null || sudo dnf install -y 'dnf-command(copr)'
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
   sudo dnf install -y "${@}"
+  dnf copr remove -y @fedora-iot/fedora-iot
 }
 
 install_client() {
-  rpm -q go-fdo-client &> /dev/null || install_from_copr go-fdo-client
+  # If PACKIT_COPR_RPMS is not defined it means we are running the test
+  # locally so we will install the client from the copr repo
+  [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &> /dev/null || install_from_copr go-fdo-client
 }
 
 uninstall_client() {
-  sudo dnf remove -y go-fdo-client
+  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-client
 }
 
 install_server() {
-  rpm -q go-fdo-server-{manufacturer,owner,rendezvous} || install_from_copr go-fdo-server{,-manufacturer,-owner,-rendezvous}
+  # If PACKIT_COPR_RPMS is not defined it means we are running the test
+  # locally so we will build and install the RPMs
+  if [ ! -v "PACKIT_COPR_RPMS" ]; then
+    commit="$(git rev-parse --short HEAD)"
+    rpm -q go-fdo-server | grep "go-fdo-server.*git${commit}.*" || { \
+      make rpm;
+      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm;
+    }
+  else
+    # Make sure the RPMS are installed
+    echo "Expected installed RPMs: ${PACKIT_COPR_RPMS}"
+    echo "Installed RPMs: $(rpm -qa go-fdo-server*)"
+  fi
 }
 
 uninstall_server() {
-  sudo dnf remove -y go-fdo-server{,-manufacturer,-owner,-rendezvous}
+  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-server{,-manufacturer,-owner,-rendezvous}
 }
 
 start_service_manufacturer() {
