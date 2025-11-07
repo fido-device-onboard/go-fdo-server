@@ -377,6 +377,20 @@ generate_service_certs() {
   ls -l "${certs_dir}"
 }
 
+generate_https_certs() {
+ for service in "${services[@]}"; do
+    local service_protocol="${service}_protocol"
+    [[ "${!service_protocol-}" = "https" ]] || continue
+    local service_key="${service}_https_key"
+    local service_crt="${service}_https_crt"
+    local service_dns="${service}_dns"
+    local service_subj="/C=US/O=FDO/CN=${!service_dns:-${service}}"
+    if [[ -v "${service_key}" && -v "${service_crt}" ]]; then
+      generate_cert "${!service_key}" "${!service_crt}" "${service_subj}" "pem"
+    fi
+  done
+}
+
 set_or_update_rendezvous_info() {
   local manufacturer_url=$1
   local rendezvous_service_name=$2
