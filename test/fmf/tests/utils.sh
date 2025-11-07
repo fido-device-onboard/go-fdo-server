@@ -58,6 +58,15 @@ start_service_owner() {
   sudo systemctl start go-fdo-server-owner
 }
 
+# We do not use pid files but functions to stop the services via systemctl
+stop_service() {
+  local service=$1
+  echo -n "  ⚙ Stopping service ${service} "
+  local stop_service="stop_service_${service}"
+  ! declare -F "${stop_service}" >/dev/null || ${stop_service}
+  echo " ✔"
+}
+
 stop_service_manufacturer() {
   sudo systemctl stop go-fdo-server-manufacturer
 }
