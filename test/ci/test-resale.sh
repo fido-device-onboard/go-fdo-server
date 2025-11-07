@@ -37,6 +37,12 @@ run_test() {
   # Add the new owner service defined above
   services+=("${new_owner_service_name}")
 
+  echo "⭐ Setting the trap handler in case of error"
+  trap on_failure ERR
+
+  echo "⭐ Environment variables"
+  printenv|sort
+
   echo "⭐ Creating directories"
   create_directories
 
@@ -82,8 +88,10 @@ run_test() {
   echo "⭐ Running FIDO Device Onboard"
   run_fido_device_onboard --debug
 
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
+  echo "⭐ Unsetting the trap handler in case of error"
+  trap - ERR
+
+  echo "✅ Test PASS!"
 }
 
 # Allow running directly

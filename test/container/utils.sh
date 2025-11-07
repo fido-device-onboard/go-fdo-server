@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../ci/utils.sh"
+
 client_compose_file="deployments/compose/client/fdo-client.yaml"
 servers_compose_file="deployments/compose/server/fdo-onboarding-servers.yaml"
 
@@ -85,8 +87,16 @@ stop_services() {
   docker compose --file "${servers_compose_file}" stop
 }
 
-get_server_logs() {
-  for service_name in $(docker compose --file ${servers_compose_file} ps -a --format "{{.Name}}"); do
-    docker compose --file "${servers_compose_file}" logs "${service_name}"
+get_service_logs() {
+  local service=$1
+  local log_file="${logs_dir}/${service}.log"
+  echo "🛑 ❓ '${service}' logs:"
+  docker compose --file "${servers_compose_file}" logs --no-log-prefix "${service}" | tee "${log_file}"
+}
+
+get_logs() {
+  echo "⭐ Retrieving logs"
+  for service in $(docker compose --file ${servers_compose_file} ps -a --format "{{.Name}}"); do
+    get_service_logs ${service}
   done
 }

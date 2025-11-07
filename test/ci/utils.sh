@@ -2,8 +2,6 @@
 
 set -euo pipefail
 
-trap stop_services EXIT
-
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
 
@@ -164,6 +162,21 @@ unset_hostnames() {
   done
 }
 
+configure_services() {
+  generate_https_certs
+  echo "⭐ Configuring services"
+  for service in "${services[@]}"; do
+    configure_service "${service}"
+  done
+}
+
+configure_service() {
+  local service=$1
+  echo "  ⚙ Configuring service ${service}"
+  local configure_service="configure_service_${service}"
+  ! declare -F "${configure_service}" >/dev/null || ${configure_service}
+}
+
 get_real_ip() {
   local service=$1
   local service_ip=${service}_ip
@@ -189,7 +202,7 @@ wait_for_url() {
     echo -n "." 1>&2
     sleep "$interval"
   done
-  echo " 🚀"
+  echo " ✔"
 }
 
 wait_for_service_ready() {
@@ -304,7 +317,7 @@ start_service() {
   echo -n "  ⚙ Starting service ${service} "
   local start_service="start_service_${service}"
   ! declare -F "${start_service}" >/dev/null || ${start_service}
-  echo " 🚀"
+  echo " ✔"
 }
 
 start_services() {
@@ -324,7 +337,7 @@ stop_service() {
       wait "$(cat ${!service_pid_file})" 2>/dev/null || :
     fi
   fi
-  echo " 🛑"
+  echo " ✔"
 }
 
 stop_services() {
@@ -415,12 +428,19 @@ set_or_update_owner_redirect_info() {
   echo
 }
 
-get_server_logs() {
-  for log_file in "${logs_dir}"/*; do
-    if [[ -f "${log_file}" ]]; then
-      echo "❓ ${log_file}"
-      cat "$log_file"
-    fi
+get_service_logs() {
+  local service=$1
+  local service_log_var="${service}_log"
+  if [[ -v "${service_log_var}" ]]; then
+    echo "🛑 ❓ '${service}' logs:"
+    [ ! -f "${!service_log_var}" ] || cat "${!service_log_var}"
+  fi
+}
+
+get_logs() {
+  echo "⭐ Retrieving logs"
+  for service in "${services[@]}"; do
+    get_service_logs ${service}
   done
 }
 
@@ -452,12 +472,23 @@ verify_equal_files() {
   fi
 }
 
+on_failure() {
+  trap - ERR
+  stop_services
+  echo "❌ Test FAILED!"
+}
+
+remove_files() {
+  echo "⭐ Removing files from '${base_dir:?}'"
+  rm -rf "${base_dir:?}"/*
+}
+
 cleanup() {
   echo "⭐ Cleaning ..."
   stop_services
   unset_hostnames
   uninstall_server
   uninstall_client
-  rm -rf "${base_dir:?}"/*
+  remove_files
   echo "⭐ Done!"
 }

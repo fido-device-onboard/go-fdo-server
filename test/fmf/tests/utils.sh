@@ -54,7 +54,55 @@ stop_service_owner() {
   sudo systemctl stop go-fdo-server-owner
 }
 
-# We generate only the HTTPS transport certs (PEM) for services using HTTPS
+get_go_fdo_server_logs() {
+  local role=$1
+  journalctl_args=("--no-pager" "--unit" "go-fdo-server-${role}")
+  . /etc/os-release
+  [[ "${ID}" = "centos" && "${VERSION_ID}" = "9" ]] || journalctl_args+=("--invocation=0")
+  journalctl "${journalctl_args[@]}"
+}
+
+get_service_logs_manufacturer() {
+  get_go_fdo_server_logs manufacturer | tee "${manufacturer_log}"
+}
+
+get_service_logs_rendezvous() {
+  get_go_fdo_server_logs rendezvous | tee "${rendezvous_log}"
+}
+
+get_service_logs_owner() {
+  get_go_fdo_server_logs owner | tee "${owner_log}"
+}
+
+get_service_logs() {
+  local service=$1
+  echo "🛑 ❓ '${service}' logs:"
+  local get_service_logs_func="get_service_logs_${service}"
+  ! declare -F "${get_service_logs_func}" >/dev/null || ${get_service_logs_func}
+}
+
+remove_files() {
+  echo "⭐ Removing files from '${base_dir:?}'"
+  sudo rm -vrf "${base_dir:?}"/*
+  echo "⭐ Removing files from '${rpm_sysconfig_dir}'"
+  sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"*
+  echo "⭐ Removing files from '${rpm_config_base_dir}'"
+  sudo rm -vf "${rpm_config_base_dir:?}"/*
+  echo "⭐ Removing files from '${rpm_manufacturer_database_dir}'"
+  sudo rm -vf "${rpm_manufacturer_database_dir:?}/"*
+  echo "⭐ Removing files from '${rpm_rendezvous_database_dir}'"
+  sudo rm -vf "${rpm_rendezvous_database_dir:?}/"*
+  echo "⭐ Removing files from '${rpm_owner_database_dir}'"
+  sudo rm -vf "${rpm_owner_database_dir:?}/"*
+}
+
+on_failure() {
+  trap - ERR
+  stop_services
+  get_logs
+  echo "❌ Test FAILED!"
+}
+
 configure_services() {
   for service in "${services[@]}"; do
     local proto_var="${service}_protocol"

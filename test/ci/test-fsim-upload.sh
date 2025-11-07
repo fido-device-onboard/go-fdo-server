@@ -47,6 +47,12 @@ verify_uploads() {
 # Public entrypoint used by CI
 run_test() {
 
+  echo "⭐ Setting the trap handler in case of error"
+  trap on_failure ERR
+
+  echo "⭐ Environment variables"
+  printenv|sort
+
   echo "⭐ Creating directories"
   # Add uploads directories to be created
   directories+=("${device_uploads_dir}" "${owner_uploads_dir}")
@@ -94,8 +100,10 @@ run_test() {
   echo "⭐ Verify uploaded files"
   verify_uploads
 
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
+  echo "⭐ Unsetting the trap handler in case of error"
+  trap - ERR
+
+  echo "✅ Test PASS!"
 }
 
 # Allow running directly

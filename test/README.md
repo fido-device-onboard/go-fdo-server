@@ -35,9 +35,9 @@ Stage  Job ID                            Job name                     Workflow n
 
 ## Testing the CI jobs locally with `act`:
 
-When running the workflow jobs it's important to bind mount the `/tmp` dir:
+When running the workflow jobs it's important to bind mount the `./test/workdir` dir:
 ```bash
-➜ act --container-options "-v /tmp:/tmp" -j test-onboarding
+➜ act --container-options "-v ${PWD}/test/workdir:${PWD}/test/workdir" -j test-onboarding
 ```
 
 ## Testing the CI jobs with `tmt`:

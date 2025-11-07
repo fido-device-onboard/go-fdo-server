@@ -6,6 +6,12 @@ source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/test
 
 run_test() {
 
+  echo "⭐ Setting the trap handler in case of error"
+  trap on_failure ERR
+
+  echo "⭐ Environment variables"
+  printenv|sort
+
   echo "⭐ Creating directories"
   create_directories
 
@@ -90,8 +96,10 @@ run_test() {
     exit 1
   fi
 
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
+  echo "⭐ Unsetting the trap handler in case of error"
+  trap - ERR
+
+  echo "✅ Test PASS!"
 }
 
 # Allow running directly

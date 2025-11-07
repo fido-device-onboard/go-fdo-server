@@ -8,6 +8,12 @@ run_test () {
   # Add the new owner service for wrong owner test
   services+=("${new_owner_service_name}")
 
+  echo "⭐ Setting the trap handler in case of error"
+  trap on_failure ERR
+
+  echo "⭐ Environment variables"
+  printenv|sort
+
   echo "⭐ Creating directories"
   create_directories
 
@@ -65,8 +71,10 @@ run_test () {
   ! send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${new_owner_url}" 2>&1 || { echo "  ❌ This test was supposed to fail"; return 1; }
   echo "  ✅ New owner correctly rejected voucher (owner key doesn't match)"
 
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
+  echo "⭐ Unsetting the trap handler in case of error"
+  trap - ERR
+
+  echo "✅ Test PASS!"
 }
 
 # Allow running directly

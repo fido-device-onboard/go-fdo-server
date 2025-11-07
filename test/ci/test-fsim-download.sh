@@ -47,6 +47,12 @@ verify_downloads() {
 # Public entrypoint used by CI
 run_test() {
 
+  echo "⭐ Setting the trap handler in case of error"
+  trap on_failure ERR
+
+  echo "⭐ Environment variables"
+  printenv|sort
+
   echo "⭐ Creating directories"
   directories+=("$owner_download_dir" "$device_download_dir")
   create_directories
@@ -93,8 +99,10 @@ run_test() {
   echo "⭐ Verify downloaded files"
   verify_downloads
 
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
+  echo "⭐ Unsetting the trap handler in case of error"
+  trap - ERR
+
+  echo "✅ Test PASS!"
 }
 
 # Allow running directly
