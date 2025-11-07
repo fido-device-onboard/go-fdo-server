@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-onboarding.sh"
 
 configs_dir="${base_dir}/configs"
 manufacturer_config_file="${configs_dir}/manufacturing.yaml"
@@ -11,8 +11,8 @@ owner_config_file="${configs_dir}/owner.yaml"
 
 directories+=("${configs_dir}")
 
-generate_manufacturer_config() {
-  cat <<EOF
+configure_service_manufacturer() {
+  cat > "${manufacturer_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -31,8 +31,8 @@ owner:
 EOF
 }
 
-generate_rendezvous_config() {
-  cat <<EOF
+configure_service_rendezvous() {
+  cat > "${rendezvous_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -44,8 +44,8 @@ http:
 EOF
 }
 
-generate_owner_config() {
-  cat <<EOF
+configure_service_owner() {
+  cat > "${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -60,16 +60,6 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
 EOF
-}
-
-generate_service_configs() {
-  for service in "${services[@]}"; do
-    local gen_func="generate_${service}_config"
-    local conf_file="${service}_config_file"
-    if declare -F "${gen_func}" > /dev/null; then
-      "${gen_func}" > "${!conf_file}"
-    fi
-  done
 }
 
 # override to remove use of CLI flags
@@ -97,54 +87,6 @@ start_service_rendezvous() {
 start_service_owner() {
   run_go_fdo_server owner ${owner_pid_file} ${owner_log} \
                     --config=${owner_config_file}
-}
-
-run_test() {
-
-  echo "⭐ Creating directories"
-  create_directories
-
-  echo "⭐ Generating service certificates"
-  generate_service_certs
-
-  echo "⭐ Build and install 'go-fdo-client' binary"
-  install_client
-
-  echo "⭐ Build and install 'go-fdo-server' binary"
-  install_server
-
-  echo "⭐ Generating service configuration files"
-  generate_service_configs
-
-  echo "⭐ Start services"
-  start_services
-
-  echo "⭐ Wait for the services to be ready:"
-  wait_for_services_ready
-
-  echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
-
-  echo "⭐ Run Device Initialization"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device initialized with GUID: ${guid}"
-
-  echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
-
-  echo "⭐ Sending Ownership Voucher to the Owner"
-  send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
-
-  echo "⭐ Sleeping to allow TO0 to complete"
-  sleep 20
-
-  echo "⭐ Running FIDO Device Onboard "
-  run_fido_device_onboard --debug
-
-  echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly

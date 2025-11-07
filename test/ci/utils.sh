@@ -30,7 +30,6 @@ manufacturer_key="${certs_dir}/manufacturer.key"
 #shellcheck disable=SC2034
 manufacturer_crt="${manufacturer_key/\.key/.crt}"
 #shellcheck disable=SC2034
-#shellcheck disable=SC2034
 manufacturer_subj="/C=US/O=FDO/CN=Manufacturer"
 manufacturer_service="${manufacturer_dns}:${manufacturer_port}"
 # Default per-service protocol; caller may override
@@ -80,11 +79,6 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 #shellcheck disable=SC2034
 owner_ov="${base_dir}/owner.ov"
-
-# Define HTTPS certificate subjects per service (passed down to cert generator)
-manufacturer_https_subj="/C=US/O=FDO/CN=manufacturer"
-rendezvous_https_subj="/C=US/O=FDO/CN=rendezvous"
-owner_https_subj="/C=US/O=FDO/CN=owner"
 
 # HTTPS transport cert paths
 manufacturer_https_key="${certs_dir}/manufacturer-http.key"
