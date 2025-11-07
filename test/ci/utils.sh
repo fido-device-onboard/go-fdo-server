@@ -368,7 +368,7 @@ uninstall_server() {
   rm -f "${bin_dir}/go-fdo-server"
 }
 
-generate_certs() {
+generate_service_certs() {
   for service in "${services[@]}"; do
     local service_key="${service}_key"
     local service_crt="${service}_crt"
