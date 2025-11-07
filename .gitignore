@@ -6,3 +6,4 @@ go-fdo-server
 go-fdo-server-*.tar.gz
 rpmbuild
 test/workdir
+vendor/
