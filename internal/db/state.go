@@ -105,7 +105,7 @@ var _ interface {
 	fdo.TO1SessionState
 	fdo.TO2SessionState
 	fdo.RendezvousBlobPersistentState
-	fdo.ManufacturerVoucherPersistentState
+	fdo.VoucherPersistentState
 	fdo.OwnerVoucherPersistentState
 	fdo.OwnerKeyPersistentState
 } = (*State)(nil)

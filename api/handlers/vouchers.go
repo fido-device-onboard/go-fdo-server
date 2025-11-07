@@ -273,12 +273,40 @@ func ResellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
 			return
 		}
 
-		extended, err := to2Server.Resell(context.TODO(), guid, nextOwner, nil)
-		if err != nil {
-			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
-			slog.Debug(err.Error())
+		// Get the underlying *db.State to access the *gorm.DB for transactions
+		state, ok := to2Server.VouchersForExtension.(*db.State)
+		if !ok {
+			http.Error(w, "Internal server error: invalid state type", http.StatusInternalServerError)
+			slog.Error("VouchersForExtension is not *db.State", "type", fmt.Sprintf("%T", to2Server.VouchersForExtension))
 			return
 		}
+
+		// Wrap Resell in a transaction to ensure atomicity
+		// If Resell fails after RemoveVoucher, the transaction will rollback
+		// and restore the original voucher
+		var extended *fdo.Voucher
+		err = state.DB.Transaction(func(tx *gorm.DB) error {
+			// Create a transactional state wrapper for VouchersForExtension only
+			txVouchersForExtension := &db.State{DB: tx}
+
+			// Create a minimal TO2Server copy with only VouchersForExtension replaced
+			txTO2Server := *to2Server
+			txTO2Server.VouchersForExtension = txVouchersForExtension
+
+			// Call Resell on the copy - it will use the transactional wrapper
+			var resellErr error
+			extended, resellErr = txTO2Server.Resell(context.TODO(), guid, nextOwner, nil)
+			return resellErr
+		})
+
+		if err != nil {
+			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
+			slog.Debug("Resell failed", "error", err)
+			// Transaction already rolled back, restoring the original voucher
+			// No need to manually add it back
+			return
+		}
+
 		ovBytes, err := cbor.Marshal(extended)
 		if err != nil {
 			http.Error(w, "Error marshaling voucher", http.StatusInternalServerError)

@@ -216,9 +216,10 @@ func serveOwner(config *OwnerServerConfig) error {
 	}
 
 	to2Server := &fdo.TO2Server{
-		Session:   state.DB,
-		Vouchers:  state.DB,
-		OwnerKeys: state,
+		Session:              state.DB,
+		Vouchers:             state.DB,
+		VouchersForExtension: state.DB,
+		OwnerKeys:            state,
 		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
 			return voucher.Header.Val.RvInfo, nil
 		},
