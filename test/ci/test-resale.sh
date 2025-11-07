@@ -73,6 +73,9 @@ run_test() {
   echo "⭐ Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
+  echo "⭐ Extracting the public key from the New Owner cert"
+  extract_pubkey_from_cert ${new_owner_crt} ${new_owner_pub}
+
   echo "⭐ Trigger the Resell protocol on the current owner"
   resell "${owner_url}" "${guid}" "${new_owner_pub}" "${new_owner_ov}"
 

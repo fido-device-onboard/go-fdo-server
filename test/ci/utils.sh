@@ -15,7 +15,6 @@ device_credentials="${credentials_dir}/creds.bin"
 
 device_ca_key="${certs_dir}/device_ca.key"
 device_ca_crt="${device_ca_key/\.key/.crt}"
-device_ca_pub="${device_ca_key/\.key/.pub}"
 device_ca_subj="/C=US/O=FDO/CN=Device CA"
 
 manufacturer_service_name="manufacturer"
@@ -31,7 +30,6 @@ manufacturer_key="${certs_dir}/manufacturer.key"
 #shellcheck disable=SC2034
 manufacturer_crt="${manufacturer_key/\.key/.crt}"
 #shellcheck disable=SC2034
-manufacturer_pub="${manufacturer_key/\.key/.pub}"
 #shellcheck disable=SC2034
 manufacturer_subj="/C=US/O=FDO/CN=Manufacturer"
 manufacturer_service="${manufacturer_dns}:${manufacturer_port}"
@@ -370,13 +368,12 @@ generate_certs() {
   for service in "${services[@]}"; do
     local service_key="${service}_key"
     local service_crt="${service}_crt"
-    local service_pub="${service}_pub"
     local service_subj="${service}_subj"
-    if [[ -v "${service_key}" && -v "${service_crt}" && -v "${service_pub}" && -v "${service_subj}" ]]; then
-      generate_cert "${!service_key}" "${!service_crt}" "${!service_pub}" "${!service_subj}"
+    if [[ -v "${service_key}" && -v "${service_crt}" && -v "${service_subj}" ]]; then
+      generate_cert "${!service_key}" "${!service_crt}" "${!service_subj}"
     fi
   done
-  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_pub}" "${device_ca_subj}"
+  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_subj}"
   ls -l "${certs_dir}"
 }
 
