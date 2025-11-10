@@ -7,6 +7,29 @@ on:
 name: Continuous integration
 
 jobs:
+  test-go:
+    name: Run the go unit tests
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install dependencies
+        run: dnf install -y git make gcc
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Run go test
+        env:
+          CGO_ENABLED: 1
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make test
+
   test-rpms:
     name: Test srpm and rpm builds
     runs-on: ubuntu-latest
