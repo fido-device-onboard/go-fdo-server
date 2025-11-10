@@ -1,0 +1,34 @@
+on:
+  push:
+    branches:
+    - main
+    - "*.*.x"
+    tags:
+    - v*
+  schedule:
+    - cron: '0 0 * * *'
+
+name: Continuous Delivery
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: continuous-delivery
+    env:
+      quay_org: fido-fdo
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Perform container builds
+      id: build
+      uses: ./.github/actions/build_containers
+
+    - name: Push go-fdo-server to quay.io
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        registry: "quay.io/${{ env.quay_org }}"
+        image: go-fdo-server
+        tags: ${{ steps.build.outputs.tags }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_ROBOT_TOKEN }}

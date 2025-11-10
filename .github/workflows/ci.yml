@@ -36,6 +36,14 @@ jobs:
       - name: Fail if the source code has changes after build
         uses: NathanielHill/fail-if-changes@master
 
+  container:
+    name: Build container
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build containers
+      uses: ./.github/actions/build_container
+
   test-onboarding:
     name: Test FIDO device onboarding
     runs-on: ubuntu-latest
