@@ -6,6 +6,7 @@ package db
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -14,9 +15,16 @@ import (
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var db *gorm.DB
+
+// Sentinel errors to classify client input issues
+var (
+	ErrInvalidOwnerInfo = errors.New("invalid ownerinfo data")
+	ErrInvalidRvInfo    = errors.New("invalid rvinfo data")
+)
 
 // FetchVoucher returns a single voucher filtered by provided fields.
 // Supported filters (keys):
@@ -85,23 +93,37 @@ func InsertVoucher(voucher Voucher) error {
 func InsertOwnerInfo(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
-		return fmt.Errorf("error parsing ownerinfo data: %w", err)
+		return fmt.Errorf("%w: %v", ErrInvalidOwnerInfo, err)
 	}
 
 	ownerInfo := OwnerInfo{
 		ID:    1,
 		Value: data,
 	}
-	return db.Create(&ownerInfo).Error
+	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&ownerInfo)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrDuplicatedKey
+	}
+	return nil
 }
 
 func UpdateOwnerInfo(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
-		return fmt.Errorf("error parsing ownerinfo data: %w", err)
+		return fmt.Errorf("%w: %v", ErrInvalidOwnerInfo, err)
 	}
 
-	return db.Model(&OwnerInfo{}).Where("id = ?", 1).Update("value", data).Error
+	tx := db.Model(&OwnerInfo{}).Where("id = ?", 1).Update("value", data)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func FetchOwnerInfoJSON() ([]byte, error) {
@@ -125,23 +147,37 @@ func FetchOwnerInfo() ([]protocol.RvTO2Addr, error) {
 func InsertRvInfo(data []byte) error {
 	// check the data can be parsed into [][]protocol.RvInstruction
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
-		return fmt.Errorf("error parsing rvinfo data: %w", err)
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
 	}
 
 	rvInfo := RvInfo{
 		ID:    1,
 		Value: data,
 	}
-	return db.Create(&rvInfo).Error
+	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrDuplicatedKey
+	}
+	return nil
 }
 
 func UpdateRvInfo(data []byte) error {
 	// check the data can be parsed into [][]protocol.RvInstruction
 	if _, err := parseHumanReadableRvJSON(data); err != nil {
-		return fmt.Errorf("error parsing rvinfo data: %w", err)
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
 	}
 
-	return db.Model(&RvInfo{}).Where("id = ?", 1).Update("value", data).Error
+	tx := db.Model(&RvInfo{}).Where("id = ?", 1).Update("value", data)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func FetchRvInfoJSON() ([]byte, error) {

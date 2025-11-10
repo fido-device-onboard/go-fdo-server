@@ -8,24 +8,22 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"gorm.io/gorm"
 )
 
 func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
-	var mu sync.Mutex
 	slog.Debug("Received OwnerInfo request", "method", r.Method, "path", r.URL.Path)
 	switch r.Method {
 	case http.MethodGet:
 		getOwnerInfo(w, r)
 	case http.MethodPost:
-		createOwnerInfo(w, r, &mu)
+		createOwnerInfo(w, r)
 	case http.MethodPut:
-		updateOwnerInfo(w, r, &mu)
+		updateOwnerInfo(w, r)
 	default:
-		slog.Debug("Method not allowed", "method", r.Method, "path", r.URL.Path)
+		slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
@@ -35,10 +33,10 @@ func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
 	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Debug("No ownerInfo found")
+			slog.Error("No ownerInfo found")
 			http.Error(w, "No ownerInfo found", http.StatusNotFound)
 		} else {
-			slog.Debug("Error fetching ownerInfo", "error", err)
+			slog.Error("Error fetching ownerInfo", "error", err)
 			http.Error(w, "Error fetching ownerInfo", http.StatusInternalServerError)
 		}
 		return
@@ -48,29 +46,26 @@ func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
 	w.Write(ownerInfoJSON)
 }
 
-func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
-	mu.Lock()
-	defer mu.Unlock()
-
+func createOwnerInfo(w http.ResponseWriter, r *http.Request) {
 	ownerInfo, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error reading body", "error", err)
+		slog.Error("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
 		return
 	}
 
-	if _, err := db.FetchOwnerInfoJSON(); err == nil {
-		slog.Debug("ownerInfo already exists, cannot create new entry")
-		http.Error(w, "ownerInfo already exists", http.StatusConflict)
-		return
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Debug("Error checking ownerInfo existence", "error", err)
-		http.Error(w, "Error processing ownerInfo", http.StatusInternalServerError)
-		return
-	}
-
 	if err := db.InsertOwnerInfo(ownerInfo); err != nil {
-		slog.Debug("Error inserting ownerInfo", "error", err)
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			slog.Error("ownerInfo already exists (constraint)", "error", err)
+			http.Error(w, "ownerInfo already exists", http.StatusConflict)
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid ownerInfo payload", "error", err)
+			http.Error(w, "Invalid ownerInfo", http.StatusBadRequest)
+			return
+		}
+		slog.Error("Error inserting ownerInfo", "error", err)
 		http.Error(w, "Error inserting ownerInfo", http.StatusInternalServerError)
 		return
 	}
@@ -82,28 +77,26 @@ func createOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
 	w.Write(ownerInfo)
 }
 
-func updateOwnerInfo(w http.ResponseWriter, r *http.Request, mu *sync.Mutex) {
-	mu.Lock()
-	defer mu.Unlock()
-
+func updateOwnerInfo(w http.ResponseWriter, r *http.Request) {
 	ownerInfo, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Error reading body", "error", err)
+		slog.Error("Error reading body", "error", err)
 		http.Error(w, "Error reading body", http.StatusInternalServerError)
-		return
-	}
-	if _, err := db.FetchOwnerInfoJSON(); errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Debug("ownerInfo does not exist, cannot update")
-		http.Error(w, "ownerInfo does not exist", http.StatusNotFound)
-		return
-	} else if err != nil {
-		slog.Debug("Error checking ownerInfo existence", "error", err)
-		http.Error(w, "Error processing ownerInfo", http.StatusInternalServerError)
 		return
 	}
 
 	if err := db.UpdateOwnerInfo(ownerInfo); err != nil {
-		slog.Debug("Error updating ownerInfo", "error", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.Error("ownerInfo does not exist, cannot update")
+			http.Error(w, "ownerInfo does not exist", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid ownerInfo payload", "error", err)
+			http.Error(w, "Invalid ownerInfo", http.StatusBadRequest)
+			return
+		}
+		slog.Error("Error updating ownerInfo", "error", err)
 		http.Error(w, "Error updating ownerInfo", http.StatusInternalServerError)
 		return
 	}
