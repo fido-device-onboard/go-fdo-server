@@ -10,18 +10,16 @@ provision:
     disk: 10GB
 
 prepare:
-  - how: shell
-    script: |
-      # Enable COPR to get go-fdo-client
-      dnf install -y 'dnf-command(copr)'
-      dnf copr enable -y @fedora-iot/fedora-iot
-  - how: install
+  - name: fdo-client
+    how: install
+    copr: fedora-iot/fedora-iot
+    package: go-fdo-client
+  - name: fdo-servers
+    how: install
     package:
-      - go-fdo-server
       - go-fdo-server-manufacturer
       - go-fdo-server-rendezvous
       - go-fdo-server-owner
-      - go-fdo-client
       - golang
       - make
       - openssl
