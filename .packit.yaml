@@ -26,6 +26,7 @@ srpm_build_deps:
   - golang
   - go-vendor-tools
   - python3-tomlkit
+  - askalono-cli
 
 packages:
   go-fdo-server-fedora:
@@ -40,26 +41,34 @@ packages:
 
 actions:
   fix-spec-file:
-    - bash -c 'sed -i "s/^%global commit .*/%global commit          $(git rev-parse HEAD)/;" build/package/rpm/go-fdo-server.spec'
-  post-upstream-clone:
     - |
-      bash -c "
+      bash -c '
+      #! /bin/bash
+      export BASE_DIR=build/package/rpm
+      export SPEC_FILE=${BASE_DIR}/go-fdo-server.spec
+      # We need the full commit hash
+      export COMMIT=$(git rev-parse ${PACKIT_PROJECT_COMMIT})
+      sed -i "s/^%global commit\(\s*\).*/%global commit\1${COMMIT}/" ${SPEC_FILE}
+      sed -i "s/^Version:\(\s*\).*/Version\:\1${PACKIT_PROJECT_VERSION}/" ${SPEC_FILE}
+      sed -i "s/^Release:\(\s*\)\S+/Release:\1${PACKIT_RPMSPEC_RELEASE}%{?dist}/" ${SPEC_FILE}
+      '
+  post-modifications:
+    # https://fedora.gitlab.io/sigs/go/go-vendor-tools/scenarios/#manual-update
+    - |
+      bash -c '
       #! /bin/bash
       set -x
-      go_version=$(go version | cut -f 3 -d ' ')
-      if [ "${go_version}" != "go1.25.0" ]; then
-        command -v gvm &>/dev/null || { curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/refs/tags/1.0.22/binscripts/gvm-installer -o /tmp/gvm-installer && bash /tmp/gvm-installer; }
-        source ${HOME}/.gvm/scripts/gvm
-        gvm install go1.25.0
-        gvm use go1.25.0 --default
-      fi
-      "
-  # for the propose-downstream CLI command
-  pre-sync:
-    - bash -c ". ${HOME}/.gvm/scripts/gvm; make vendor-tarball"
-  # for the srpm and copr builds
-  create-archive:
-    - bash -c ". ${HOME}/.gvm/scripts/gvm; make packit-create-archive"
+      export GOTOOLCHAIN=auto
+      export BASE_DIR=${PACKIT_UPSTREAM_REPO}/build/package/rpm
+      export GO_VENDOR_TOOLS_CONFIG=${BASE_DIR}/go-vendor-tools.toml
+      export SPEC_FILE=${BASE_DIR}/go-fdo-server.spec
+      go_vendor_archive create --config ${GO_VENDOR_TOOLS_CONFIG} ${SPEC_FILE}
+      go_vendor_license \
+        --config ${GO_VENDOR_TOOLS_CONFIG} \
+        --path ${SPEC_FILE} \
+        report \
+        --verify-spec
+      '
 
 jobs:
 

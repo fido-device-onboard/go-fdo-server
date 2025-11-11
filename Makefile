@@ -46,7 +46,7 @@ VENDOR_TARBALL_FILENAME    := go-fdo-server-$(VERSION)-vendor.tar.bz2
 VENDOR_TARBALL             := $(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
 $(VENDOR_TARBALL):
 	rm -rf vendor; \
-	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit; \
+	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit askalono-cli; \
 	go_vendor_archive create --config $(GO_VENDOR_TOOLS_FILE) --write-config --output $(VENDOR_TARBALL) .; \
 	rm -rf vendor;
 
@@ -89,7 +89,7 @@ RPMBUILD_SRPMS_DIR                    := $(RPMBUILD_TOP_DIR)/srpms
 RPMBUILD_BUILD_DIR                    := $(RPMBUILD_TOP_DIR)/build
 RPMBUILD_BUILDROOT_DIR                := $(RPMBUILD_TOP_DIR)/buildroot
 RPMBUILD_GOLANG_VENDOR_TOOLS_FILE     := $(RPMBUILD_SOURCES_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/$(SPEC_FILE_NAME)
+RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/go-fdo-server-$(VERSION).spec
 RPMBUILD_TARBALL                      := $(RPMBUILD_SOURCES_DIR)/$(SOURCE_TARBALL_FILENAME)
 RPMBUILD_VENDOR_TARBALL               := ${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
 RPMBUILD_GROUP_FILE                   := $(RPMBUILD_SOURCES_DIR)/$(GROUP_FILE_NAME)
@@ -149,14 +149,6 @@ rpm: $(RPMBUILD_SPECFILE) $(RPMBUILD_TARBALL) $(RPMBUILD_GOLANG_VENDOR_TOOLS_FIL
 		--define "_builddir $(RPMBUILD_BUILD_DIR)" \
 		--define "_buildrootdir $(RPMBUILD_BUILDROOT_DIR)" \
 		$(RPMBUILD_SPECFILE)
-
-#
-# Packit target
-#
-
-.PHONY: packit-create-archive
-packit-create-archive: $(SOURCE_TARBALL) $(VENDOR_TARBALL)
-	ls -1 $(SOURCE_TARBALL)
 
 .PHONY: clean
 clean:
