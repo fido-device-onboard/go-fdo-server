@@ -1,7 +1,4 @@
-LISTEN_IP="0.0.0.0"
-LISTEN_PORT="8041"
-ADDITIONAL_OPTS=""
-DATABASE_TYPE="sqlite"
-DATABASE_DSN="file:/var/lib/go-fdo-server-rendezvous/db.sqlite"
+# Command line options will override configuration file settings
+CMDLINE_OPTS=""
 # Example to enable TLS:
-# ADDITIONAL_OPTS="--http-cert=/etc/go-fdo-server/rendezvous-http.crt --http-key=/etc/go-fdo-server/rendezvous-http.key"
+# CMDLINE_OPTS="--http-cert=/etc/go-fdo-server/rendezvous-http.crt --http-key=/etc/go-fdo-server/rendezvous-http.key"

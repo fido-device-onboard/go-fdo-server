@@ -69,7 +69,7 @@ configure_service_manufacturer() {
     cp ${manufacturer_https_crt} ${rpm_manufacturer_https_crt}
     chown ${rpm_manufacturer_user}:${rpm_group} ${rpm_manufacturer_https_key} ${rpm_manufacturer_https_crt}
     additional_opts=\"--http-cert=${rpm_manufacturer_https_crt} --http-key=${rpm_manufacturer_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_manufacturer_sysconfig_file}
+    echo CMDLINE_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_manufacturer_sysconfig_file}
   fi
   "
 }
@@ -94,7 +94,7 @@ configure_service_rendezvous() {
     cp ${rendezvous_https_crt} ${rpm_rendezvous_https_crt}
     chown ${rpm_rendezvous_user}:${rpm_group} ${rpm_rendezvous_https_key} ${rpm_rendezvous_https_crt}
     additional_opts=\"--http-cert=${rpm_rendezvous_https_crt} --http-key=${rpm_rendezvous_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_rendezvous_sysconfig_file}
+    echo CMDLINE_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_rendezvous_sysconfig_file}
   fi
   "
 }
@@ -128,7 +128,7 @@ configure_service_owner() {
     cp ${owner_https_crt} ${rpm_owner_https_crt}
     chown ${rpm_owner_user}:${rpm_group} ${rpm_owner_https_key} ${rpm_owner_https_crt}
     additional_opts=\"--http-cert=${rpm_owner_https_crt} --http-key=${rpm_owner_https_key} --to0-insecure-tls\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_owner_sysconfig_file}
+    echo CMDLINE_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_owner_sysconfig_file}
   fi
   "
 }

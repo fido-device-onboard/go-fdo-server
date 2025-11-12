@@ -1,0 +1,15 @@
+# FDO Owner server default configuration
+log:
+  level: "info"
+db:
+  type: "sqlite"
+  dsn: "file:/var/lib/go-fdo-server-owner/db.sqlite"
+http:
+  ip: "0.0.0.0"
+  port: 8043
+device_ca:
+  cert: "/etc/go-fdo-server/device-ca.crt"
+owner:
+  key: "/etc/go-fdo-server/owner.key"
+  to0_insecure_tls: true
+

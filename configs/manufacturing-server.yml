@@ -1,0 +1,17 @@
+# FDO Manufacturing server default configuration
+log:
+  level: "info"
+db:
+  type: "sqlite"
+  dsn: "file:/var/lib/go-fdo-server-manufacturer/db.sqlite"
+http:
+  ip: "0.0.0.0"
+  port: 8038
+manufacturing:
+  key: "/etc/go-fdo-server/manufacturer.key"
+device_ca:
+  cert: "/etc/go-fdo-server/device-ca.crt"
+  key: "/etc/go-fdo-server/device-ca.key"
+owner:
+  cert: "/etc/go-fdo-server/owner.crt"
+
