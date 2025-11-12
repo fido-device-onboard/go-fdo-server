@@ -1,6 +1,9 @@
 ---
 # https://packit.dev/docs/configuration/
 
+# We want to generate packages with the original commit sha
+# https://packit.dev/docs/configuration#merge_pr_in_ci
+merge_pr_in_ci: false
 
 files_to_sync:
   - src:
@@ -17,12 +20,7 @@ upstream_tag_template: v{version}
 copy_upstream_release_description: true
 
 srpm_build_deps:
-  - curl
   - git
-  - make
-  - bison
-  - gcc
-  - glibc-devel
   - golang
   - go-vendor-tools
   - python3-tomlkit
@@ -36,28 +34,27 @@ packages:
   go-fdo-server-centos:
     downstream_package_name: go-fdo-server
     upstream_package_name: go-fdo-server
-    pkg_tool: centpkg
     specfile_path: build/package/rpm/go-fdo-server.spec
+    pkg_tool: centpkg
 
 actions:
   fix-spec-file:
     - |
-      bash -c '
+      bash -xc '
       #! /bin/bash
       export BASE_DIR=build/package/rpm
       export SPEC_FILE=${BASE_DIR}/go-fdo-server.spec
       # We need the full commit hash
       export COMMIT=$(git rev-parse ${PACKIT_PROJECT_COMMIT})
       sed -i "s/^%global commit\(\s*\).*/%global commit\1${COMMIT}/" ${SPEC_FILE}
-      sed -i "s/^Version:\(\s*\).*/Version\:\1${PACKIT_PROJECT_VERSION}/" ${SPEC_FILE}
-      sed -i "s/^Release:\(\s*\)\S+/Release:\1${PACKIT_RPMSPEC_RELEASE}%{?dist}/" ${SPEC_FILE}
+      sed -i "s/^Version:\(\s*\).*/Version:\1${PACKIT_PROJECT_VERSION}/" ${SPEC_FILE}
+      sed -i "s/^Release:\(\s*\).*/Release:\1${PACKIT_RPMSPEC_RELEASE}%{?dist}/" ${SPEC_FILE}
       '
   post-modifications:
     # https://fedora.gitlab.io/sigs/go/go-vendor-tools/scenarios/#manual-update
     - |
-      bash -c '
+      bash -xc '
       #! /bin/bash
-      set -x
       export GOTOOLCHAIN=auto
       export BASE_DIR=${PACKIT_UPSTREAM_REPO}/build/package/rpm
       export GO_VENDOR_TOOLS_CONFIG=${BASE_DIR}/go-vendor-tools.toml
@@ -74,47 +71,35 @@ jobs:
 
   # Fedora jobs
 
-  - &fdo_copr_build_fedora
+  - &copr_fedora
     job: copr_build
     packages: [go-fdo-server-fedora]
     trigger: pull_request
-    targets:
-      fedora-branched:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/fedora-$releasever-$basearch/
-        additional_packages:
-          - golang
-      fedora-rawhide:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/fedora-rawhide-$basearch/
-        additional_packages:
-          - golang
+    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
 
-
-  - <<: *fdo_copr_build_fedora
+  - <<: *copr_fedora
     trigger: commit
     branch: main
     owner: "@fedora-iot"
     project: fedora-iot
 
-
-  - job: sync_from_downstream
-    trigger: commit
-
   - job: propose_downstream
     trigger: release
     packages: [go-fdo-server-fedora]
-    dist_git_branches: ["fedora-development", "fedora-stable"]
+    # Avoid divergent branches: https://packit.dev/docs/fedora-releases-guide/non-divergent-dist-git-branches
+    dist_git_branches:
+      rawhide:
+        fast_forward_merge_into: ["fedora-latest-stable","fedora-latest"]
 
   - job: koji_build
     trigger: commit
     allowed_pr_authors: [all_committers]
-    dist_git_branches: ["fedora-development", "fedora-stable"]
+    dist_git_branches: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
 
   - job: bodhi_update
     trigger: commit
     allowed_builders: [all_committers]
-    dist_git_branches: ["fedora-development", "fedora-stable"]
+    dist_git_branches: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
 
   # Fedora E2E Testing jobs
 
@@ -123,30 +108,17 @@ jobs:
     identifier: e2e-fedora
     tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-fedora]
-    targets:
-      - fedora-latest-stable
-      - fedora-latest
-      - fedora-rawhide
+    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
 
   # CentOS jobs
 
-  - &fdo_copr_build_centos
+  - &copr_centos
     job: copr_build
     packages: [go-fdo-server-centos]
     trigger: pull_request
-    targets:
-      epel-9:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-9-$basearch/
-        additional_packages:
-          - golang
-      epel-10:
-        additional_repos:
-          - https://download.copr.fedorainfracloud.org/results/@go-sig/golang-rawhide/epel-10-$basearch/
-        additional_packages:
-          - golang
+    targets: ["centos-stream-9", "centos-stream-10"]
 
-  - <<: *fdo_copr_build_centos
+  - <<: *copr_centos
     trigger: commit
     branch: main
     owner: "@fedora-iot"
@@ -159,6 +131,4 @@ jobs:
     identifier: e2e-centos
     tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-centos]
-    targets:
-      - epel-9
-      - epel-10
+    targets: ["centos-stream-9", "centos-stream-10"]
