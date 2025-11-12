@@ -7,8 +7,8 @@ on:
 name: Continuous integration
 
 jobs:
-  test-go:
-    name: Run the go unit tests
+  test-build:
+    name: Run the full build via the Makefile
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
@@ -23,12 +23,15 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      - name: Run go test
+      - name: Run make all
         env:
           CGO_ENABLED: 1
         run: |
           git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
-          make test
+          make all
+
+      - name: Fail if the source code has changes after go fmt
+        uses: NathanielHill/fail-if-changes@master
 
   test-rpms:
     name: Test srpm and rpm builds

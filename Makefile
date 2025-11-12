@@ -2,6 +2,9 @@
 COMMIT = $(shell git rev-parse HEAD)
 VERSION = $(COMMIT)
 
+# Default target
+all: build test
+
 # Build the Go project
 .PHONY: build
 build: tidy fmt vet
@@ -154,6 +157,3 @@ rpm: $(RPMBUILD_SPECFILE) $(RPMBUILD_TARBALL) $(RPMBUILD_GOLANG_VENDOR_TOOLS_FIL
 clean:
 	rm -rf $(RPMBUILD_TOP_DIR)
 	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.{gz,bz2}
-
-# Default target
-all: build test
