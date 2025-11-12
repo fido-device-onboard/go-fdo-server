@@ -27,7 +27,7 @@ var (
 		return &fdo.TO0Client{Vouchers: vouchers, OwnerKeys: keys}
 	}
 	makeTransport  = tls.TlsTransport
-	fetchOwnerInfo = db.FetchOwnerInfo
+	fetchRVTO2Addr = db.FetchRVTO2Addr
 )
 
 func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, insecureTLS bool) error { // Parse to0-guid flag
@@ -41,10 +41,10 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	var guid protocol.GUID
 	copy(guid[:], guidBytes)
 
-	// Retrieve owner info from DB
-	to2Addrs, err := fetchOwnerInfo()
+	// Retrieve rvto2addr from DB
+	to2Addrs, err := fetchRVTO2Addr()
 	if err != nil {
-		return fmt.Errorf("error fetching ownerinfo: %w", err)
+		return fmt.Errorf("error fetching rvto2addr: %w", err)
 	}
 
 	ownerRvInfo := protocol.ParseOwnerRvInfo(rvInfo)

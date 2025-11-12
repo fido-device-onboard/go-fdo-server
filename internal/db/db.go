@@ -22,7 +22,7 @@ var db *gorm.DB
 
 // Sentinel errors to classify client input issues
 var (
-	ErrInvalidOwnerInfo = errors.New("invalid ownerinfo data")
+	ErrInvalidRVTO2Addr = errors.New("invalid rvto2addr data")
 	ErrInvalidRvInfo    = errors.New("invalid rvinfo data")
 )
 
@@ -90,17 +90,17 @@ func InsertVoucher(voucher Voucher) error {
 	return db.Create(&voucher).Error
 }
 
-func InsertOwnerInfo(data []byte) error {
+func InsertRVTO2Addr(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidOwnerInfo, err)
+		return fmt.Errorf("%w: %v", ErrInvalidRVTO2Addr, err)
 	}
 
-	ownerInfo := OwnerInfo{
+	rvto2Addr := RVTO2Addr{
 		ID:    1,
 		Value: data,
 	}
-	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&ownerInfo)
+	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rvto2Addr)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -110,13 +110,13 @@ func InsertOwnerInfo(data []byte) error {
 	return nil
 }
 
-func UpdateOwnerInfo(data []byte) error {
+func UpdateRVTO2Addr(data []byte) error {
 	// check the data can be parsed into []protocol.RvTO2Addr
 	if _, err := parseHumanToTO2AddrsJSON(data); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidOwnerInfo, err)
+		return fmt.Errorf("%w: %v", ErrInvalidRVTO2Addr, err)
 	}
 
-	tx := db.Model(&OwnerInfo{}).Where("id = ?", 1).Update("value", data)
+	tx := db.Model(&RVTO2Addr{}).Where("id = ?", 1).Update("value", data)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -126,22 +126,22 @@ func UpdateOwnerInfo(data []byte) error {
 	return nil
 }
 
-func FetchOwnerInfoJSON() ([]byte, error) {
-	var ownerInfo OwnerInfo
-	if err := db.Where("id = ?", 1).First(&ownerInfo).Error; err != nil {
+func FetchRVTO2AddrJSON() ([]byte, error) {
+	var rvto2Addr RVTO2Addr
+	if err := db.Where("id = ?", 1).First(&rvto2Addr).Error; err != nil {
 		return nil, err
 	}
-	return ownerInfo.Value, nil
+	return rvto2Addr.Value, nil
 }
 
-// FetchOwnerInfoData reads the owner_info JSON (stored as text) and converts it
+// FetchRVTO2Addr reads the rv_to2_addr JSON (stored as text) and converts it
 // into []protocol.RvTO2Addr.
-func FetchOwnerInfo() ([]protocol.RvTO2Addr, error) {
-	ownerInfoData, err := FetchOwnerInfoJSON()
+func FetchRVTO2Addr() ([]protocol.RvTO2Addr, error) {
+	rvto2AddrData, err := FetchRVTO2AddrJSON()
 	if err != nil {
 		return nil, err
 	}
-	return parseHumanToTO2AddrsJSON(ownerInfoData)
+	return parseHumanToTO2AddrsJSON(rvto2AddrData)
 }
 
 func InsertRvInfo(data []byte) error {

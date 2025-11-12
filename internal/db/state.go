@@ -68,7 +68,7 @@ func InitDb(dbType, dsn string) (*State, error) {
 		&Voucher{},
 		&ReplacementVoucher{},
 		&KeyExchange{},
-		&OwnerInfo{},
+		&RVTO2Addr{},
 		&RvInfo{},
 	)
 	if err != nil {

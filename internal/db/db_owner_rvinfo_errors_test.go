@@ -13,27 +13,27 @@ func setupTestDBForOwnerRv(t *testing.T) {
 	}
 }
 
-func TestInsertOwnerInfo_Invalid_ReturnsErrInvalidOwnerInfo(t *testing.T) {
+func TestInsertRVTO2Addr_Invalid_ReturnsErrInvalidRVTO2Addr(t *testing.T) {
 	setupTestDBForOwnerRv(t)
 	invalid := []byte(`{bad}`)
-	err := InsertOwnerInfo(invalid)
+	err := InsertRVTO2Addr(invalid)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if !errors.Is(err, ErrInvalidOwnerInfo) {
-		t.Fatalf("expected ErrInvalidOwnerInfo, got %v", err)
+	if !errors.Is(err, ErrInvalidRVTO2Addr) {
+		t.Fatalf("expected ErrInvalidRVTO2Addr, got %v", err)
 	}
 }
 
-func TestUpdateOwnerInfo_Invalid_ReturnsErrInvalidOwnerInfo(t *testing.T) {
+func TestUpdateRVTO2Addr_Invalid_ReturnsErrInvalidRVTO2Addr(t *testing.T) {
 	setupTestDBForOwnerRv(t)
 	invalid := []byte(`{bad}`)
-	err := UpdateOwnerInfo(invalid)
+	err := UpdateRVTO2Addr(invalid)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if !errors.Is(err, ErrInvalidOwnerInfo) {
-		t.Fatalf("expected ErrInvalidOwnerInfo, got %v", err)
+	if !errors.Is(err, ErrInvalidRVTO2Addr) {
+		t.Fatalf("expected ErrInvalidRVTO2Addr, got %v", err)
 	}
 }
 

@@ -45,12 +45,12 @@ func TestRegisterRvBlob_BreaksAfterFirstSuccess(t *testing.T) {
 		},
 	}
 
-	// Inject fake owner info
-	oldFetch := fetchOwnerInfo
-	fetchOwnerInfo = func() ([]protocol.RvTO2Addr, error) {
+	// Inject fake rvto2addr
+	oldFetch := fetchRVTO2Addr
+	fetchRVTO2Addr = func() ([]protocol.RvTO2Addr, error) {
 		return []protocol.RvTO2Addr{{}}, nil
 	}
-	defer func() { fetchOwnerInfo = oldFetch }()
+	defer func() { fetchRVTO2Addr = oldFetch }()
 
 	// Inject fake transport maker to avoid real URLs
 	oldMakeTransport := makeTransport

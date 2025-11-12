@@ -190,14 +190,14 @@ func (Voucher) TableName() string {
 	return "vouchers"
 }
 
-type OwnerInfo struct {
+type RVTO2Addr struct {
 	ID    int    `gorm:"primaryKey;check:id = 1"`
 	Value []byte `gorm:"type:text;not null"`
 }
 
-// TableName specifies the table name for OwnerInfo model
-func (OwnerInfo) TableName() string {
-	return "owner_info"
+// TableName specifies the table name for RVTO2Addr model
+func (RVTO2Addr) TableName() string {
+	return "rv_to2_addr"
 }
 
 type RvInfo struct {

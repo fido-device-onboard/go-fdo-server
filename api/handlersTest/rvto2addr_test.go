@@ -11,10 +11,10 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 )
 
-func TestOwnerInfo_PostConflictOnDuplicate(t *testing.T) {
+func TestRVTO2Addr_PostConflictOnDuplicate(t *testing.T) {
 	setupTestDB(t)
 
-	handler := http.HandlerFunc(handlers.OwnerInfoHandler)
+	handler := http.HandlerFunc(handlers.RVTO2AddrHandler)
 	body := []byte(`[{"dns":"owner.example","port":"8082","protocol":"http"}]`)
 
 	// First POST should create (201)
@@ -34,25 +34,25 @@ func TestOwnerInfo_PostConflictOnDuplicate(t *testing.T) {
 	}
 }
 
-func TestOwnerInfo_Put404ThenCreateThenUpdateAndGet(t *testing.T) {
+func TestRVTO2Addr_Put404ThenCreateThenUpdateAndGet(t *testing.T) {
 	setupTestDB(t)
 
 	get := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/owner/redirect", nil)
 		rec := httptest.NewRecorder()
-		handlers.OwnerInfoHandler(rec, req)
+		handlers.RVTO2AddrHandler(rec, req)
 		return rec
 	}
 	put := func(body []byte) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/owner/redirect", bytes.NewReader(body))
 		rec := httptest.NewRecorder()
-		handlers.OwnerInfoHandler(rec, req)
+		handlers.RVTO2AddrHandler(rec, req)
 		return rec
 	}
 	post := func(body []byte) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/redirect", bytes.NewReader(body))
 		rec := httptest.NewRecorder()
-		handlers.OwnerInfoHandler(rec, req)
+		handlers.RVTO2AddrHandler(rec, req)
 		return rec
 	}
 

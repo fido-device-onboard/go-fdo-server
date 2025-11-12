@@ -242,7 +242,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		InsecureTLS:  config.Owner.TO0InsecureTLS,
 	}))
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
-	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
+	apiRouter.HandleFunc("/owner/redirect", handlers.RVTO2AddrHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
