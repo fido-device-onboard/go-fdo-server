@@ -7,9 +7,15 @@ db:
 http:
   ip: "0.0.0.0"
   port: 8043
+  # To enable HTTPS provide the server certificate and matching
+  # private key below. If the certificate is signed by a certificate
+  # authority, the certFile should be the concatenation of the
+  # server's certificate, any intermediates, and the CA's certificate.
+  ##cert: /etc/pki/go-fdo-server/owner-http.crt
+  ##key: /etc/pki/go-fdo-server/owner-http.key
 device_ca:
-  cert: "/etc/go-fdo-server/device-ca.crt"
+  cert: "/etc/pki/go-fdo-server/device-ca.crt"
 owner:
-  key: "/etc/go-fdo-server/owner.key"
+  key: "/etc/pki/go-fdo-server/owner.key"
   to0_insecure_tls: true
 

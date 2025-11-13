@@ -1,5 +1,19 @@
+# Modifying this file in-place is not recommended, because changes
+# will be overwritten during package upgrades.  To customize the
+# behaviour, run "systemctl edit go-fdo-server-manufacturer" to create
+# an override unit.
+#
+# For example, to pass additional command line options to the server
+# at startup create an override unit (as is done by systemctl edit)
+# and enter the following:
+#
+#	[Service]
+#	Environment=OPTIONS="--log-level debug"
+
 [Unit]
 Description=Go FDO owner server
+Requires=go-fdo-server-init.service
+After=go-fdo-server-init.service
 After=network.target
 
 [Service]
@@ -7,11 +21,8 @@ Type=simple
 PrivateDevices=yes
 CacheDirectory=go-fdo-server-owner
 StateDirectory=go-fdo-server-owner
-ExecStartPre=/usr/share/go-fdo-server/generate-owner-certs.sh
-ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server owner ${CMDLINE_OPTS}'
+ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server owner $OPTIONS'
 User=go-fdo-server-owner
-
-EnvironmentFile=-/etc/sysconfig/go-fdo-server-owner
 
 [Install]
 WantedBy=multi-user.target

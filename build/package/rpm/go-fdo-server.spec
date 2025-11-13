@@ -52,24 +52,26 @@ devices when they are first powered on in their final location.
 install -m 0755 -vd %{buildroot}%{_bindir}
 install -m 0755 -vp -s %{gobuilddir}/bin/* %{buildroot}%{_bindir}
 # Configuration
-install -m 0775 -vd %{buildroot}%{_sysconfdir}/%{name}
+install -m 0755 -vd %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp -D configs/manufacturing-server.yml %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp -D configs/owner-server.yml %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp -D configs/rendezvous-server.yml %{buildroot}%{_sysconfdir}/%{name}
+# Certificates
+install -m 0755 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
 # Sysusers
 install -m 0644 -vp -D %{SOURCE3} %{buildroot}/%{_sysusersdir}/go-fdo-server.conf
 install -m 0644 -vp -D %{SOURCE4} %{buildroot}/%{_sysusersdir}/go-fdo-server-manufacturer.conf
 install -m 0644 -vp -D %{SOURCE5} %{buildroot}/%{_sysusersdir}/go-fdo-server-rendezvous.conf
 install -m 0644 -vp -D %{SOURCE6} %{buildroot}/%{_sysusersdir}/go-fdo-server-owner.conf
-# Sysconfig files
-install -m 0755 -vd %{buildroot}%{_sysconfdir}/sysconfig
-install -m 0644 -vp -D configs/sysconfig/* %{buildroot}%{_sysconfdir}/sysconfig/
 # Systemd units
 install -m 0755 -vd %{buildroot}%{_unitdir}
 install -m 0644 -vp -D init/systemd/* %{buildroot}%{_unitdir}
 # Helpers
-install -m 0755 -vd %{buildroot}%{_datadir}/%{name}
-install -m 0755 -vp -D scripts/* %{buildroot}%{_datadir}/%{name}
+install -m 0755 -vd %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 -vp -D scripts/cert-utils.sh %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 -vp -D scripts/generate-device-ca-certs.sh %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 -vp -D scripts/generate-manufacturer-certs.sh %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 -vp -D scripts/generate-owner-certs.sh %{buildroot}%{_libexecdir}/%{name}
 
 %check
 %if %{with check}
@@ -80,17 +82,28 @@ install -m 0755 -vp -D scripts/* %{buildroot}%{_datadir}/%{name}
 %license LICENSE vendor/modules.txt
 %doc DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
 %{_bindir}/go-fdo-server
-%dir %attr(775, root, go-fdo-server) %{_sysconfdir}/%{name}
+%dir %attr(755, root, go-fdo-server) %{_sysconfdir}/%{name}
+%dir %attr(755, root, go-fdo-server) %{_sysconfdir}/pki/%{name}
 %{_sysusersdir}/%{name}.conf
-%dir %{_datadir}/%{name}
-%{_datadir}/%{name}/fdo-utils.sh
-%{_datadir}/%{name}/cert-utils.sh
-%{_datadir}/%{name}/generate-manufacturer-certs.sh
-%{_datadir}/%{name}/generate-device-ca-certs.sh
-%{_datadir}/%{name}/generate-owner-certs.sh
+%dir %{_libexecdir}/%{name}
+%{_libexecdir}/%{name}/cert-utils.sh
+%{_libexecdir}/%{name}/generate-manufacturer-certs.sh
+%{_libexecdir}/%{name}/generate-device-ca-certs.sh
+%{_libexecdir}/%{name}/generate-owner-certs.sh
+# Systemd unit
+%{_unitdir}/go-fdo-server-init.service
 
 %pre
 %sysusers_create_compat %{SOURCE3}
+
+%post
+%systemd_post go-fdo-server-init.service
+
+%preun
+%systemd_preun go-fdo-server-init.service
+
+%postun
+%systemd_postun_with_restart go-fdo-server-init.service
 
 %package manufacturer
 Requires: go-fdo-server
@@ -106,7 +119,6 @@ preparing devices for the on-boarding process during the manufacturing phase.
 %files manufacturer
 # Systemd unit
 %{_unitdir}/go-fdo-server-manufacturer.service
-%config(noreplace) %{_sysconfdir}/sysconfig/go-fdo-server-manufacturer
 # Sysuser
 %{_sysusersdir}/go-fdo-server-manufacturer.conf
 # Default config
@@ -138,7 +150,6 @@ voucher.
 %files rendezvous
 # Systemd unit
 %{_unitdir}/go-fdo-server-rendezvous.service
-%config(noreplace) %{_sysconfdir}/sysconfig/go-fdo-server-rendezvous
 # Sysuser
 %{_sysusersdir}/go-fdo-server-rendezvous.conf
 # Default config
@@ -170,7 +181,6 @@ necessary credentials and configuration for operation.
 %files owner
 # Systemd unit
 %{_unitdir}/go-fdo-server-owner.service
-%config(noreplace) %{_sysconfdir}/sysconfig/go-fdo-server-owner
 # Sysuser
 %{_sysusersdir}/go-fdo-server-owner.conf
 # Default config

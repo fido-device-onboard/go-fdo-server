@@ -1,5 +1,19 @@
+# Modifying this file in-place is not recommended, because changes
+# will be overwritten during package upgrades.  To customize the
+# behaviour, run "systemctl edit go-fdo-server-manufacturer" to create
+# an override unit.
+#
+# For example, to pass additional command line options to the server
+# at startup create an override unit (as is done by systemctl edit)
+# and enter the following:
+#
+#	[Service]
+#	Environment=OPTIONS="--log-level debug"
+
 [Unit]
 Description=Go FDO rendezvous server
+Requires=go-fdo-server-init.service
+After=go-fdo-server-init.service
 After=network.target
 
 [Service]
@@ -7,10 +21,8 @@ Type=simple
 PrivateDevices=yes
 CacheDirectory=go-fdo-server-rendezvous
 StateDirectory=go-fdo-server-rendezvous
-ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server rendezvous ${CMDLINE_OPTS}'
+ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server rendezvous $OPTIONS'
 User=go-fdo-server-rendezvous
-
-EnvironmentFile=-/etc/sysconfig/go-fdo-server-rendezvous
 
 [Install]
 WantedBy=multi-user.target

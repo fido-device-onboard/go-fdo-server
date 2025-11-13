@@ -1,8 +1,0 @@
-# Command line options will override configuration file settings
-CMDLINE_OPTS=""
-# Example to enable TLS:
-# CMDLINE_OPTS="--http-cert=/etc/go-fdo-server/manufacturer-http.crt --http-key=/etc/go-fdo-server/manufacturer-http.key"
-MANUFACTURER_KEY="/etc/go-fdo-server/manufacturer.key"
-OWNER_CRT="/etc/go-fdo-server/owner.crt"
-DEVICE_CA_CRT="/etc/go-fdo-server/device-ca.crt"
-DEVICE_CA_KEY="/etc/go-fdo-server/device-ca.key"
