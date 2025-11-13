@@ -345,7 +345,7 @@ uninstall_client() {
 
 install_server() {
   mkdir -p "${bin_dir}"
-  make && install -m 755 go-fdo-server ${bin_dir} && rm -f go-fdo-server
+  make build && install -m 755 go-fdo-server ${bin_dir} && rm -f go-fdo-server
 }
 
 uninstall_server() {

@@ -7,7 +7,7 @@ WORKDIR /go/src/app
 COPY . .
 
 RUN apk add make curl gcc musl-dev
-RUN make && install -D -m 755 go-fdo-server /go/bin/
+RUN make build && install -D -m 755 go-fdo-server /go/bin/
 
 # Start a new stage
 FROM alpine
