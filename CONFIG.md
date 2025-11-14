@@ -4,18 +4,35 @@ This document describes all configuration options available for the FDO server. 
 
 Command-line arguments take precedence over configuration file values. The server address can be specified either as a command-line argument or in the configuration file under the appropriate section.
 
-Configuration files are loaded using the `--config` flag, for example:
+## Configuration File Location
+
+The configuration file can be specified via the `--config` server command line parameter, for example:
 
 ```bash
-# Using TOML configuration file
-go-fdo-server manufacturing --config config.toml
+# Using TOML configuration file:
+go-fdo-server manufacturing --config /etc/config.toml
 
-# Using YAML configuration file
+# Using YAML configuration file in the local directory with listening address override:
 go-fdo-server owner --config config.yaml 127.0.0.1:8080
 
 # Using TOML, enable debug logging
-go-fdo-server rendezvous --log-level=debug --config config.toml
+go-fdo-server rendezvous --log-level=debug --config /home/fdo/config.toml
 ```
+
+If `--config` is not provided the server will search the following directories in order until a configuration file is found:
+
+- `$HOME/.config/go-fdo-server/`
+- `/etc/go-fdo-server/`
+- `/usr/share/go-fdo-server/`
+
+The name of the configuration file is based on the server's role, with the file name suffix corresponding to the file format:
+
+| Role | Filename | Examples |
+|------|----------|----------|
+| Manufacturer | `manufacturing-server.<suffix>` | `manufacturing-server.yml`, `manufacturing-server.toml` |
+| Owner | `owner-server.<suffix>` | `owner-server.yml`, `owner-server.toml` |
+| Rendezvous | `rendezvous-server.<suffix>` | `rendezvous-server.yml`, `rendezvous-server.toml` |
+
 
 ## Configuration Structure
 
