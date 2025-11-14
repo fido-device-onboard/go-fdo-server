@@ -1,0 +1,2 @@
+test: ./integration.sh
+duration: 60m

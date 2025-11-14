@@ -1,0 +1,18 @@
+summary: fdo server test plan
+discover:
+  how: fmf
+  test: integration
+execute:
+  how: tmt
+provision:
+  hardware:
+    virtualization:
+      is-supported: true
+    cpu:
+      processors: ">= 2"
+    memory: ">= 6 GB"
+
+/bootc-iso:
+  summary: Test go fdo server with bootc iso image
+  environment+:
+    TEST_CASE: bootc-iso
