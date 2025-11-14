@@ -9,3 +9,4 @@ crt="${cert_dir}/device-ca.crt"
 pub="${cert_dir}/device-ca.pub"
 
 generate_cert "${key}" "${crt}" "${subj}"
+chmod g+r "${key}"

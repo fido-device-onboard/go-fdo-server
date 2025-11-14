@@ -8,3 +8,4 @@ key="${cert_dir}/owner.key"
 crt="${cert_dir}/owner.crt"
 
 generate_cert "${key}" "${crt}" "${subj}"
+chmod g+r "${key}"

@@ -1,14 +1,14 @@
-# Modifying this file in-place is not recommended, because changes
-# will be overwritten during package upgrades.  To customize the
-# behaviour, run "systemctl edit go-fdo-server-manufacturer" to create
-# an override unit.
+# Modifying this file in-place is not recommended because changes will
+# be overwritten during package upgrades. Customization should be done
+# by using a systemd "drop-in" instead.
 #
-# For example, to pass additional command line options to the server
-# at startup create an override unit (as is done by systemctl edit)
-# and enter the following:
+# For example to add an additional command line option to enable debug
+# logging create an override "drop-in" unit (as is done by systemctl
+# edit) and enter the following:
 #
 #	[Service]
-#	Environment=OPTIONS="--log-level debug"
+#       ExecStart=
+#       ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server manufacturing --log-level debug'
 
 [Unit]
 Description=Go FDO manufacturer server
@@ -21,7 +21,7 @@ Type=simple
 PrivateDevices=yes
 CacheDirectory=go-fdo-server-manufacturer
 StateDirectory=go-fdo-server-manufacturer
-ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server manufacturing $OPTIONS'
+ExecStart=/bin/sh -c 'exec /usr/bin/go-fdo-server manufacturing'
 User=go-fdo-server-manufacturer
 
 [Install]

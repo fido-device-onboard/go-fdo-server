@@ -11,5 +11,5 @@ http:
   # private key below. If the certificate is signed by a certificate
   # authority, the certFile should be the concatenation of the
   # server's certificate, any intermediates, and the CA's certificate.
-  ##cert: /etc/pki/go-fdo-server/rendezvous-http.crt
-  ##key: /etc/pki/go-fdo-server/rendezvous-http.key
+  ##cert: /etc/pki/go-fdo-server/rendezvous-https.crt
+  ##key: /etc/pki/go-fdo-server/rendezvous-https.key

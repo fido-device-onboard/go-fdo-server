@@ -8,3 +8,4 @@ key="${cert_dir}/manufacturer.key"
 crt="${cert_dir}/manufacturer.crt"
 
 generate_cert "${key}" "${crt}" "${subj}"
+chmod g+r "${key}"

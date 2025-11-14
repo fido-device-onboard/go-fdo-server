@@ -11,11 +11,10 @@ http:
   # private key below. If the certificate is signed by a certificate
   # authority, the certFile should be the concatenation of the
   # server's certificate, any intermediates, and the CA's certificate.
-  ##cert: /etc/pki/go-fdo-server/owner-http.crt
-  ##key: /etc/pki/go-fdo-server/owner-http.key
+  ##cert: /etc/pki/go-fdo-server/owner-https.crt
+  ##key: /etc/pki/go-fdo-server/owner-https.key
 device_ca:
   cert: "/etc/pki/go-fdo-server/device-ca.crt"
 owner:
   key: "/etc/pki/go-fdo-server/owner.key"
-  to0_insecure_tls: true
 

@@ -11,8 +11,8 @@ http:
   # private key below. If the certificate is signed by a certificate
   # authority, the certFile should be the concatenation of the
   # server's certificate, any intermediates, and the CA's certificate.
-  ##cert: /etc/pki/go-fdo-server/manufacturer-http.crt
-  ##key: /etc/pki/go-fdo-server/manufacturer-http.key
+  ##cert: /etc/pki/go-fdo-server/manufacturer-https.crt
+  ##key: /etc/pki/go-fdo-server/manufacturer-https.key
 manufacturing:
   key: "/etc/pki/go-fdo-server/manufacturer.key"
 device_ca:
