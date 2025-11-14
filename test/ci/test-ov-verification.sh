@@ -69,8 +69,7 @@ run_test () {
   echo "  ✅ New owner correctly rejected voucher (owner key doesn't match)"
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }

@@ -9,4 +9,4 @@ client_compose_file="deployments/compose/client/fdo-client.yaml"
 servers_compose_file="deployments/compose/server/fsim-fdo-upload-servers.yaml"
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }

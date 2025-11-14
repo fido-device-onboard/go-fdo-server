@@ -97,8 +97,7 @@ run_test() {
   run_fido_device_onboard --debug
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }

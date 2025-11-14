@@ -91,10 +91,9 @@ run_test() {
   fi
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
 
 
