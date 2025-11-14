@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-trap stop_services EXIT
+printenv|sort
+
+trap on_failure EXIT
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
@@ -17,7 +19,6 @@ device_credentials="${credentials_dir}/creds.bin"
 
 device_ca_key="${certs_dir}/device_ca.key"
 device_ca_crt="${device_ca_key/\.key/.crt}"
-device_ca_pub="${device_ca_key/\.key/.pub}"
 device_ca_subj="/C=US/O=FDO/CN=Device CA"
 
 manufacturer_service_name="manufacturer"
@@ -32,8 +33,6 @@ manufacturer_log="${logs_dir}/${manufacturer_dns}.log"
 manufacturer_key="${certs_dir}/manufacturer.key"
 #shellcheck disable=SC2034
 manufacturer_crt="${manufacturer_key/\.key/.crt}"
-#shellcheck disable=SC2034
-manufacturer_pub="${manufacturer_key/\.key/.pub}"
 #shellcheck disable=SC2034
 manufacturer_subj="/C=US/O=FDO/CN=Manufacturer"
 manufacturer_service="${manufacturer_dns}:${manufacturer_port}"
@@ -84,11 +83,6 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 #shellcheck disable=SC2034
 owner_ov="${base_dir}/owner.ov"
-
-# Define HTTPS certificate subjects per service (passed down to cert generator)
-manufacturer_https_subj="/C=US/O=FDO/CN=manufacturer"
-rendezvous_https_subj="/C=US/O=FDO/CN=rendezvous"
-owner_https_subj="/C=US/O=FDO/CN=owner"
 
 # HTTPS transport cert paths
 manufacturer_https_key="${certs_dir}/manufacturer-http.key"
@@ -162,6 +156,21 @@ unset_hostnames() {
     local service_dns=${service}_dns
     unset_hostname "${!service_dns}" "${!service_ip}"
   done
+}
+
+configure_services() {
+  generate_https_certs
+  echo "⭐ Configuring services"
+  for service in "${services[@]}"; do
+    configure_service "${service}"
+  done
+}
+
+configure_service() {
+  local service=$1
+  echo "  ⚙ Configuring service ${service}"
+  local configure_service="configure_service_${service}"
+  ! declare -F "${configure_service}" >/dev/null || ${configure_service}
 }
 
 get_real_ip() {
@@ -353,18 +362,31 @@ uninstall_server() {
   rm -f "${bin_dir}/go-fdo-server"
 }
 
-generate_certs() {
+generate_service_certs() {
   for service in "${services[@]}"; do
     local service_key="${service}_key"
     local service_crt="${service}_crt"
-    local service_pub="${service}_pub"
     local service_subj="${service}_subj"
-    if [[ -v "${service_key}" && -v "${service_crt}" && -v "${service_pub}" && -v "${service_subj}" ]]; then
-      generate_cert "${!service_key}" "${!service_crt}" "${!service_pub}" "${!service_subj}"
+    if [[ -v "${service_key}" && -v "${service_crt}" && -v "${service_subj}" ]]; then
+      generate_cert "${!service_key}" "${!service_crt}" "${!service_subj}"
     fi
   done
-  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_pub}" "${device_ca_subj}"
+  generate_cert "${device_ca_key}" "${device_ca_crt}" "${device_ca_subj}"
   ls -l "${certs_dir}"
+}
+
+generate_https_certs() {
+ for service in "${services[@]}"; do
+    local service_protocol="${service}_protocol"
+    [[ "${!service_protocol-}" = "https" ]] || continue
+    local service_key="${service}_https_key"
+    local service_crt="${service}_https_crt"
+    local service_dns="${service}_dns"
+    local service_subj="/C=US/O=FDO/CN=${!service_dns:-${service}}"
+    if [[ -v "${service_key}" && -v "${service_crt}" ]]; then
+      generate_cert "${!service_key}" "${!service_crt}" "${service_subj}" "pem"
+    fi
+  done
 }
 
 set_or_update_rendezvous_info() {
@@ -372,7 +394,8 @@ set_or_update_rendezvous_info() {
   local rendezvous_service_name=$2
   local rendezvous_dns=$3
   local rendezvous_port=$4
-  
+  local rendezvous_protocol=${5:-http}
+
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
@@ -402,6 +425,7 @@ set_or_update_owner_redirect_info() {
   local owner_service_name=$2
   local owner_dns=$3
   local owner_port=$4
+  local owner_protocol=${5:-http}
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   echo "❓ Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
@@ -415,12 +439,19 @@ set_or_update_owner_redirect_info() {
   echo
 }
 
-get_server_logs() {
-  for log_file in "${logs_dir}"/*; do
-    if [[ -f "${log_file}" ]]; then
-      echo "❓ ${log_file}"
-      cat "$log_file"
-    fi
+get_service_logs() {
+  local service=$1
+  local service_log_var="${service}_log"
+  if [[ -v "${service_log_var}" ]]; then
+    echo "❓ '${service}' logs ('${!service_log_var}')"
+    [ ! -f "${!service_log_var}" ] || cat "${!service_log_var}"
+  fi
+}
+
+get_logs() {
+  echo "⭐ Retrieving logs"
+  for service in "${services[@]}"; do
+    get_service_logs ${service}
   done
 }
 
@@ -452,12 +483,25 @@ verify_equal_files() {
   fi
 }
 
+on_failure() {
+  trap - EXIT
+  stop_services
+  echo "❌ Test FAILED!"
+}
+
+remove_files() {
+  echo "⭐ Removing files from '${base_dir:?}'"
+  rm -rf "${base_dir:?}"/*
+}
+
 cleanup() {
+  trap - EXIT
   echo "⭐ Cleaning ..."
   stop_services
   unset_hostnames
   uninstall_server
   uninstall_client
-  rm -rf "${base_dir:?}"/*
+  remove_files
   echo "⭐ Done!"
+  echo "✅ Test OK!"
 }

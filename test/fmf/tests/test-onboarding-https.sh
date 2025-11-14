@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/test-onboarding.sh"
+# Source the common CI test first (defines certs_dir via CI utils)
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/test-onboarding.sh"
 
 # Force all services to use HTTPS for this test
 manufacturer_protocol=https
@@ -16,6 +17,5 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
-
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
 

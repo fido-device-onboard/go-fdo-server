@@ -26,7 +26,6 @@ Source4:        go-fdo-server-manufacturer-user.conf
 Source5:        go-fdo-server-rendezvous-user.conf
 Source6:        go-fdo-server-owner-user.conf
 
-BuildRequires:  go-vendor-tools
 # Systemd units
 BuildRequires:  systemd-rpm-macros
 # Sysusers
@@ -43,15 +42,13 @@ devices when they are first powered on in their final location.
 %setup -q -T -D -a1 %{forgesetupargs}
 #%%autopatch -p1
 
-%generate_buildrequires
-%go_vendor_license_buildrequires -c %{S:2}
+%go_generate_buildrequires
 
 %build
 %global gomodulesmode GO111MODULE=on
 %gobuild -o %{gobuilddir}/bin/go-fdo-server %{goipath}
 
 %install
-%go_vendor_license_install -c %{S:2}
 install -m 0755 -vd %{buildroot}%{_bindir}
 install -m 0755 -vp -s %{gobuilddir}/bin/* %{buildroot}%{_bindir}
 # Configuration dir
@@ -72,11 +69,11 @@ install -m 0755 -vd %{buildroot}%{_datadir}/%{name}
 install -m 0755 -vp -D scripts/* %{buildroot}%{_datadir}/%{name}
 
 %check
-%go_vendor_license_check -c %{S:2}
 %if %{with check}
 %gotest ./...
 %endif
-%files -f %{go_vendor_license_filelist}
+
+%files
 %license vendor/modules.txt
 %doc DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
 %{_bindir}/go-fdo-server

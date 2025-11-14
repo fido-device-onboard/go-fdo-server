@@ -26,11 +26,11 @@ jobs:
           source test/container/test-onboarding.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-onboarding.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -57,11 +57,11 @@ jobs:
           source test/container/test-onboarding-postgres.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-onboarding-postgres.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -88,11 +88,11 @@ jobs:
           source test/container/test-ov-verification.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-ov-verification.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -118,11 +118,11 @@ jobs:
           source test/container/test-resale.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-resale.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -148,11 +148,11 @@ jobs:
           source test/container/test-fsim-upload.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-fsim-upload.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -178,11 +178,11 @@ jobs:
           source test/container/test-fsim-download.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-fsim-download.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -208,11 +208,11 @@ jobs:
           source test/container/test-fsim-wget.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-fsim-wget.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -239,11 +239,11 @@ jobs:
           source test/container/test-onboarding-config.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/container/test-onboarding-config.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()

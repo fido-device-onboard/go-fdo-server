@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/test-onboarding.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd )/utils.sh"
 
 run_test() {
 
@@ -10,7 +10,7 @@ run_test() {
   create_directories
 
   echo "⭐ Generating service certificates"
-  generate_certs
+  generate_service_certs
 
   echo "⭐ Build and install 'go-fdo-client' binary"
   install_client
@@ -91,10 +91,9 @@ run_test() {
   fi
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
 
 

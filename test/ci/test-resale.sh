@@ -20,17 +20,28 @@ new_owner_pub="${new_owner_key/\.key/.pub}"
 #shellcheck disable=SC2034
 new_owner_subj="/C=US/O=FDO/CN=New Owner"
 new_owner_service="${new_owner_dns}:${new_owner_port}"
-new_owner_url="http://${new_owner_service}"
+new_owner_protocol="http"
+new_owner_url="${new_owner_protocol}://${new_owner_service}"
 # needed for 'wait_for_services_ready' do not remove
 #shellcheck disable=SC2034
 new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
 
+#shellcheck disable=SC2034
+new_owner_https_subj="/C=US/O=FDO/CN=new_owner"
+new_owner_https_key="${certs_dir}/new_owner-http.key"
+new_owner_https_crt="${certs_dir}/new_owner-http.crt"
+
 start_service_new_owner() {
+  local extra_opts=()
+  if [ "${new_owner_protocol}" = "https" ]; then
+    extra_opts+=(--http-cert "${new_owner_https_crt}" --http-key "${new_owner_https_key}" --to0-insecure-tls)
+  fi
   run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
     --owner-key="${new_owner_key}" \
     --device-ca-cert="${device_ca_crt}"
+    "${extra_opts[@]}"
 }
 
 run_test() {
@@ -41,7 +52,7 @@ run_test() {
   create_directories
 
   echo "⭐ Generating service certificates"
-  generate_certs
+  generate_service_certs
 
   echo "⭐ Build and install the 'go-fdo-client' binary"
   install_client
@@ -56,7 +67,7 @@ run_test() {
   wait_for_services_ready
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   echo "⭐ Run Device Initialization"
   run_device_initialization
@@ -67,11 +78,14 @@ run_test() {
   echo "⭐ Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
+  echo "⭐ Extracting the public key from the New Owner cert"
+  extract_pubkey_from_cert ${new_owner_crt} ${new_owner_pub}
+
   echo "⭐ Trigger the Resell protocol on the current owner"
   resell "${owner_url}" "${guid}" "${new_owner_pub}" "${new_owner_ov}"
 
   echo "⭐ Setting or updating the New Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}"
+  set_or_update_owner_redirect_info "${new_owner_url}" "${new_owner_service_name}" "${new_owner_dns}" "${new_owner_port}" "${new_owner_protocol}"
 
   echo "⭐ Sending the Ownership Voucher to the New Owner"
   send_ov_to_owner "${new_owner_url}" "${new_owner_ov}"
@@ -83,8 +97,7 @@ run_test() {
   run_fido_device_onboard --debug
 
   echo "⭐ Success! ✅"
-  trap cleanup EXIT
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || run_test
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }

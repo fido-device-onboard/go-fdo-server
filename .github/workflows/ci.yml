@@ -79,11 +79,11 @@ jobs:
           source test/ci/test-onboarding.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after a failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/ci/test-onboarding.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -108,11 +108,11 @@ jobs:
           source test/ci/test-ov-verification.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after a failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/ci/test-ov-verification.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -137,11 +137,11 @@ jobs:
           source test/ci/test-resale.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/ci/test-resale.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -167,10 +167,10 @@ jobs:
           run_test
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure()
+        if: always()
         run: |
           source test/ci/test-fsim-wget.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -196,10 +196,10 @@ jobs:
           run_test
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure()
+        if: always()
         run: |
           source test/ci/test-fsim-upload.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -225,10 +225,10 @@ jobs:
           run_test
 
       - name: Get Manufacturer, Rendezvous and Owner server logs after a failed onboarding
-        if: failure()
+        if: always()
         run: |
           source test/ci/test-fsim-download.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
@@ -253,11 +253,11 @@ jobs:
           source test/ci/test-onboarding-config.sh
           run_test
 
-      - name: Get manufacturer, rendezvous and owner server logs after a failure
-        if: failure()
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
         run: |
           source test/ci/test-onboarding-config.sh
-          get_server_logs
+          get_logs
 
       - name: Cleanup the environment
         if: always()
