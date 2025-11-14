@@ -10,7 +10,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../sc
 base_dir="${PWD}/test/workdir"
 bin_dir="${base_dir}/bin"
 pid_dir="${base_dir}/run"
-logs_dir="${base_dir}/logs"
+logs_dir="$(mktemp -d)/logs"
 certs_dir="${base_dir}/certs"
 credentials_dir="${base_dir}/device-credentials"
 device_credentials="${credentials_dir}/creds.bin"
