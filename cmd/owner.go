@@ -385,7 +385,7 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 				defer func() { _ = f.Close() }()
 
 				if !yield("fdo.download", &fsim.DownloadContents[*os.File]{
-					Name:         name,
+					Name:         filepath.Base(name),
 					Contents:     f,
 					MustDownload: true,
 				}) {

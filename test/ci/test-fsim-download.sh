@@ -9,9 +9,9 @@ fsim_download_dir="${base_dir}/fsim/download"
 owner_download_dir="${fsim_download_dir}/owner"
 device_download_dir="${fsim_download_dir}/device"
 
-# downloads using relative subdir paths doesn't work
-#download_files=("relative1" "subdir1/relative2" "subdir1/subdir2/relative3" "${owner_download_dir}/absolute")
-download_files=("file1" "${owner_download_dir}/file2" "${owner_download_dir}/subdir1/file3")
+# Test both relative and absolute paths with the fix
+download_files=("file1" "subdir1/relative2" "${owner_download_dir}/file3")
+# Original failing test: download_files=("relative1" "subdir1/relative2" "subdir1/subdir2/relative3" "${owner_download_dir}/absolute")
 
 # Overwrite the owner service start function to configure download FSIM
 start_service_owner() {
