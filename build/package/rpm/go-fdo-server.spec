@@ -53,9 +53,9 @@ install -m 0755 -vd %{buildroot}%{_bindir}
 install -m 0755 -vp -s %{gobuilddir}/bin/* %{buildroot}%{_bindir}
 # Configuration
 install -m 0755 -vd %{buildroot}%{_sysconfdir}/%{name}
-install -m 0644 -vp -D configs/manufacturing-server.yml %{buildroot}%{_sysconfdir}/%{name}
-install -m 0644 -vp -D configs/owner-server.yml %{buildroot}%{_sysconfdir}/%{name}
-install -m 0644 -vp -D configs/rendezvous-server.yml %{buildroot}%{_sysconfdir}/%{name}
+install -m 0644 -vp -D configs/manufacturing.yaml %{buildroot}%{_sysconfdir}/%{name}
+install -m 0644 -vp -D configs/owner.yaml %{buildroot}%{_sysconfdir}/%{name}
+install -m 0644 -vp -D configs/rendezvous.yaml %{buildroot}%{_sysconfdir}/%{name}
 # Certificates
 install -m 0755 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
 # Sysusers
@@ -122,7 +122,7 @@ preparing devices for the on-boarding process during the manufacturing phase.
 # Sysuser
 %{_sysusersdir}/go-fdo-server-manufacturer.conf
 # Default config
-%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/manufacturing-server.yml
+%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/manufacturing.yaml
 
 %pre manufacturer
 %sysusers_create_compat %{SOURCE4}
@@ -153,7 +153,7 @@ voucher.
 # Sysuser
 %{_sysusersdir}/go-fdo-server-rendezvous.conf
 # Default config
-%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/rendezvous-server.yml
+%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/rendezvous.yaml
 
 %pre rendezvous
 %sysusers_create_compat %{SOURCE5}
@@ -184,7 +184,7 @@ necessary credentials and configuration for operation.
 # Sysuser
 %{_sysusersdir}/go-fdo-server-owner.conf
 # Default config
-%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/owner-server.yml
+%config(noreplace) %attr(644, root, go-fdo-server) %{_sysconfdir}/%{name}/owner.yaml
 
 %pre owner
 %sysusers_create_compat %{SOURCE6}

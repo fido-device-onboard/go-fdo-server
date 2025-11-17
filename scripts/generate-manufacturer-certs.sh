@@ -4,8 +4,8 @@ source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/cert
 
 cert_dir="/etc/pki/go-fdo-server"
 subj="/C=US/O=FDO/CN=Manufacturer"
-key="${cert_dir}/manufacturer.key"
-crt="${cert_dir}/manufacturer.crt"
+key="${cert_dir}/manufacturer-example.key"
+crt="${cert_dir}/manufacturer-example.crt"
 
 generate_cert "${key}" "${crt}" "${subj}"
 chmod g+r "${key}"

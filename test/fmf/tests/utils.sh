@@ -11,33 +11,33 @@ rpm_systemd_drop_in_dir="/run/systemd/system"
 rpm_group="go-fdo-server"
 
 rpm_device_ca_user="go-fdo-server-manufacturer"
-rpm_device_ca_crt="${rpm_certs_base_dir}/device-ca.crt"
-rpm_device_ca_key="${rpm_certs_base_dir}/device-ca.key"
+rpm_device_ca_crt="${rpm_certs_base_dir}/device-ca-example.crt"
+rpm_device_ca_key="${rpm_certs_base_dir}/device-ca-example.key"
 
 rpm_manufacturer_user="go-fdo-server-manufacturer"
 rpm_manufacturer_db_type="sqlite"
 rpm_manufacturer_database_dir="/var/lib/go-fdo-server-manufacturer"
 rpm_manufacturer_db_dsn="file:${rpm_manufacturer_database_dir}/db.sqlite"
-rpm_manufacturer_key="${rpm_certs_base_dir}/manufacturer.key"
-rpm_manufacturer_crt="${rpm_certs_base_dir}/manufacturer.crt"
-rpm_manufacturer_https_key="${rpm_certs_base_dir}/manufacturer-https.key"
-rpm_manufacturer_https_crt="${rpm_certs_base_dir}/manufacturer-https.crt"
+rpm_manufacturer_key="${rpm_certs_base_dir}/manufacturer-example.key"
+rpm_manufacturer_crt="${rpm_certs_base_dir}/manufacturer-example.crt"
+rpm_manufacturer_https_key="${rpm_certs_base_dir}/manufacturer-https-example.key"
+rpm_manufacturer_https_crt="${rpm_certs_base_dir}/manufacturer-https-example.crt"
 
 rpm_rendezvous_user="go-fdo-server-rendezvous"
 rpm_rendezvous_db_type="sqlite"
 rpm_rendezvous_database_dir="/var/lib/go-fdo-server-rendezvous"
 rpm_rendezvous_db_dsn="file:${rpm_rendezvous_database_dir}/db.sqlite"
-rpm_rendezvous_https_key="${rpm_certs_base_dir}/rendezvous-https.key"
-rpm_rendezvous_https_crt="${rpm_certs_base_dir}/rendezvous-https.crt"
+rpm_rendezvous_https_key="${rpm_certs_base_dir}/rendezvous-https-example.key"
+rpm_rendezvous_https_crt="${rpm_certs_base_dir}/rendezvous-https-example.crt"
 
 rpm_owner_user="go-fdo-server-owner"
 rpm_owner_db_type="sqlite"
 rpm_owner_database_dir="/var/lib/go-fdo-server-owner"
 rpm_owner_db_dsn="file:${rpm_owner_database_dir}/db.sqlite"
-rpm_owner_key="${rpm_certs_base_dir}/owner.key"
-rpm_owner_crt="${rpm_certs_base_dir}/owner.crt"
-rpm_owner_https_key="${rpm_certs_base_dir}/owner-https.key"
-rpm_owner_https_crt="${rpm_certs_base_dir}/owner-https.crt"
+rpm_owner_key="${rpm_certs_base_dir}/owner-example.key"
+rpm_owner_crt="${rpm_certs_base_dir}/owner-example.crt"
+rpm_owner_https_key="${rpm_certs_base_dir}/owner-https-example.key"
+rpm_owner_https_crt="${rpm_certs_base_dir}/owner-https-example.crt"
 
 configure_service_manufacturer() {
   sudo bash -c "
@@ -222,6 +222,20 @@ get_service_logs() {
   ! declare -F "${get_service_logs_func}" >/dev/null || ${get_service_logs_func}
 }
 
+cleanup_drop_ins() {
+  local reload_systemd=0
+  for service in rendezvous manufacturer owner; do
+    local drop_in_dir="${rpm_systemd_drop_in_dir:?}/go-fdo-server-${service}.service.d"
+    if [[ -d "${drop_in_dir}" ]]; then
+      reload_systemd=1
+      sudo rm -vrf "${drop_in_dir}"
+    fi
+  done
+  if [[ ${reload_systemd} -eq 1 ]]; then
+    sudo systemctl daemon-reload
+  fi
+}
+
 remove_files() {
   echo "⭐ Removing files from '${base_dir:?}'"
   sudo rm -vrf "${base_dir:?}"/*
@@ -235,6 +249,8 @@ remove_files() {
   sudo rm -vf "${rpm_rendezvous_database_dir:?}/"*
   echo "⭐ Removing files from '${rpm_owner_database_dir}'"
   sudo rm -vf "${rpm_owner_database_dir:?}/"*
+  echo "⭐ Removing systemd drop-in files"
+  cleanup_drop_ins
 }
 
 on_failure() {

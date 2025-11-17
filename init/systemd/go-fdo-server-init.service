@@ -1,15 +1,12 @@
 [Unit]
 Description=Create default certificates for the go-fdo-servers
 
-ConditionPathExists=|!/etc/pki/go-fdo-server/manufacturer.key
-ConditionPathExists=|!/etc/pki/go-fdo-server/manufacturer.crt
-ConditionPathExists=|!/etc/pki/go-fdo-server/manufacturer.pub
-ConditionPathExists=|!/etc/pki/go-fdo-server/device-ca.key
-ConditionPathExists=|!/etc/pki/go-fdo-server/device-ca.crt
-ConditionPathExists=|!/etc/pki/go-fdo-server/device-ca.pub
-ConditionPathExists=|!/etc/pki/go-fdo-server/owner.key
-ConditionPathExists=|!/etc/pki/go-fdo-server/owner.crt
-ConditionPathExists=|!/etc/pki/go-fdo-server/owner.pub
+ConditionPathExists=|!/etc/pki/go-fdo-server/manufacturer-example.key
+ConditionPathExists=|!/etc/pki/go-fdo-server/manufacturer-example.crt
+ConditionPathExists=|!/etc/pki/go-fdo-server/device-ca-example.key
+ConditionPathExists=|!/etc/pki/go-fdo-server/device-ca-example.crt
+ConditionPathExists=|!/etc/pki/go-fdo-server/owner-example.key
+ConditionPathExists=|!/etc/pki/go-fdo-server/owner-example.crt
 
 [Service]
 Type=oneshot

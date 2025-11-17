@@ -6,18 +6,18 @@ db:
   dsn: "file:/var/lib/go-fdo-server-manufacturer/db.sqlite"
 http:
   ip: "0.0.0.0"
-  port: 8038
+  port: "8038"
   # To enable HTTPS provide the server certificate and matching
   # private key below. If the certificate is signed by a certificate
   # authority, the certFile should be the concatenation of the
   # server's certificate, any intermediates, and the CA's certificate.
-  ##cert: /etc/pki/go-fdo-server/manufacturer-https.crt
-  ##key: /etc/pki/go-fdo-server/manufacturer-https.key
+  ##cert: /etc/pki/go-fdo-server/manufacturer-https-example.crt
+  ##key: /etc/pki/go-fdo-server/manufacturer-https-example.key
 manufacturing:
-  key: "/etc/pki/go-fdo-server/manufacturer.key"
+  key: "/etc/pki/go-fdo-server/manufacturer-example.key"
 device_ca:
-  cert: "/etc/pki/go-fdo-server/device-ca.crt"
-  key: "/etc/pki/go-fdo-server/device-ca.key"
+  cert: "/etc/pki/go-fdo-server/device-ca-example.crt"
+  key: "/etc/pki/go-fdo-server/device-ca-example.key"
 owner:
-  cert: "/etc/pki/go-fdo-server/owner.crt"
+  cert: "/etc/pki/go-fdo-server/owner-example.crt"
 

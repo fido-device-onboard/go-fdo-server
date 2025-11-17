@@ -6,10 +6,10 @@ db:
   dsn: "file:/var/lib/go-fdo-server-rendezvous/db.sqlite"
 http:
   ip: "0.0.0.0"
-  port: 8041
+  port: "8041"
   # To enable HTTPS provide the server certificate and matching
   # private key below. If the certificate is signed by a certificate
   # authority, the certFile should be the concatenation of the
   # server's certificate, any intermediates, and the CA's certificate.
-  ##cert: /etc/pki/go-fdo-server/rendezvous-https.crt
-  ##key: /etc/pki/go-fdo-server/rendezvous-https.key
+  ##cert: /etc/pki/go-fdo-server/rendezvous-https-example.crt
+  ##key: /etc/pki/go-fdo-server/rendezvous-https-example.key

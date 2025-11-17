@@ -29,9 +29,9 @@ The name of the configuration file is based on the server's role, with the file 
 
 | Role | Filename | Examples |
 |------|----------|----------|
-| Manufacturer | `manufacturing-server.<suffix>` | `manufacturing-server.yml`, `manufacturing-server.toml` |
-| Owner | `owner-server.<suffix>` | `owner-server.yml`, `owner-server.toml` |
-| Rendezvous | `rendezvous-server.<suffix>` | `rendezvous-server.yml`, `rendezvous-server.toml` |
+| Manufacturer | `manufacturing.<suffix>` | `manufacturing.yaml`, `manufacturing.toml` |
+| Owner | `owner.<suffix>` | `owner.yaml`, `owner.toml` |
+| Rendezvous | `rendezvous.<suffix>` | `rendezvous.yaml`, `rendezvous.toml` |
 
 
 ## Configuration Structure
