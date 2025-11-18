@@ -52,7 +52,7 @@ run_test() {
   # Add the wget_httpd service defined above
   services+=("${wget_httpd_service_name}")
 
-  echo "⭐ Setting the trap handler in case of error"
+  echo "⭐ Setting the error trap handler"
   trap on_failure ERR
 
   echo "⭐ Environment variables"
@@ -144,11 +144,11 @@ run_test() {
   echo "⭐ Verify downloaded file ${wget_device2_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device2_download_file}"
 
-  echo "⭐ Unsetting the trap handler in case of error"
+  echo "⭐ Unsetting the error trap handler"
   trap - ERR
 
   echo "✅ Test PASS!"
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }

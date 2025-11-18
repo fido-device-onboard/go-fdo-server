@@ -25,7 +25,7 @@ get_real_ip() {
 
 set_hostnames() {
   echo "⭐ Adding hostnames to '/etc/hosts'"
-  for service_name in $(docker compose -f ${servers_compose_file} ps -a --format "{{.Name}}" | grep -v db); do
+  for service_name in $(docker compose -f ${servers_compose_file} config --services | grep -v db); do
     service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
     set_hostname "$service_dns" "127.0.0.1"
@@ -34,7 +34,7 @@ set_hostnames() {
 
 unset_hostnames() {
   echo "⭐ Removing hostnames from '/etc/hosts'"
-  for service_name in $(docker compose -f ${servers_compose_file} ps -a --format "{{.Name}}" | grep -v db); do
+  for service_name in $(docker compose -f ${servers_compose_file} config --services "{{.Name}}" | grep -v db); do
     service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
     unset_hostname "$service_dns" "127.0.0.1"
@@ -89,14 +89,34 @@ stop_services() {
 
 get_service_logs() {
   local service=$1
-  local log_file="${logs_dir}/${service}.log"
   echo "🛑 ❓ '${service}' logs:"
-  docker compose --file "${servers_compose_file}" logs --no-log-prefix "${service}" | tee "${log_file}"
+  docker compose --file "${servers_compose_file}" logs --no-log-prefix "${service}"
 }
 
 get_logs() {
   echo "⭐ Retrieving logs"
-  for service in $(docker compose --file ${servers_compose_file} ps -a --format "{{.Name}}"); do
+  for service in $(docker compose --file ${servers_compose_file} config --services); do
     get_service_logs ${service}
   done
+}
+
+save_service_logs() {
+  local service=$1
+  local log_file="${logs_dir}/${service}.log"
+  echo "  ⚙ Saving '${service}' logs"
+  get_service_logs "${service}" > "${log_file}"
+}
+
+save_logs() {
+  echo "⭐ Saving logs"
+  for service in $(docker compose --file ${servers_compose_file} config --services); do
+    save_service_logs ${service}
+  done
+}
+
+on_failure() {
+  trap - ERR
+  save_logs
+  stop_services
+  echo "❌ Test FAILED!"
 }

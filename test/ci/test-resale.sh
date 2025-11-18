@@ -48,7 +48,7 @@ run_test() {
   # Add the new owner service defined above
   services+=("${new_owner_service_name}")
 
-  echo "⭐ Setting the trap handler in case of error"
+  echo "⭐ Setting the error trap handler"
   trap on_failure ERR
 
   echo "⭐ Environment variables"
@@ -102,11 +102,11 @@ run_test() {
   echo "⭐ Running FIDO Device Onboard"
   run_fido_device_onboard --debug
 
-  echo "⭐ Unsetting the trap handler in case of error"
+  echo "⭐ Unsetting the error trap handler"
   trap - ERR
 
   echo "✅ Test PASS!"
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }

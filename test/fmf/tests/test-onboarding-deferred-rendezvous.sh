@@ -6,7 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd )/utils.
 
 run_test() {
 
-  echo "⭐ Setting the trap handler in case of error"
+  echo "⭐ Setting the error trap handler"
   trap on_failure ERR
 
   echo "⭐ Environment variables"
@@ -96,13 +96,11 @@ run_test() {
     exit 1
   fi
 
-  echo "⭐ Unsetting the trap handler in case of error"
+  echo "⭐ Unsetting the error trap handler"
   trap - ERR
 
   echo "✅ Test PASS!"
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
-
-
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }

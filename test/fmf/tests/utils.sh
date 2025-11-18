@@ -209,19 +209,20 @@ get_go_fdo_server_logs() {
   journalctl_args=("--no-pager" "--unit" "go-fdo-server-${role}")
   . /etc/os-release
   [[ "${ID}" = "centos" && "${VERSION_ID}" = "9" ]] || journalctl_args+=("--invocation=0")
+  systemctl status "go-fdo-server-${role}.service" || true
   journalctl "${journalctl_args[@]}"
 }
 
 get_service_logs_manufacturer() {
-  get_go_fdo_server_logs manufacturer | tee "${manufacturer_log}"
+  get_go_fdo_server_logs manufacturer
 }
 
 get_service_logs_rendezvous() {
-  get_go_fdo_server_logs rendezvous | tee "${rendezvous_log}"
+  get_go_fdo_server_logs rendezvous
 }
 
 get_service_logs_owner() {
-  get_go_fdo_server_logs owner | tee "${owner_log}"
+  get_go_fdo_server_logs owner
 }
 
 get_service_logs() {
@@ -231,24 +232,70 @@ get_service_logs() {
   ! declare -F "${get_service_logs_func}" >/dev/null || ${get_service_logs_func}
 }
 
+save_go_fdo_server_logs() {
+  local role=$1
+  local log_file=$2
+  get_go_fdo_server_logs "${role}" > "${log_file}"
+}
+
+save_service_logs_manufacturer() {
+  save_go_fdo_server_logs manufacturer "${manufacturer_log}"
+}
+
+save_service_logs_rendezvous() {
+  save_go_fdo_server_logs rendezvous "${rendezvous_log}"
+}
+
+save_service_logs_owner() {
+  save_go_fdo_server_logs owner "${owner_log}"
+}
+
+save_service_logs() {
+  local service=$1
+  echo "  ⚙ Saving '${service}' logs"
+  local save_service_logs_func="save_service_logs_${service}"
+  ! declare -F "${save_service_logs_func}" >/dev/null || ${save_service_logs_func}
+}
+
+save_logs() {
+  echo "⭐ Saving logs"
+  for service in "${services[@]}"; do
+    save_service_logs ${service}
+  done
+  if [ -v "PACKIT_COPR_RPMS" ]; then
+    echo "⭐ Submitting files to TMT '${base_dir:?}'"
+    find "${base_dir:?}" -type f -exec tmt-file-submit -l {} \;
+  fi
+}
+
 remove_files() {
   echo "⭐ Removing files from '${base_dir:?}'"
   sudo rm -vrf "${base_dir:?}"/*
   echo "⭐ Removing files from '${rpm_sysconfig_dir}'"
-  sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"*
+  sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"/*
   echo "⭐ Removing files from '${rpm_config_base_dir}'"
   sudo rm -vf "${rpm_config_base_dir:?}"/*
   echo "⭐ Removing files from '${rpm_manufacturer_database_dir}'"
-  sudo rm -vf "${rpm_manufacturer_database_dir:?}/"*
+  sudo rm -vf "${rpm_manufacturer_database_dir:?}"/*
   echo "⭐ Removing files from '${rpm_rendezvous_database_dir}'"
-  sudo rm -vf "${rpm_rendezvous_database_dir:?}/"*
+  sudo rm -vf "${rpm_rendezvous_database_dir:?}"/*
   echo "⭐ Removing files from '${rpm_owner_database_dir}'"
-  sudo rm -vf "${rpm_owner_database_dir:?}/"*
+  sudo rm -vf "${rpm_owner_database_dir:?}"/*
 }
 
 on_failure() {
   trap - ERR
+  save_logs
   stop_services
-  get_logs
   echo "❌ Test FAILED!"
+}
+
+cleanup() {
+  save_logs
+  stop_services
+  unset_hostnames
+  uninstall_server
+  uninstall_client
+  remove_files
+  echo "⭐ Done!"
 }

@@ -17,5 +17,5 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
 

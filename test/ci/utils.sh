@@ -309,7 +309,7 @@ start_service() {
   echo -n "  ⚙ Starting service ${service} "
   local start_service="start_service_${service}"
   ! declare -F "${start_service}" >/dev/null || ${start_service}
-  echo " ✔"
+  echo "✔"
 }
 
 start_services() {
@@ -329,7 +329,7 @@ stop_service() {
       wait "$(cat ${!service_pid_file})" 2>/dev/null || :
     fi
   fi
-  echo " ✔"
+  echo "✔"
 }
 
 stop_services() {
@@ -487,11 +487,10 @@ on_failure() {
 
 remove_files() {
   echo "⭐ Removing files from '${base_dir:?}'"
-  rm -rf "${base_dir:?}"/*
+  rm -vrf "${base_dir:?}"/*
 }
 
 cleanup() {
-  echo "⭐ Cleaning ..."
   stop_services
   unset_hostnames
   uninstall_server

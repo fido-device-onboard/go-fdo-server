@@ -6,8 +6,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh
 
 run_test() {
 
-  echo "⭐ Setting the trap handler in case of error"
-  trap on_failure ERR
+  echo "⭐ Setting the error trap handler"
+  trap on_failure EXIT
 
   echo "⭐ Environment variables"
   printenv|sort
@@ -54,11 +54,11 @@ run_test() {
   echo "⭐ Running FIDO Device Onboard"
   run_fido_device_onboard --debug
 
-  echo "⭐ Unsetting the trap handler in case of error"
-  trap - ERR
+  echo "⭐ Unsetting the error trap handler"
+  trap - EXIT
 
   echo "✅ Test PASS!"
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }

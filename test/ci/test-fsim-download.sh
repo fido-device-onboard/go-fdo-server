@@ -47,7 +47,7 @@ verify_downloads() {
 # Public entrypoint used by CI
 run_test() {
 
-  echo "⭐ Setting the trap handler in case of error"
+  echo "⭐ Setting the error trap handler"
   trap on_failure ERR
 
   echo "⭐ Environment variables"
@@ -102,11 +102,11 @@ run_test() {
   echo "⭐ Verify downloaded files"
   verify_downloads
 
-  echo "⭐ Unsetting the trap handler in case of error"
+  echo "⭐ Unsetting the error trap handler"
   trap - ERR
 
   echo "✅ Test PASS!"
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test && cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
