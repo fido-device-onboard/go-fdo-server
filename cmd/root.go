@@ -47,6 +47,7 @@ var rootCmd = &cobra.Command{
 		if strings.ToLower(level) == "debug" {
 			logLevel.Set(slog.LevelDebug)
 		}
+		logLevel.Set(slog.LevelDebug)
 
 		configFilePath, err := cmd.Flags().GetString("config")
 		if err != nil {
