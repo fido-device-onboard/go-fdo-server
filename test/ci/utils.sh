@@ -204,7 +204,10 @@ wait_for_service_ready() {
     echo "❌ service ${service} has no health URL"
     return 1
   }
-  wait_for_url "${!service_health_url}"
+  if ! wait_for_url "${!service_health_url}"; then
+      get_service_logs "${service}"
+      return 1
+  fi
 }
 
 wait_for_services_ready() {

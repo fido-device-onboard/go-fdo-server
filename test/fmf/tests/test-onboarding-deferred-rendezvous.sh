@@ -6,6 +6,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd )/utils.
 
 run_test() {
 
+  set -x
+
   echo "⭐ Setting the trap handler in case of error"
   trap on_failure ERR
 
@@ -37,6 +39,9 @@ run_test() {
   echo "⭐ Wait for manufacturer and owner to be ready"
   wait_for_service_ready manufacturer
   wait_for_service_ready owner
+
+  get_service_logs_manufacturer && cat "${manufacturer_log}"
+  get_service_logs_owner && cat "${owner_log}"
 
   echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo) on manufacturer"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
@@ -72,6 +77,7 @@ run_test() {
   echo "⭐ Now starting rendezvous"
   start_service_rendezvous
   wait_for_service_ready rendezvous
+  get_service_logs_rendezvous && cat "${rendezvous_log}"
 
   echo "⭐ Sleeping 70 seconds to allow TO0 to complete"
   sleep 70
@@ -100,6 +106,7 @@ run_test() {
   trap - ERR
 
   echo "✅ Test PASS!"
+  set +x
 }
 
 # Allow running directly

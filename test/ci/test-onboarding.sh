@@ -6,6 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh
 
 run_test() {
 
+  set -x
   echo "⭐ Setting the trap handler in case of error"
   trap on_failure ERR
 
@@ -58,6 +59,7 @@ run_test() {
   trap - ERR
 
   echo "✅ Test PASS!"
+  set +x
 }
 
 # Allow running directly
