@@ -175,9 +175,17 @@ func (s *OwnerServer) Start() error {
 			MinVersion:   tls.VersionTLS12,
 			CipherSuites: preferredCipherSuites,
 		}
-		return srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
+		err := srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
+		if err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	}
-	return srv.Serve(lis)
+	err = srv.Serve(lis)
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 type OwnerServerState struct {
