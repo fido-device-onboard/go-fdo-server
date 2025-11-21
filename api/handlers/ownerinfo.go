@@ -28,16 +28,16 @@ func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
+func getOwnerInfo(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Fetching ownerInfo")
 	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("No ownerInfo found")
-			http.Error(w, "No ownerInfo found", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "No ownerInfo found", "Owner redirect information has not been configured", "No ownerInfo found")
 		} else {
 			slog.Error("Error fetching ownerInfo", "error", err)
-			http.Error(w, "Error fetching ownerInfo", http.StatusInternalServerError)
+			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching ownerInfo", err.Error(), "Error fetching ownerInfo")
 		}
 		return
 	}
