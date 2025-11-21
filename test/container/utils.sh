@@ -24,7 +24,6 @@ get_real_ip() {
 }
 
 set_hostnames() {
-  echo "⭐ Adding hostnames to '/etc/hosts'"
   for service_name in $(docker compose -f ${servers_compose_file} config --services | grep -v db); do
     service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
@@ -33,7 +32,7 @@ set_hostnames() {
 }
 
 unset_hostnames() {
-  echo "⭐ Removing hostnames from '/etc/hosts'"
+  log_info "Removing hostnames from '/etc/hosts'"
   for service_name in $(docker compose -f ${servers_compose_file} config --services "{{.Name}}" | grep -v db); do
     service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
@@ -57,7 +56,7 @@ run_go_fdo_client() {
     # Replace base_dir with container_working_dir in paths
     args+=("${arg//$base_dir/$container_working_dir}")
   done
-  docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}"
+  docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}" | tee -a "${logs_dir}/client.log"
 }
 
 install_server() {
@@ -74,7 +73,11 @@ start_service() {
 }
 
 start_services() {
+  log_info "Starting services"
   docker compose --file "${servers_compose_file}" up -d
+  # We need to add the hosts IPs after starting the services
+  # so the resolution within the containers is not affected
+  log_info "Adding hostnames to '/etc/hosts'"
   set_hostnames
 }
 
@@ -89,13 +92,13 @@ stop_services() {
 
 get_service_logs() {
   local service=$1
-  echo "🛑 ❓ '${service}' logs:"
   docker compose --file "${servers_compose_file}" logs --no-log-prefix "${service}"
 }
 
 get_logs() {
-  echo "⭐ Retrieving logs"
+  log_info "Retrieving logs"
   for service in $(docker compose --file ${servers_compose_file} config --services); do
+    log "🛑 '${service}' logs:\n"
     get_service_logs ${service}
   done
 }
@@ -103,14 +106,15 @@ get_logs() {
 save_service_logs() {
   local service=$1
   local log_file="${logs_dir}/${service}.log"
-  echo "  ⚙ Saving '${service}' logs"
   get_service_logs "${service}" > "${log_file}"
 }
 
 save_logs() {
-  echo "⭐ Saving logs"
+  log_info "Saving logs"
   for service in $(docker compose --file ${servers_compose_file} config --services); do
+    log "\t⚙ Saving '${service}' logs "
     save_service_logs ${service}
+    log_success
   done
 }
 
@@ -118,5 +122,5 @@ on_failure() {
   trap - ERR
   save_logs
   stop_services
-  echo "❌ Test FAILED!"
+  test_fail
 }

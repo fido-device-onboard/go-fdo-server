@@ -4,7 +4,7 @@ services:
   manufacturer:
     container_name: manufacturer
     hostname: manufacturer
-    image: manufacturer
+    image: go-fdo-server
     build: ../../..
     environment:
       TZ: Europe/Madrid
@@ -37,8 +37,7 @@ services:
   rendezvous:
     container_name: rendezvous
     hostname: rendezvous
-    image: rendezvous
-    build: ../../..
+    image: go-fdo-server
     environment:
       TZ: Europe/Madrid
     user: ${container_user}
@@ -66,8 +65,7 @@ services:
   owner:
     container_name: owner
     hostname: owner
-    image: owner
-    build: ../../..
+    image: go-fdo-server
     environment:
       TZ: Europe/Madrid
     user: ${container_user}

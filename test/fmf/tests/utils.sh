@@ -136,8 +136,7 @@ configure_service_owner() {
 install_from_copr() {
   rpm -q --whatprovides 'dnf-command(copr)' &> /dev/null || sudo dnf install -y 'dnf-command(copr)'
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
-  sudo dnf install -y "${@}"
-  dnf copr remove -y @fedora-iot/fedora-iot
+  sudo dnf --disablerepo=* --enablerepo=copr:copr.fedorainfracloud.org:group_fedora-iot:fedora-iot install -y "${@}"
 }
 
 install_client() {
@@ -147,7 +146,10 @@ install_client() {
 }
 
 uninstall_client() {
-  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-client
+  [ -v "PACKIT_COPR_RPMS" ] || {
+    sudo dnf remove -y go-fdo-client;
+    sudo dnf copr remove -y @fedora-iot/fedora-iot;
+  }
 }
 
 install_server() {
@@ -186,10 +188,8 @@ start_service_owner() {
 # We do not use pid files but functions to stop the services via systemctl
 stop_service() {
   local service=$1
-  echo -n "  ⚙ Stopping service ${service} "
   local stop_service="stop_service_${service}"
   ! declare -F "${stop_service}" >/dev/null || ${stop_service}
-  echo " ✔"
 }
 
 stop_service_manufacturer() {
@@ -206,7 +206,7 @@ stop_service_owner() {
 
 get_go_fdo_server_logs() {
   local role=$1
-  journalctl_args=("--no-pager" "--unit" "go-fdo-server-${role}")
+  journalctl_args=("--no-pager" "--output=cat" "--unit" "go-fdo-server-${role}")
   . /etc/os-release
   [[ "${ID}" = "centos" && "${VERSION_ID}" = "9" ]] || journalctl_args+=("--invocation=0")
   systemctl status "go-fdo-server-${role}.service" || true
@@ -227,7 +227,7 @@ get_service_logs_owner() {
 
 get_service_logs() {
   local service=$1
-  echo "🛑 ❓ '${service}' logs:"
+  log "🛑 '${service}' logs:\n"
   local get_service_logs_func="get_service_logs_${service}"
   ! declare -F "${get_service_logs_func}" >/dev/null || ${get_service_logs_func}
 }
@@ -252,34 +252,35 @@ save_service_logs_owner() {
 
 save_service_logs() {
   local service=$1
-  echo "  ⚙ Saving '${service}' logs"
+  log "\t⚙ Saving '${service}' logs "
   local save_service_logs_func="save_service_logs_${service}"
   ! declare -F "${save_service_logs_func}" >/dev/null || ${save_service_logs_func}
+  log_success
 }
 
 save_logs() {
-  echo "⭐ Saving logs"
+  log_info "Saving logs"
   for service in "${services[@]}"; do
     save_service_logs ${service}
   done
   if [ -v "PACKIT_COPR_RPMS" ]; then
-    echo "⭐ Submitting files to TMT '${base_dir:?}'"
+    log_info "Submitting files to TMT '${base_dir:?}'"
     find "${base_dir:?}" -type f -exec tmt-file-submit -l {} \;
   fi
 }
 
 remove_files() {
-  echo "⭐ Removing files from '${base_dir:?}'"
+  log_info "Removing files from '${base_dir:?}'"
   sudo rm -vrf "${base_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_sysconfig_dir}'"
+  log_info "Removing files from '${rpm_sysconfig_dir}'"
   sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"/*
-  echo "⭐ Removing files from '${rpm_config_base_dir}'"
+  log_info "Removing files from '${rpm_config_base_dir}'"
   sudo rm -vf "${rpm_config_base_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_manufacturer_database_dir}'"
+  log_info "Removing files from '${rpm_manufacturer_database_dir}'"
   sudo rm -vf "${rpm_manufacturer_database_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_rendezvous_database_dir}'"
+  log_info "Removing files from '${rpm_rendezvous_database_dir}'"
   sudo rm -vf "${rpm_rendezvous_database_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_owner_database_dir}'"
+  log_info "Removing files from '${rpm_owner_database_dir}'"
   sudo rm -vf "${rpm_owner_database_dir:?}"/*
 }
 
@@ -287,15 +288,14 @@ on_failure() {
   trap - ERR
   save_logs
   stop_services
-  echo "❌ Test FAILED!"
+  test_fail
 }
 
 cleanup() {
-  save_logs
+  [ ! -v "PACKIT_COPR_RPMS" ] || save_logs
   stop_services
   unset_hostnames
   uninstall_server
   uninstall_client
   remove_files
-  echo "⭐ Done!"
 }

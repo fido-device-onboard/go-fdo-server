@@ -74,18 +74,36 @@ jobs:
 
   # Fedora jobs
 
+  # We build and test Fedora 43 ('latest-stable'), Fedora 44 ('latest' when branched) and Fedora Rawhide
+  # because they are the only ones officially released with golang >= 1.25.0
   - &copr_fedora
     job: copr_build
     packages: [go-fdo-server-fedora]
     trigger: pull_request
-    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+    targets: &copr_fedora_targets
+      - "fedora-latest-stable-x86_64"
+      - "fedora-latest-stable-aarch64"
+      - "fedora-latest-x86_64"
+      - "fedora-latest-aarch64"
+      - "fedora-rawhide-x86_64"
+      - "fedora-rawhide-aarch64"
 
+    # Build all versions in '@fedora-iot/copr' copr because it's possible to add golang >= 1.25.0
+    # see: https://copr.fedorainfracloud.org/coprs/g/fedora-iot/fedora-iot/edit_chroot/fedora-42-x86_64/
   - <<: *copr_fedora
     trigger: commit
     branch: main
     owner: "@fedora-iot"
     project: fedora-iot
+    targets:
+     - "fedora-stable-x86_64"
+     - "fedora-stable-aarch64"
+     - "fedora-development-x86_64"
+     - "fedora-development-aarch64"
+     - "fedora-eln-x86_64"
+     - "fedora-eln-aarch64"
 
+  # Only Fedora >= 43 have golang >= 1.25.0
   - job: propose_downstream
     trigger: release
     packages: [go-fdo-server-fedora]
@@ -97,21 +115,25 @@ jobs:
   - job: koji_build
     trigger: commit
     allowed_pr_authors: [all_committers]
-    dist_git_branches: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+    dist_git_branches: &fedora_dist_git_branches
+      - "fedora-latest-stable"
+      - "fedora-latest"
+      - "fedora-rawhide"
 
   - job: bodhi_update
     trigger: commit
     allowed_builders: [all_committers]
-    dist_git_branches: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+    dist_git_branches: *fedora_dist_git_branches
 
   # Fedora E2E Testing jobs
-
+  # We build and test Fedora 43 ('latest-stable'), Fedora 44 ('latest' when branched) and Fedora Rawhide
+  # because they are the only ones officially released with golang >= 1.25.0
   - job: tests
     trigger: pull_request
     identifier: e2e-fedora
     tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-fedora]
-    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+    targets: *copr_fedora_targets
 
   # CentOS jobs
 
@@ -119,13 +141,27 @@ jobs:
     job: copr_build
     packages: [go-fdo-server-centos]
     trigger: pull_request
-    targets: ["centos-stream-9", "centos-stream-10"]
+    targets: &copr_centos_targets
+      - "centos-stream-9-x86_64"
+      - "centos-stream-9-aarch64"
+      - "centos-stream-10-x86_64"
+      - "centos-stream-10-aarch64"
 
+  # Build also for epel-9 and epel-10 in '@fedora-iot/fedora-iot' copr
   - <<: *copr_centos
     trigger: commit
     branch: main
     owner: "@fedora-iot"
     project: fedora-iot
+    targets:
+      - "centos-stream-9-x86_64"
+      - "centos-stream-9-aarch64"
+      - "centos-stream-10-x86_64"
+      - "centos-stream-10-aarch64"
+      - "epel-9-x86"
+      - "epel-9-aarch64"
+      - "epel-10-x86"
+      - "epel-10-aarch64"
 
   # CentOS E2E Testing jobs
   #
@@ -134,4 +170,4 @@ jobs:
     identifier: e2e-centos
     tmt_plan: test/fmf/plans/e2e
     packages: [go-fdo-server-centos]
-    targets: ["centos-stream-9", "centos-stream-10"]
+    targets: *copr_centos_targets

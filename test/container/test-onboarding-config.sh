@@ -14,7 +14,7 @@ directories+=("${configs_dir}")
 # files to be based on container_working_dir
 configure_services() {
   generate_https_certs
-  echo "⭐ Configuring services"
+  log_info "Configuring services"
   for service in "${services[@]}"; do
     configure_service "${service}"
     local conf_file="${service}_config_file"
