@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -13,98 +12,98 @@ import (
 	"gorm.io/gorm"
 )
 
+// TEMPORARY: Backward compatibility wrapper for manufacturing server
+// TODO: Remove once manufacturing server is refactored to use OpenAPI interface
 func RvInfoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
+		s := &Server{} // Empty server for compatibility
 		switch r.Method {
 		case http.MethodGet:
-			getRvInfo(w, r)
+			s.GetOwnerRedirect(w, r)
 		case http.MethodPost:
-			createRvInfo(w, r)
+			s.PostOwnerRedirect(w, r)
 		case http.MethodPut:
-			updateRvInfo(w, r)
+			s.PutOwnerRedirect(w, r)
 		default:
 			slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			WriteErrorResponse(w, r, http.StatusMethodNotAllowed, "Method not allowed", "HTTP method "+r.Method+" is not supported for this endpoint", "Method not allowed")
 		}
 	}
 }
 
-func getRvInfo(w http.ResponseWriter, _ *http.Request) {
+// GetOwnerRedirect implements the rvInfo GET endpoint (OpenAPI interface method)
+func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Fetching rvInfo")
 	rvInfoJSON, err := db.FetchRvInfoJSON()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("No rvInfo found")
-			http.Error(w, "No rvInfo found", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "No rvInfo found", "rvInfo has not been configured", "No rvInfo found")
 		} else {
 			slog.Error("Error fetching rvInfo", "error", err)
-			http.Error(w, "Error fetching rvInfo", http.StatusInternalServerError)
+			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching rvInfo", err.Error(), "Error fetching rvInfo")
 		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(rvInfoJSON)
 }
 
-func createRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+// PostOwnerRedirect implements the rvInfo POST endpoint (OpenAPI interface method)
+func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	rvInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.InsertRvInfo(rvInfo); err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			slog.Error("rvInfo already exists (constraint)", "error", err)
-			http.Error(w, "rvInfo already exists", http.StatusConflict)
+		if HandleDBError(w, r, "rvInfo", err) {
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
 			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
 		slog.Error("Error inserting rvInfo", "error", err)
-		http.Error(w, "Error inserting rvInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting rvInfo", err.Error(), "Error inserting rvInfo")
 		return
 	}
 
 	slog.Debug("rvInfo created")
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(rvInfo)
 }
 
-func updateRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+// PutOwnerRedirect implements the rvInfo PUT endpoint (OpenAPI interface method)
+func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	rvInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.UpdateRvInfo(rvInfo); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("rvInfo does not exist, cannot update")
-			http.Error(w, "rvInfo does not exist", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "rvInfo does not exist", "No rvInfo found to update", "rvInfo does not exist")
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
 			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
 		slog.Error("Error updating rvInfo", "error", err)
-		http.Error(w, "Error updating rvInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating rvInfo", err.Error(), "Error updating rvInfo")
 		return
 	}
 
 	slog.Debug("rvInfo updated")
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(rvInfo)
 }

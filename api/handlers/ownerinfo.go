@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -24,85 +23,77 @@ func OwnerInfoHandler(w http.ResponseWriter, r *http.Request) {
 		updateOwnerInfo(w, r)
 	default:
 		slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		WriteErrorResponse(w, r, http.StatusMethodNotAllowed, "Method not allowed", "HTTP method "+r.Method+" is not supported for this endpoint", "Method not allowed")
 	}
 }
 
-func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
+func getOwnerInfo(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Fetching ownerInfo")
 	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("No ownerInfo found")
-			http.Error(w, "No ownerInfo found", http.StatusNotFound)
-		} else {
-			slog.Error("Error fetching ownerInfo", "error", err)
-			http.Error(w, "Error fetching ownerInfo", http.StatusInternalServerError)
+		if HandleDBError(w, r, "ownerInfo", err) {
+			return
 		}
+		slog.Error("Error fetching ownerInfo", "error", err)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching ownerInfo", err.Error(), "Error fetching ownerInfo")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(ownerInfoJSON)
 }
 
 func createOwnerInfo(w http.ResponseWriter, r *http.Request) {
-	ownerInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+	ownerInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.InsertOwnerInfo(ownerInfo); err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			slog.Error("ownerInfo already exists (constraint)", "error", err)
-			http.Error(w, "ownerInfo already exists", http.StatusConflict)
+		if HandleDBError(w, r, "ownerInfo", err) {
 			return
 		}
 		if errors.Is(err, db.ErrInvalidOwnerInfo) {
 			slog.Error("Invalid ownerInfo payload", "error", err)
-			http.Error(w, "Invalid ownerInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid ownerInfo", err.Error(), "Invalid ownerInfo")
 			return
 		}
 		slog.Error("Error inserting ownerInfo", "error", err)
-		http.Error(w, "Error inserting ownerInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting ownerInfo", err.Error(), "Error inserting ownerInfo")
 		return
 	}
 
 	slog.Debug("ownerInfo created")
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(ownerInfo)
 }
 
 func updateOwnerInfo(w http.ResponseWriter, r *http.Request) {
-	ownerInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+	ownerInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.UpdateOwnerInfo(ownerInfo); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("ownerInfo does not exist, cannot update")
-			http.Error(w, "ownerInfo does not exist", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "ownerInfo does not exist", "No ownerInfo found to update", "ownerInfo does not exist")
 			return
 		}
 		if errors.Is(err, db.ErrInvalidOwnerInfo) {
 			slog.Error("Invalid ownerInfo payload", "error", err)
-			http.Error(w, "Invalid ownerInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid ownerInfo", err.Error(), "Invalid ownerInfo")
 			return
 		}
 		slog.Error("Error updating ownerInfo", "error", err)
-		http.Error(w, "Error updating ownerInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating ownerInfo", err.Error(), "Error updating ownerInfo")
 		return
 	}
 
 	slog.Debug("ownerInfo updated")
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(ownerInfo)
 }

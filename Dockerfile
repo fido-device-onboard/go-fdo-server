@@ -7,6 +7,7 @@ WORKDIR /go/src/app
 COPY . .
 
 RUN apk add make curl gcc musl-dev
+RUN go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 RUN make build && install -D -m 755 go-fdo-server /go/bin/
 
 # Start a new stage

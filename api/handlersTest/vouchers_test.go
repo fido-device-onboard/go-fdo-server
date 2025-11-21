@@ -10,13 +10,18 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/testdata"
@@ -140,7 +145,7 @@ func TestInsertVoucherHandler(t *testing.T) {
 			ownerKey:           testData.extendedOwnerPublicKey, // Next owner key
 			expectedStatusCode: http.StatusBadRequest,
 			expectedBodyOneOf: []string{
-				"Invalid ownership voucher\n",
+				"verification failed",
 			},
 		},
 		{
@@ -150,7 +155,7 @@ func TestInsertVoucherHandler(t *testing.T) {
 			ownerKey:           testData.ownerPublicKey, // Doesn't matter, fails before key check
 			expectedStatusCode: http.StatusBadRequest,
 			expectedBodyOneOf: []string{
-				"Unable to decode cbor\n",
+				"decode CBOR",
 			},
 		},
 		{
@@ -160,7 +165,7 @@ func TestInsertVoucherHandler(t *testing.T) {
 			ownerKey:           testData.ownerPublicKey, // Doesn't matter, fails before key check
 			expectedStatusCode: http.StatusBadRequest,
 			expectedBodyOneOf: []string{
-				"Unable to decode PEM content\n",
+				"remaining PEM content",
 			},
 		},
 	}
@@ -169,6 +174,7 @@ func TestInsertVoucherHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create HTTP request
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(tc.voucherData))
+			req.Header.Set("Accept", "application/json")
 			rec := httptest.NewRecorder()
 
 			// Create handler with appropriate owner key for this test case
@@ -186,13 +192,13 @@ func TestInsertVoucherHandler(t *testing.T) {
 				body := rec.Body.String()
 				found := false
 				for _, expected := range tc.expectedBodyOneOf {
-					if body == expected {
+					if strings.Contains(body, expected) {
 						found = true
 						break
 					}
 				}
 				if !found {
-					t.Errorf("Expected one of %v, got: %s", tc.expectedBodyOneOf, body)
+					t.Errorf("Expected one of %v to be contained in response", tc.expectedBodyOneOf)
 				}
 			}
 		})
@@ -212,6 +218,7 @@ func TestInsertVoucherHandler_WrongOwnerKey(t *testing.T) {
 		t.Fatalf("Failed to generate wrong owner key: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(voucherPEM))
+	req.Header.Set("Accept", "application/json")
 	rec := httptest.NewRecorder()
 	handler := handlers.InsertVoucherHandler([]crypto.PublicKey{wrongOwnerKey.Public()})
 	handler(rec, req)
@@ -219,9 +226,8 @@ func TestInsertVoucherHandler_WrongOwnerKey(t *testing.T) {
 		t.Errorf("Expected status 400 Bad Request for wrong owner key, got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	expectedError := "Invalid ownership voucher\n"
-	if body != expectedError {
-		t.Errorf("Expected error '%s', got: '%s'", expectedError, body)
+	if !strings.Contains(body, "owner key does not match") {
+		t.Errorf("Expected error about owner key mismatch")
 	}
 }
 
@@ -322,6 +328,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 				Bytes: modifiedBytes,
 			})
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(modifiedPEM))
+			req.Header.Set("Accept", "application/json")
 			rec := httptest.NewRecorder()
 
 			// Create handler with correct owner key and verify response for each invalid voucher
@@ -332,8 +339,76 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 				t.Errorf("Expected status 400 Bad Request, got %d: %s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
-			if body != tc.expectedError {
-				t.Errorf("Expected error '%s', got: '%s'", tc.expectedError, body)
+			if !strings.Contains(body, "Voucher verification failed") {
+				t.Errorf("Expected 'Voucher verification failed' in JSON response")
+			}
+		})
+	}
+}
+
+// TestInsertVoucherHandler_ContentTypeValidation tests content type validation with CI compatibility
+func TestInsertVoucherHandler_ContentTypeValidation(t *testing.T) {
+	setupTestDB(t)
+	testData := setupTestData(t)
+	pemString := string(testData.validVoucherPEM)
+
+	// Create valid JSON voucher response for CI compatibility test
+	voucherBytes, _ := pem.Decode([]byte(pemString))
+	if voucherBytes == nil {
+		t.Fatalf("Failed to decode test PEM")
+	}
+	validVoucherJSON := fmt.Sprintf(`{"voucher":"%s","encoding":"pem","guid":"455fd681c576f8b3b51135c7f9e82e92"}`,
+		base64.StdEncoding.EncodeToString(voucherBytes.Bytes))
+
+	// Test content type validation
+	testCases := []struct {
+		name        string
+		data        string
+		contentType string
+		expectCode  int
+		description string
+	}{
+		{"valid_pem", pemString, "application/x-pem-file", http.StatusOK, "Direct PEM upload (preferred)"},
+		{"valid_pem_no_content_type", pemString, "", http.StatusOK, "PEM without explicit content-type"},
+		{"valid_ci_json_in_form", validVoucherJSON, "application/x-www-form-urlencoded", http.StatusOK, "CI: JSON voucher in form data"},
+		{"rejected_invalid_form_data", pemString, "application/x-www-form-urlencoded", http.StatusBadRequest, "Form data without JSON"},
+		{"rejected_invalid_json_form", `{"invalid":"data"}`, "application/x-www-form-urlencoded", http.StatusBadRequest, "Form data with invalid JSON"},
+		{"rejected_json", `{"voucher":"test"}`, "application/json", http.StatusUnsupportedMediaType, "Direct JSON (not supported)"},
+		{"rejected_text", pemString, "text/plain", http.StatusUnsupportedMediaType, "Text content type"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", strings.NewReader(tc.data))
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			req.Header.Set("Accept", "application/json")
+			rec := httptest.NewRecorder()
+
+			handler := handlers.InsertVoucherHandler([]crypto.PublicKey{testData.ownerPublicKey})
+			handler(rec, req)
+
+			if rec.Code != tc.expectCode {
+				t.Errorf("Test '%s': Expected status %d, got %d: %s", tc.description, tc.expectCode, rec.Code, rec.Body.String())
+			}
+
+			if tc.expectCode == http.StatusOK {
+				var response openapi.VoucherInsertResponse
+				if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+					t.Errorf("Failed to parse JSON response: %v", err)
+				}
+				if response.Processed != 1 || response.Inserted != 1 {
+					t.Errorf("Expected 1 processed and 1 inserted, got %d processed and %d inserted", response.Processed, response.Inserted)
+				}
+			} else if tc.expectCode == http.StatusUnsupportedMediaType {
+				if !strings.Contains(rec.Body.String(), "Unsupported content type") {
+					t.Errorf("Expected 'Unsupported content type' in response for %s", tc.description)
+				}
+			} else if tc.expectCode == http.StatusBadRequest {
+				if !strings.Contains(rec.Body.String(), "Invalid") {
+					t.Errorf("Expected 'Invalid' error in response for %s", tc.description)
+				}
 			}
 		})
 	}

@@ -8,87 +8,126 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
+	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"gorm.io/gorm"
 )
 
-func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
-	guidHex := r.URL.Query().Get("guid")
-	deviceInfo := r.URL.Query().Get("device_info")
+// Server implements the openapi.ServerInterface
+type Server struct {
+	ownerPKeys []crypto.PublicKey
+	to2Server  *fdo.TO2Server
+}
 
+// NewServer creates a new Server instance
+func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server) *Server {
+	return &Server{
+		ownerPKeys: ownerPKeys,
+		to2Server:  to2Server,
+	}
+}
+
+// TEMPORARY: Backward compatibility wrappers for manufacturing server
+// TODO: Remove these once manufacturing server is refactored to use OpenAPI interface
+func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
+	// Create a dummy GetVouchersParams from query parameters
+	params := openapi.GetVouchersParams{}
+	if guid := r.URL.Query().Get("guid"); guid != "" {
+		params.Guid = &guid
+	}
+	if deviceInfo := r.URL.Query().Get("device_info"); deviceInfo != "" {
+		params.DeviceInfo = &deviceInfo
+	}
+	// Use the server method without server instance (for backward compatibility)
+	s := &Server{} // Empty server for compatibility
+	s.GetVouchers(w, r, params)
+}
+
+func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
+	guid := r.PathValue("guid")
+	// Use the server method without server instance (for backward compatibility)
+	s := &Server{} // Empty server for compatibility
+	s.GetVouchersGuid(w, r, guid)
+}
+
+// TEMPORARY: Legacy function signature for tests
+func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s := &Server{ownerPKeys: ownerPKeys} // Server with keys for compatibility
+		s.PostOwnerVouchers(w, r)
+	}
+}
+
+func (s *Server) GetVouchers(w http.ResponseWriter, r *http.Request, params openapi.GetVouchersParams) {
 	filters := make(map[string]interface{})
 
-	if guidHex != "" {
-		if !utils.IsValidGUID(guidHex) {
-			http.Error(w, fmt.Sprintf("Invalid GUID: %s", guidHex), http.StatusBadRequest)
-			return
-		}
-
-		guid, err := hex.DecodeString(guidHex)
-		if err != nil {
-			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
+	if params.Guid != nil {
+		guid, ok := ValidateAndDecodeGUID(w, r, *params.Guid)
+		if !ok {
 			return
 		}
 		filters["guid"] = guid
 	}
 
-	if deviceInfo != "" {
-		filters["device_info"] = deviceInfo
+	if params.DeviceInfo != nil {
+		filters["device_info"] = *params.DeviceInfo
 	}
 
 	vouchers, err := db.QueryVouchers(filters, false)
 	if err != nil {
 		slog.Debug("Error querying vouchers", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error querying vouchers", err.Error(), "Error querying vouchers")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(vouchers); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		HandleEncodingError(w, r, "response", err)
 	}
 }
 
-// GetVoucherByGUIDHandler returns a PEM-encoded voucher by path GUID.
-func GetVoucherByGUIDHandler(w http.ResponseWriter, r *http.Request) {
-	guidHex := r.PathValue("guid")
-	if !utils.IsValidGUID(guidHex) {
-		http.Error(w, "Invalid GUID", http.StatusBadRequest)
+// GetVouchersGuid returns a voucher by path GUID in JSON or PEM format.
+func (s *Server) GetVouchersGuid(w http.ResponseWriter, r *http.Request, guid string) {
+	guidBytes, ok := ValidateAndDecodeGUID(w, r, guid)
+	if !ok {
 		return
 	}
-	guid, err := hex.DecodeString(guidHex)
-	if err != nil {
-		http.Error(w, "Invalid GUID format", http.StatusBadRequest)
-		return
-	}
-	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guid})
+	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guidBytes})
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "Voucher not found", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "Voucher not found", "No voucher found with the specified GUID", "Voucher not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Internal server error", err.Error(), err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/x-pem-file")
-	if err := pem.Encode(w, &pem.Block{Type: "OWNERSHIP VOUCHER", Bytes: voucher.CBOR}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+
+	// Check if client wants JSON response (default) or PEM (backward compatibility)
+	if ShouldReturnJSON(r) {
+		if err := WriteJSONVoucher(w, voucher.CBOR, "pem", guidBytes); err != nil {
+			WriteJSONError(w, http.StatusInternalServerError, "Failed to encode response", err.Error())
+		}
+	} else {
+		// Backward compatibility: return PEM format
+		w.Header().Set("Content-Type", ContentTypePEM)
+		if err := pem.Encode(w, &pem.Block{Type: "OWNERSHIP VOUCHER", Bytes: voucher.CBOR}); err != nil {
+			HandleEncodingError(w, r, "PEM", err)
+		}
 	}
 }
 
@@ -178,150 +217,216 @@ func VerifyVoucher(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) error {
 	return nil
 }
 
-// InsertVoucherHandler verifies and inserts vouchers. Background TO0 is handled by the owner server.
-func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
-			return
-		}
+// PostOwnerVouchers verifies and inserts vouchers. Background TO0 is handled by the owner server.
+func (s *Server) PostOwnerVouchers(w http.ResponseWriter, r *http.Request) {
+	PostOwnerVouchersWithKeys(w, r, s.ownerPKeys)
+}
 
-		block, rest := pem.Decode(body)
-		for ; block != nil; block, rest = pem.Decode(rest) {
-			if block.Type != "OWNERSHIP VOUCHER" {
-				slog.Debug("Got unknown label type", "type", block.Type)
-				continue
-			}
-			var ov fdo.Voucher
-			if err := cbor.Unmarshal(block.Bytes, &ov); err != nil {
-				slog.Debug("Unable to decode cbor", "block", block.Bytes)
-				http.Error(w, "Unable to decode cbor", http.StatusBadRequest)
-				return
-			}
+// PostOwnerVouchersWithKeys verifies and inserts vouchers with provided owner keys.
+func PostOwnerVouchersWithKeys(w http.ResponseWriter, r *http.Request, ownerPKeys []crypto.PublicKey) {
+	body, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
 
-			// Ov Verification
-			if err := VerifyVoucher(&ov, ownerPKeys); err != nil {
-				slog.Error("Ownership voucher verification failed", "guid", ov.Header.Val.GUID[:], "err", err)
-				http.Error(w, "Invalid ownership voucher", http.StatusBadRequest)
-				return
-			}
+	response := openapi.VoucherInsertResponse{
+		Processed: 0,
+		Inserted:  0,
+	}
 
-			// Check for duplicate vouchers in database
-			if dbOv, err := db.FetchVoucher(map[string]interface{}{"guid": ov.Header.Val.GUID[:]}); err == nil {
-				if bytes.Equal(block.Bytes, dbOv.CBOR) {
-					slog.Debug("Voucher already exists", "guid", ov.Header.Val.GUID[:])
-					continue
+	// Handle PEM data with limited form-encoded support for CI compatibility
+	var pemData []byte
+	contentType := r.Header.Get("Content-Type")
+	if strings.Contains(contentType, ContentTypeForm) {
+		// Check if the body looks like JSON voucher response (CI compatibility)
+		if strings.HasPrefix(string(body), "{") {
+			var voucherResp openapi.VoucherResponse
+			if err := json.Unmarshal(body, &voucherResp); err == nil {
+				// Only accept if it's a proper voucher response from manufacturer
+				if voucherResp.Encoding == "pem" && voucherResp.Voucher != "" {
+					if voucherBytes, err := base64.StdEncoding.DecodeString(voucherResp.Voucher); err == nil {
+						pemBlock := &pem.Block{
+							Type:  "OWNERSHIP VOUCHER",
+							Bytes: voucherBytes,
+						}
+						pemData = pem.EncodeToMemory(pemBlock)
+					} else {
+						AppendError(&response, "Failed to decode base64 voucher from JSON response")
+						WriteJSONVoucherInsertResponse(w, response)
+						return
+					}
+				} else {
+					AppendError(&response, "Invalid voucher JSON format")
+					WriteJSONVoucherInsertResponse(w, response)
+					return
 				}
-				slog.Debug("Voucher guid already exists. not overwriting it", "guid", ov.Header.Val.GUID[:])
-				continue
-			}
-
-			// Insert voucher into database
-			slog.Debug("Inserting voucher", "GUID", ov.Header.Val.GUID)
-
-			if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes, DeviceInfo: ov.Header.Val.DeviceInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
-				slog.Debug("Error inserting into database", "error", err.Error())
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			} else {
+				AppendError(&response, "Invalid JSON in form-encoded request body")
+				WriteJSONVoucherInsertResponse(w, response)
 				return
 			}
-		}
-
-		if len(bytes.TrimSpace(rest)) > 0 {
-			http.Error(w, "Unable to decode PEM content", http.StatusBadRequest)
+		} else {
+			// Reject non-JSON form data - this addresses Miguel's feedback about complexity
+			WriteErrorResponse(w, r, http.StatusBadRequest,
+				"Invalid form data",
+				"Form-encoded data must contain JSON voucher response from manufacturer",
+				"Invalid form data")
 			return
 		}
+	} else if contentType != "" && contentType != ContentTypePEM {
+		// Reject any content type other than PEM or form (per Miguel's feedback)
+		WriteErrorResponse(w, r, http.StatusUnsupportedMediaType,
+			"Unsupported content type",
+			fmt.Sprintf("Expected %s or %s, got %s", ContentTypePEM, ContentTypeForm, contentType),
+			"Unsupported content type")
+		return
+	} else {
+		// Direct PEM data (preferred per Miguel's feedback)
+		pemData = body
+	}
 
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
+	block, rest := pem.Decode(pemData)
+	for ; block != nil; block, rest = pem.Decode(rest) {
+		response.Processed++
+
+		if block.Type != "OWNERSHIP VOUCHER" {
+			AppendError(&response, "Unknown block type: %s (expected OWNERSHIP VOUCHER)", block.Type)
+			continue
+		}
+
+		var ov fdo.Voucher
+		if err := cbor.Unmarshal(block.Bytes, &ov); err != nil {
+			AppendError(&response, "Unable to decode CBOR in voucher %d: %v", response.Processed, err)
+			continue
+		}
+
+		// Ov Verification
+		if err := VerifyVoucher(&ov, ownerPKeys); err != nil {
+			AppendError(&response, "Voucher verification failed for GUID %s: %v", hex.EncodeToString(ov.Header.Val.GUID[:]), err)
+			slog.Error("Ownership voucher verification failed", "guid", ov.Header.Val.GUID[:], "err", err)
+			continue
+		}
+
+		// Check for duplicate vouchers in database
+		if dbOv, err := db.FetchVoucher(map[string]interface{}{"guid": ov.Header.Val.GUID[:]}); err == nil {
+			if bytes.Equal(block.Bytes, dbOv.CBOR) {
+				response.Inserted++ // Count as successful even if it already existed
+				continue
+			}
+			AppendError(&response, "Voucher with GUID %s already exists (not overwriting)", hex.EncodeToString(ov.Header.Val.GUID[:]))
+			continue
+		}
+
+		// Insert voucher into database
+
+		if err := db.InsertVoucher(db.Voucher{GUID: ov.Header.Val.GUID[:], CBOR: block.Bytes, DeviceInfo: ov.Header.Val.DeviceInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
+			AppendError(&response, "Database insertion failed for GUID %s: %v", hex.EncodeToString(ov.Header.Val.GUID[:]), err)
+			continue
+		}
+
+		response.Inserted++
+	}
+
+	if len(bytes.TrimSpace(rest)) > 0 {
+		AppendError(&response, "Unable to decode remaining PEM content after processing all blocks")
+	}
+
+	// Return JSON response or fall back to legacy behavior
+	if ShouldReturnJSON(r) {
+		WriteJSONVoucherInsertResponse(w, response)
+	} else {
+		// Backward compatibility: return text/plain
+		if response.Errors != nil && len(*response.Errors) > 0 {
+			http.Error(w, fmt.Sprintf("Processed %d vouchers, inserted %d, %d errors", response.Processed, response.Inserted, len(*response.Errors)), http.StatusBadRequest)
+		} else {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "Successfully processed %d vouchers, inserted %d", response.Processed, response.Inserted)
+		}
 	}
 }
 
-func ResellHandler(to2Server *fdo.TO2Server) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		guidHex := r.PathValue("guid")
+func (s *Server) PostOwnerResellGuid(w http.ResponseWriter, r *http.Request, guid string) {
+	PostOwnerResellGuidWithServer(w, r, guid, s.to2Server)
+}
 
-		if !utils.IsValidGUID(guidHex) {
-			http.Error(w, "GUID is not a valid GUID", http.StatusBadRequest)
-			return
+// PostOwnerResellGuidWithServer handles voucher reselling with provided TO2 server.
+func PostOwnerResellGuidWithServer(w http.ResponseWriter, r *http.Request, guid string, to2Server *fdo.TO2Server) {
+	guidBytes, ok := ValidateAndDecodeGUID(w, r, guid)
+	if !ok {
+		return
+	}
+
+	var guidProtocol protocol.GUID
+	copy(guidProtocol[:], guidBytes)
+
+	body, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
+	blk, _ := pem.Decode(body)
+	if blk == nil {
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid PEM content", "Request body must contain valid PEM-encoded public key", "Invalid PEM content")
+		return
+	}
+	nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid public key", err.Error(), "Error parsing x.509 public key")
+		return
+	}
+
+	// Get the underlying *db.State to access the *gorm.DB for transactions
+	state, ok := to2Server.VouchersForExtension.(*db.State)
+	if !ok {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Internal server error", "Invalid state type", "Internal server error: invalid state type")
+		slog.Error("VouchersForExtension is not *db.State", "type", fmt.Sprintf("%T", to2Server.VouchersForExtension))
+		return
+	}
+
+	// Wrap Resell in a transaction to ensure atomicity
+	// If Resell fails after RemoveVoucher, the transaction will rollback
+	// and restore the original voucher
+	var extended *fdo.Voucher
+	err = state.DB.Transaction(func(tx *gorm.DB) error {
+		// Create a transactional state wrapper for VouchersForExtension only
+		txVouchersForExtension := &db.State{DB: tx}
+
+		// Create a minimal TO2Server copy with only VouchersForExtension replaced
+		txTO2Server := *to2Server
+		txTO2Server.VouchersForExtension = txVouchersForExtension
+
+		// Call Resell on the copy - it will use the transactional wrapper
+		var resellErr error
+		extended, resellErr = txTO2Server.Resell(context.TODO(), guidProtocol, nextOwner, nil)
+		return resellErr
+	})
+
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error reselling voucher", err.Error(), "Error reselling voucher")
+		// Transaction already rolled back, restoring the original voucher
+		// No need to manually add it back
+		return
+	}
+
+	ovBytes, err := cbor.Marshal(extended)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error marshaling voucher", err.Error(), "Error marshaling voucher")
+		return
+	}
+
+	// Check if client wants JSON response (default) or PEM (backward compatibility)
+	if ShouldReturnJSON(r) {
+		if err := WriteJSONVoucher(w, ovBytes, "pem", guidBytes); err != nil {
+			WriteJSONError(w, http.StatusInternalServerError, "Failed to encode response", err.Error())
 		}
-
-		guidBytes, err := hex.DecodeString(guidHex)
-		if err != nil {
-			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
-			slog.Debug(err.Error())
-			return
-		}
-
-		var guid protocol.GUID
-		copy(guid[:], guidBytes)
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failure to read the request body", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-		blk, _ := pem.Decode(body)
-		if blk == nil {
-			http.Error(w, "Invalid PEM content", http.StatusInternalServerError)
-			return
-		}
-		nextOwner, err := x509.ParsePKIXPublicKey(blk.Bytes)
-		if err != nil {
-			http.Error(w, "Error parsing x.509 public key", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-
-		// Get the underlying *db.State to access the *gorm.DB for transactions
-		state, ok := to2Server.VouchersForExtension.(*db.State)
-		if !ok {
-			http.Error(w, "Internal server error: invalid state type", http.StatusInternalServerError)
-			slog.Error("VouchersForExtension is not *db.State", "type", fmt.Sprintf("%T", to2Server.VouchersForExtension))
-			return
-		}
-
-		// Wrap Resell in a transaction to ensure atomicity
-		// If Resell fails after RemoveVoucher, the transaction will rollback
-		// and restore the original voucher
-		var extended *fdo.Voucher
-		err = state.DB.Transaction(func(tx *gorm.DB) error {
-			// Create a transactional state wrapper for VouchersForExtension only
-			txVouchersForExtension := &db.State{DB: tx}
-
-			// Create a minimal TO2Server copy with only VouchersForExtension replaced
-			txTO2Server := *to2Server
-			txTO2Server.VouchersForExtension = txVouchersForExtension
-
-			// Call Resell on the copy - it will use the transactional wrapper
-			var resellErr error
-			extended, resellErr = txTO2Server.Resell(context.TODO(), guid, nextOwner, nil)
-			return resellErr
-		})
-
-		if err != nil {
-			http.Error(w, "Error reselling voucher", http.StatusInternalServerError)
-			slog.Debug("Resell failed", "error", err)
-			// Transaction already rolled back, restoring the original voucher
-			// No need to manually add it back
-			return
-		}
-
-		ovBytes, err := cbor.Marshal(extended)
-		if err != nil {
-			http.Error(w, "Error marshaling voucher", http.StatusInternalServerError)
-			slog.Debug(err.Error())
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/x-pem-file")
+	} else {
+		// Backward compatibility: return PEM format
+		w.Header().Set("Content-Type", ContentTypePEM)
 		if err := pem.Encode(w, &pem.Block{
 			Type:  "OWNERSHIP VOUCHER",
 			Bytes: ovBytes,
 		}); err != nil {
-			slog.Debug("Error encoding voucher", "error", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			HandleEncodingError(w, r, "PEM", err)
 			return
 		}
 	}
