@@ -47,66 +47,63 @@ verify_uploads() {
 # Public entrypoint used by CI
 run_test() {
 
-  echo "⭐ Setting the error trap handler"
+  log_info "Setting the error trap handler"
   trap on_failure ERR
 
-  echo "⭐ Environment variables"
+  log_info "Environment variables"
   show_env
 
-  echo "⭐ Creating directories"
+  log_info "Creating directories"
   # Add uploads directories to be created
   directories+=("${device_uploads_dir}" "${owner_uploads_dir}")
   create_directories
 
-  echo "⭐ Generating service certificates"
+  log_info "Generating service certificates"
   generate_service_certs
 
-  echo "⭐ Build and install 'go-fdo-client' binary"
+  log_info "Build and install 'go-fdo-client' binary"
   install_client
 
-  echo "⭐ Build and install 'go-fdo-server' binary"
+  log_info "Build and install 'go-fdo-server' binary"
   install_server
 
-  echo "⭐ Configuring services"
+  log_info "Configuring services"
   configure_services
 
-  echo "⭐ Start services"
+  log_info "Configure DNS and start services"
   start_services
 
-  echo "⭐ Wait for the services to be ready:"
+  log_info "Wait for the services to be ready:"
   wait_for_services_ready
 
-  echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
+  log_info "Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
-  echo "⭐ Run Device Initialization"
+  log_info "Run Device Initialization"
   run_device_initialization
 
   guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device initialized with GUID: ${guid}"
+  log_info "Device initialized with GUID: ${guid}"
 
-  echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
+  log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
 
-  echo "⭐ Sending Ownership Voucher to the Owner"
+  log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  echo "⭐ Sleeping to allow TO0 to complete"
   sleep 20
-
-  echo "⭐ Prepare the upload payloads on client side: ${upload_files[*]}"
+  log_info "Prepare the upload payloads on client side: ${upload_files[*]}"
   generate_upload_files
 
-  echo "⭐ Running FIDO Device Onboard with FSIM fdo.upload"
+  log_info "Running FIDO Device Onboard with FSIM fdo.upload"
   run_fido_device_onboard --upload "/"
 
-  echo "⭐ Verify uploaded files"
+  log_info "Verify uploaded files"
   verify_uploads
 
-  echo "⭐ Unsetting the error trap handler"
+  log_info "Unsetting the error trap handler"
   trap - ERR
-
-  echo "✅ Test PASS!"
+  test_pass
 }
 
 # Allow running directly

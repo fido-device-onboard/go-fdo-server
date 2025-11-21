@@ -91,6 +91,42 @@ owner_https_crt="${certs_dir}/owner-http.crt"
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+  echo -ne "$@"
+}
+
+log_info() {
+  echo -e "${BLUE}[INFO]${NC} ⭐" "$@"
+}
+
+log_warn() {
+  echo -e "${YELLOW}[WARN]${NC} 🚧" "$@"
+}
+
+log_success() {
+  echo -e "✔" "$@"
+}
+
+log_error(){
+  echo -e "${RED}[ERROR]${NC} ❌" "$@"
+  return 1
+}
+
+test_pass() {
+  echo -e "${GREEN}[PASS]${NC} ✅ Test PASSED!"
+}
+
+test_fail() {
+  log_error "Test FAILED!"
+}
+
 show_env(){
   env -0 | sort -z | tr '\0' '\n'
 }
@@ -141,34 +177,37 @@ unset_hostname() {
 }
 
 set_hostnames() {
-  echo "⭐ Adding hostnames to '/etc/hosts'"
   for service in "${services[@]}"; do
     service_ip=${service}_ip
     service_dns=${service}_dns
+    log "  ⚙ ${!service_ip} ${!service_dns} "
     set_hostname "${!service_dns}" "${!service_ip}"
+    log_success
   done
 }
 
 unset_hostnames() {
-  echo "⭐ Removing hostnames from '/etc/hosts'"
+  log_info "Removing hostnames from '/etc/hosts'"
   for service in "${services[@]}"; do
     local service_ip=${service}_ip
     local service_dns=${service}_dns
+    log "  ⚙ ${!service_ip} ${!service_dns} "
     unset_hostname "${!service_dns}" "${!service_ip}"
+    log_success
   done
 }
 
 configure_services() {
   generate_https_certs
-  echo "⭐ Configuring services"
   for service in "${services[@]}"; do
+    log "  ⚙ Configuring service ${service} "
     configure_service "${service}"
+    log_success
   done
 }
 
 configure_service() {
   local service=$1
-  echo "  ⚙ Configuring service ${service}"
   local configure_service="configure_service_${service}"
   ! declare -F "${configure_service}" >/dev/null || ${configure_service}
 }
@@ -185,30 +224,24 @@ wait_for_url() {
   local -r interval=2
   local -r max_retries=5
   local url=$1
-  echo "url: ${url}"
-  echo -n "❓ Waiting for ${url} to be healthy "
   while true; do
     [[ "$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' "${url}")" = "200" ]] && break
     status=$?
     ((retry += 1))
     if [ $retry -gt $max_retries ]; then
-      echo " ❌"
       return $status
     fi
-    echo -n "." 1>&2
     sleep "$interval"
   done
-  echo " ✔"
 }
 
 wait_for_service_ready() {
   local service=$1
   local service_health_url="${service}_health_url"
-  [[ -v "${service_health_url}" ]] || {
-    echo "❌ service ${service} has no health URL"
-    return 1
-  }
-  wait_for_url "${!service_health_url}"
+  [[ -v "${service_health_url}" ]] || log_error "service ${service} has no health URL"
+  log "  ⚙ Waiting for ${!service_health_url} to be healthy "
+  wait_for_url "${!service_health_url}" || log_error
+  log_success
 }
 
 wait_for_services_ready() {
@@ -310,36 +343,37 @@ start_service_owner() {
 
 start_service() {
   local service=$1
-  echo -n "  ⚙ Starting service ${service} "
   local start_service="start_service_${service}"
   ! declare -F "${start_service}" >/dev/null || ${start_service}
-  echo "✔"
 }
 
 start_services() {
+  log_info "Adding hostnames to '/etc/hosts'"
   set_hostnames
-  echo "⭐ Starting services"
+  log_info "Starting Services"
   for service in "${services[@]}"; do
+    log "  ⚙ Starting service ${service} "
     start_service ${service}
+    log_success
   done
 }
 
 stop_service() {
   local service=$1
   local service_pid_file="${service}_pid_file"
-  echo -n "  ⚙ Stopping service ${service} "
   if [[ -v "${service_pid_file}" ]] && [[ -f "${!service_pid_file}" ]]; then
     if pkill -F "${!service_pid_file}"; then
       wait "$(cat ${!service_pid_file})" 2>/dev/null || :
     fi
   fi
-  echo "✔"
 }
 
 stop_services() {
-  echo "⭐ Stopping services"
+  log_info "Stopping services"
   for service in "${services[@]}"; do
-    stop_service ${service}
+    log "  ⚙ Stopping service ${service} "
+    stop_service "${service}"
+    log_success
   done
 }
 
@@ -348,8 +382,8 @@ install_client() {
 }
 
 uninstall_client() {
-  echo "⭐ Uninstalling client"
-  rm -rf "$(go env GOPATH)/bin/go-fdo-client"
+  log_info "Uninstalling client"
+  rm -vf "$(go env GOPATH)/bin/go-fdo-client"
 }
 
 install_server() {
@@ -358,8 +392,8 @@ install_server() {
 }
 
 uninstall_server() {
-  echo "⭐ Uninstalling server"
-  rm -f "${bin_dir}/go-fdo-server"
+  log_info "Uninstalling server"
+  rm -vf "${bin_dir}/go-fdo-server"
 }
 
 generate_service_certs() {
@@ -398,12 +432,12 @@ set_or_update_rendezvous_info() {
 
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
-  echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
+  log_info "Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
   if [ -z "$(get_rendezvous_info "${manufacturer_url}")" ]; then
-    echo "🚧 'RendezvousInfo' not found, creating it..."
+    log_warn "'RendezvousInfo' not found, creating it"
     set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   else
-    echo "⚙ 'RendezvousInfo; found, updating it..."
+    log_info "'RendezvousInfo' found, updating it"
     update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
   fi
   echo
@@ -428,12 +462,12 @@ set_or_update_owner_redirect_info() {
   local owner_protocol=${5:-http}
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
-  echo "❓ Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
+  log_info "Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
   if [ -z "$(get_owner_redirect_info "${owner_url}")" ]; then
-    echo "🚧 'RVTO2Addr' not found, creating it..."
+    log_warn "'RVTO2Addr' not found, creating it"
     set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   else
-    echo "⚙ 'RVTO2Addr' found, updating it..."
+    log_info "'RVTO2Addr' found, updating it"
     update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   fi
   echo
@@ -443,15 +477,15 @@ get_service_logs() {
   local service=$1
   local service_log_var="${service}_log"
   if [[ -v "${service_log_var}" ]]; then
-    echo "🛑 ❓ '${service}' logs:"
     [ ! -f "${!service_log_var}" ] || cat "${!service_log_var}"
   fi
 }
 
 get_logs() {
-  echo "⭐ Retrieving logs"
+  log_info "Retrieving logs"
   for service in "${services[@]}"; do
-    get_service_logs ${service}
+    log "🛑 '${service}' logs:\n"
+    get_service_logs "${service}"
   done
 }
 
@@ -466,10 +500,7 @@ verify_equal_files() {
   local file_2=$2
 
   for file in "${file_1}" "${file_2}"; do
-    [ -f "${file}" ] || {
-      echo "❌ File not found: ${file}"
-      return 1
-    }
+    [ -f "${file}" ] || log_error "File not found: ${file}";
   done
 
   [ "${file_1}" != "${file_2}" ] || return 0
@@ -478,19 +509,18 @@ verify_equal_files() {
   file_1_sha=$(sha256sum "${file_1}" | awk '{print $1}')
   file_2_sha=$(sha256sum "${file_2}" | awk '{print $1}')
   if [ "${file_1_sha}" != "${file_2_sha}" ]; then
-    echo "❌ Checksum mismatch: ${file_1}=${file_1_sha} ${file_2}=${file_2_sha}"
-    return 1
+    log_error "Checksum mismatch: ${file_1}=${file_1_sha} ${file_2}=${file_2_sha}"
   fi
 }
 
 on_failure() {
   trap - ERR
   stop_services
-  echo "❌ Test FAILED!"
+  test_fail
 }
 
 remove_files() {
-  echo "⭐ Removing files from '${base_dir:?}'"
+  log_info "Removing files from '${base_dir:?}'"
   rm -vrf "${base_dir:?}"/*
 }
 
@@ -500,5 +530,4 @@ cleanup() {
   uninstall_server
   uninstall_client
   remove_files
-  echo "⭐ Done!"
 }

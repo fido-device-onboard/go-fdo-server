@@ -6,51 +6,51 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd )/utils.
 
 run_test() {
 
-  echo "⭐ Setting the error trap handler"
+  log_info "Setting the error trap handler"
   trap on_failure ERR
 
-  echo "⭐ Environment variables"
+  log_info "Environment variables"
   show_env
 
-  echo "⭐ Creating directories"
+  log_info "Creating directories"
   create_directories
 
-  echo "⭐ Generating service certificates"
+  log_info "Generating service certificates"
   generate_service_certs
 
-  echo "⭐ Build and install 'go-fdo-client' binary"
+  log_info "Build and install 'go-fdo-client' binary"
   install_client
 
-  echo "⭐ Build and install 'go-fdo-server' binary"
+  log_info "Build and install 'go-fdo-server' binary"
   install_server
 
-  echo "⭐ Configure services"
+  log_info "Configure services"
   configure_services
 
-  echo "⭐ Setting hostnames"
+  log_info "Setting hostnames"
   set_hostnames
 
-  echo "⭐ Start services (manufacturer, owner) — rendezvous is intentionally delayed"
+  log_info "Start services (manufacturer, owner) — rendezvous is intentionally delayed"
   start_service_manufacturer
   start_service_owner
 
-  echo "⭐ Wait for manufacturer and owner to be ready"
+  log_info "Wait for manufacturer and owner to be ready"
   wait_for_service_ready manufacturer
   wait_for_service_ready owner
 
-  echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo) on manufacturer"
+  log_info "Setting or updating Rendezvous Info (RendezvousInfo) on manufacturer"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
 
-  echo "⭐ Run Device Initialization"
+  log_info "Run Device Initialization"
   run_device_initialization
 
   guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device initialized with GUID: ${guid}"
+  log_info "Device initialized with GUID: ${guid}"
 
-  echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
+  log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}"
 
-  echo "⭐ Sending Ownership Voucher to the Owner"
+  log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   # TODO: once we have an infinite loop in the client, we should just confirm that the onboarding process is just stuck until the rendezvous is started
@@ -96,10 +96,9 @@ run_test() {
     exit 1
   fi
 
-  echo "⭐ Unsetting the error trap handler"
+  log_info "Unsetting the error trap handler"
   trap - ERR
-
-  echo "✅ Test PASS!"
+  test_pass
 }
 
 # Allow running directly

@@ -186,10 +186,8 @@ start_service_owner() {
 # We do not use pid files but functions to stop the services via systemctl
 stop_service() {
   local service=$1
-  echo -n "  ⚙ Stopping service ${service} "
   local stop_service="stop_service_${service}"
   ! declare -F "${stop_service}" >/dev/null || ${stop_service}
-  echo " ✔"
 }
 
 stop_service_manufacturer() {
@@ -227,7 +225,7 @@ get_service_logs_owner() {
 
 get_service_logs() {
   local service=$1
-  echo "🛑 ❓ '${service}' logs:"
+  log "🛑 '${service}' logs:\n"
   local get_service_logs_func="get_service_logs_${service}"
   ! declare -F "${get_service_logs_func}" >/dev/null || ${get_service_logs_func}
 }
@@ -252,34 +250,35 @@ save_service_logs_owner() {
 
 save_service_logs() {
   local service=$1
-  echo "  ⚙ Saving '${service}' logs"
+  log "\t⚙ Saving '${service}' logs "
   local save_service_logs_func="save_service_logs_${service}"
   ! declare -F "${save_service_logs_func}" >/dev/null || ${save_service_logs_func}
+  log_success
 }
 
 save_logs() {
-  echo "⭐ Saving logs"
+  log_info "Saving logs"
   for service in "${services[@]}"; do
     save_service_logs ${service}
   done
   if [ -v "PACKIT_COPR_RPMS" ]; then
-    echo "⭐ Submitting files to TMT '${base_dir:?}'"
+    log_info "Submitting files to TMT '${base_dir:?}'"
     find "${base_dir:?}" -type f -exec tmt-file-submit -l {} \;
   fi
 }
 
 remove_files() {
-  echo "⭐ Removing files from '${base_dir:?}'"
+  log_info "Removing files from '${base_dir:?}'"
   sudo rm -vrf "${base_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_sysconfig_dir}'"
+  log_info "Removing files from '${rpm_sysconfig_dir}'"
   sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"/*
-  echo "⭐ Removing files from '${rpm_config_base_dir}'"
+  log_info "Removing files from '${rpm_config_base_dir}'"
   sudo rm -vf "${rpm_config_base_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_manufacturer_database_dir}'"
+  log_info "Removing files from '${rpm_manufacturer_database_dir}'"
   sudo rm -vf "${rpm_manufacturer_database_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_rendezvous_database_dir}'"
+  log_info "Removing files from '${rpm_rendezvous_database_dir}'"
   sudo rm -vf "${rpm_rendezvous_database_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_owner_database_dir}'"
+  log_info "Removing files from '${rpm_owner_database_dir}'"
   sudo rm -vf "${rpm_owner_database_dir:?}"/*
 }
 
@@ -287,7 +286,7 @@ on_failure() {
   trap - ERR
   save_logs
   stop_services
-  echo "❌ Test FAILED!"
+  test_fail
 }
 
 cleanup() {
@@ -297,5 +296,4 @@ cleanup() {
   uninstall_server
   uninstall_client
   remove_files
-  echo "⭐ Done!"
 }

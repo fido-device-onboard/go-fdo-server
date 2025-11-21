@@ -52,102 +52,98 @@ run_test() {
   # Add the wget_httpd service defined above
   services+=("${wget_httpd_service_name}")
 
-  echo "⭐ Setting the error trap handler"
+  log_info "Setting the error trap handler"
   trap on_failure ERR
 
-  echo "⭐ Environment variables"
+  log_info "Environment variables"
   show_env
 
-  echo "⭐ Creating directories"
+  log_info "Creating directories"
   directories+=("${wget_httpd_dir}" "${wget_download_dirs[@]}")
   create_directories
 
-  echo "⭐ Generating service certificates"
+  log_info "Generating service certificates"
   generate_service_certs
 
-  echo "⭐ Build and install 'go-fdo-client' binary"
+  log_info "Build and install 'go-fdo-client' binary"
   install_client
 
-  echo "⭐ Build and install 'go-fdo-server' binary"
+  log_info "Build and install 'go-fdo-server' binary"
   install_server
 
-  echo "⭐ Configuring services"
+  log_info "Configuring services"
   configure_services
 
-  echo "⭐ Start services"
+  log_info "Start services"
   start_services
 
-  echo "⭐ Wait for the services to be ready:"
+  log_info "Wait for the services to be ready:"
   wait_for_services_ready
 
-  echo "⭐ Prepare the wget test payload file on server side: '${wget_source_file}'"
+  log_info "Prepare the wget test payload file on server side: '${wget_source_file}'"
   prepare_payload "${wget_source_file}"
 
-  echo "⭐ Setting or updating Rendezvous Info (RendezvousInfo)"
+  log_info "Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
-  echo "⭐ Run Device Initialization for Device 1"
+  log_info "Run Device Initialization for Device 1"
   run_device_initialization
 
   guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device 1 initialized with GUID: ${guid}"
+  log_info "Device 1 initialized with GUID: ${guid}"
 
-  echo "⭐ Setting or updating Owner Redirect Info (RVTO2Addr)"
+  log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
   set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
 
-  echo "⭐ Sending Device 1 Ownership Voucher to the Owner"
+  log_info "Sending Device 1 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  echo "⭐ Sleeping to allow TO0 to complete"
   sleep 20
-
-  echo "⭐ Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
+  log_info "Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
 
-  echo "⭐ Verify downloaded file ${wget_device1_download_file}"
+  log_info "Verify downloaded file ${wget_device1_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device1_download_file}"
 
-  echo "⭐ Device 1 Success! ✅"
+  log_info "Device 1 Success!"
 
-  echo "⭐ Run Device Initialization For Device 2"
+  log_info "Run Device Initialization For Device 2"
   run_device_initialization
 
   guid=$(get_device_guid ${device_credentials})
-  echo "⭐ Device 2 initialized with GUID: ${guid}"
+  log_info "Device 2 initialized with GUID: ${guid}"
 
-  echo "⭐ Sending Device 2 Ownership Voucher to the Owner"
+  log_info "Sending Device 2 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  echo "⭐ Sleeping to allow TO0 to complete"
   sleep 20
-
-  echo "⭐ Stop HTTP Server to Simulate Loss of WGET Service"
+  log_info "Stop HTTP Server to Simulate Loss of WGET Service"
   stop_service "${wget_httpd_service_name}"
 
-  echo "⭐ Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" || {
-    echo "❌ Expected Device 2 onboard to fail!"
-    return 1
-  }
+  log_info "Attempt WGET with missing HTTP server, verify FSIM error occurs"
+  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" ||
+    log_error "Expected Device 2 onboard to fail!"
 
+  log_info "Verifying the error was logged"
   # verify that the wget FSIM error is logged
   find_in_log_or_fail "$(get_device_onboard_log)" "error handling device service info .*fdo\.wget:error"
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
-  echo "⭐ Restarting HTTP Server"
+  log_info "Restarting HTTP Server"
   start_service "${wget_httpd_service_name}"
   wait_for_service_ready "${wget_httpd_service_name}"
 
-  echo "⭐ Re-running FIDO Device Onboard with FSIM fdo.wget"
+  log_info "Re-running FIDO Device Onboard with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}"
 
-  echo "⭐ Verify downloaded file ${wget_device2_download_file}"
+  log_info "Verify downloaded file ${wget_device2_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device2_download_file}"
 
-  echo "⭐ Unsetting the error trap handler"
-  trap - ERR
+  log_info "Device 2 Success!"
 
-  echo "✅ Test PASS!"
+  log_info "Unsetting the error trap handler"
+  trap - ERR
+  test_pass
 }
 
 # Allow running directly
