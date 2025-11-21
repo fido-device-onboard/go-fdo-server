@@ -340,7 +340,16 @@ stop_services() {
 }
 
 install_client() {
-  go install github.com/fido-device-onboard/go-fdo-client@latest
+  # Build from local clone with RV bypass support (pr20-rv-bypass-fixes branch)
+  # TODO: Change to @latest once RV bypass is merged to upstream main
+  # Tracking: https://github.com/fido-device-onboard/go-fdo-client/pull/38
+  local client_dir="../go-fdo-client"
+  if [ -d "${client_dir}" ]; then
+    (cd "${client_dir}" && git checkout pr20-rv-bypass-fixes && go build -o "$(go env GOPATH)/bin/go-fdo-client")
+  else
+    echo "WARNING: Local go-fdo-client not found, falling back to @latest (RV bypass not supported)" >&2
+    go install github.com/fido-device-onboard/go-fdo-client@latest
+  fi
 }
 
 uninstall_client() {
@@ -391,16 +400,17 @@ set_or_update_rendezvous_info() {
   local rendezvous_dns=$3
   local rendezvous_port=$4
   local rendezvous_protocol=${5:-http}
+  local rv_bypass=${6:-false}
 
   local real_rendezvous_ip
   real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   echo "❓ Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
   if [ -z "$(get_rendezvous_info "${manufacturer_url}")" ]; then
     echo "🚧 'RendezvousInfo' not found, creating it..."
-    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
+    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}" "${rv_bypass}"
   else
-    echo "⚙ 'RendezvousInfo; found, updating it..."
-    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
+    echo "⚙ 'RendezvousInfo' found, updating it..."
+    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}" "${rv_bypass}"
   fi
   echo
 }
@@ -488,6 +498,12 @@ on_failure() {
 remove_files() {
   echo "⭐ Removing files from '${base_dir:?}'"
   rm -vrf "${base_dir:?}"/*
+}
+
+save_logs() {
+  # No-op in binary tests (logs already go to files)
+  # Overridden in container tests to save Docker logs to files
+  :
 }
 
 cleanup() {
