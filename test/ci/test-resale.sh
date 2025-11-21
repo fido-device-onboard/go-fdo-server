@@ -96,7 +96,6 @@ run_test() {
   log_info "Sending the Ownership Voucher to the New Owner"
   send_ov_to_owner "${new_owner_url}" "${new_owner_ov}"
 
-  sleep 20
   log_info "Running FIDO Device Onboard"
   run_fido_device_onboard --debug
 

@@ -93,7 +93,6 @@ run_test() {
   log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  sleep 20
   log_info "Running FIDO Device Onboard with FSIM fdo.download"
   run_fido_device_onboard --download "${device_download_dir}"
 

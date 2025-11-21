@@ -98,7 +98,6 @@ run_test() {
   log_info "Sending Device 1 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  sleep 20
   log_info "Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
   run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
 
@@ -116,7 +115,6 @@ run_test() {
   log_info "Sending Device 2 Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  sleep 20
   log_info "Stop HTTP Server to Simulate Loss of WGET Service"
   stop_service "${wget_httpd_service_name}"
 
@@ -126,7 +124,8 @@ run_test() {
 
   log_info "Verifying the error was logged"
   # verify that the wget FSIM error is logged
-  find_in_log_or_fail "$(get_device_onboard_log)" "error handling device service info .*fdo\.wget:error"
+  find_in_log "$(get_device_onboard_file_path ${guid})" "error handling device service info .*fdo\.wget:error" ||
+    log_error "The corresponding error was not logged"
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
   log_info "Restarting HTTP Server"

@@ -131,13 +131,10 @@ show_env(){
   env -0 | sort -z | tr '\0' '\n'
 }
 
-find_in_log_or_fail() {
+find_in_log() {
   local log=$1
   local pattern=$2
-  grep -q "${pattern}" "${log}" || {
-    echo "❌ '${pattern}' not found in '${log}' "
-    return 1
-  }
+  grep -q "${pattern}" "${log}"
 }
 
 create_directories() {
@@ -267,22 +264,28 @@ get_device_onboard_log() {
 }
 
 run_fido_device_onboard() {
-  log="$(get_device_onboard_log)"
-  >"${log}"
   # This logic will be removed once the go-fdo-client supports polling for TO2 completion.
-  local attempts=5
+  local attempts=15
   local i=1
+  onboarded=1
   while [ ${i} -le ${attempts} ]; do
-    run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log}"
-    if grep -q 'FIDO Device Onboard Complete' "${log}"; then
+    log_info "Waiting for FIDO Device Onboard to complete (attempt: ${i})"
+    if run_fido_device_onboard_cmd "$@"; then
+      onboarded=0
       break
     fi
     if [ ${i} -lt ${attempts} ]; then
-      sleep 10
+      sleep 5
     fi
     i=$((i+1))
   done
-  find_in_log_or_fail "${log}" 'FIDO Device Onboard Complete'
+  return ${onboarded}
+}
+
+run_fido_device_onboard_cmd() {
+  log_file="$(get_device_onboard_file_path)"
+  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
+  find_in_log "${log_file}" 'FIDO Device Onboard Complete'
 }
 
 run_go_fdo_server() {

@@ -91,7 +91,6 @@ run_test() {
   log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  sleep 20
   log_info "Prepare the upload payloads on client side: ${upload_files[*]}"
   generate_upload_files
 
