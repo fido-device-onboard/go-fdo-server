@@ -4,8 +4,7 @@ services:
    new_owner:
     container_name: new_owner
     hostname: new_owner
-    image: new_owner
-    build: ../../..
+    image: go-fdo-server
     environment:
       TZ: Europe/Madrid
     user: ${container_user}

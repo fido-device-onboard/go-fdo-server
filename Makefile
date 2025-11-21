@@ -1,6 +1,8 @@
 #! /usr/bin/make -f
 
 PROJECT         := go-fdo-server
+ARCH            := $(shell uname -m)
+COMMIT_SHORT    := $(shell git rev-parse --short HEAD)
 SOURCE_DIR      := $(CURDIR)/build/package/rpm
 SPEC_FILE_NAME  := $(PROJECT).spec
 SPEC_FILE       := $(SOURCE_DIR)/$(SPEC_FILE_NAME)
