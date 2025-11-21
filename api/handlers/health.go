@@ -6,25 +6,29 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
+	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 )
 
-type HealthResponse struct {
-	Version string `json:"version"`
-	Status  string `json:"status"`
+// GetHealth responds with the version and status (OpenAPI interface method)
+func (s *Server) GetHealth(w http.ResponseWriter, r *http.Request) {
+	response := openapi.HealthResponse{
+		Version: version.VERSION,
+		Status:  "OK",
+	}
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
-// HealthHandler responds with the version and status
+// TEMPORARY: Legacy function for tests and compatibility
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method not allowed"))
 		return
 	}
-	response := HealthResponse{
-		Version: "1.1",
-		Status:  "OK",
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	s := &Server{} // Empty server for compatibility
+	s.GetHealth(w, r)
 }
