@@ -39,7 +39,7 @@ run_test() {
   log_info "Run Device Initialization"
   run_device_initialization
 
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(get_device_guid "${device_credentials}")
   log_info "Device initialized with GUID: ${guid}"
 
   log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"

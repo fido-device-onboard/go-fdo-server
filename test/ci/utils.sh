@@ -147,27 +147,21 @@ create_directories() {
 }
 
 set_hostname() {
-  local dns
-  local ip
-  dns=$1
-  ip=$2
+  local dns=$1
+  local ip=$2
   if grep -q " ${dns}" /etc/hosts; then
-    echo "${ip} ${dns}"
     tmp_hosts=$(mktemp)
     sed "s/.* ${dns}/$ip $dns/" /etc/hosts >"${tmp_hosts}"
     sudo cp "${tmp_hosts}" /etc/hosts
     rm -f "${tmp_hosts}"
   else
-    echo "${ip} ${dns}" | sudo tee -a /etc/hosts
+    echo "${ip} ${dns}" | sudo tee -a /etc/hosts > /dev/null
   fi
 }
 
 unset_hostname() {
-  local dns
-  local ip
-  dns=$1
-  ip=$2
-  echo "${ip} ${dns}"
+  local dns=$1
+  local ip=$2
   if grep -q " ${dns}" /etc/hosts; then
     tmp_hosts=$(mktemp)
     sed "/.* ${dns}/d" /etc/hosts >"${tmp_hosts}"
@@ -253,8 +247,8 @@ wait_for_services_ready() {
 }
 
 run_go_fdo_client() {
-  mkdir -p ${credentials_dir}
-  cd ${credentials_dir}
+  mkdir -p "${credentials_dir}"
+  cd "${credentials_dir}"
   go-fdo-client "$@"
   cd - >/dev/null
 }
@@ -363,7 +357,7 @@ stop_service() {
   local service_pid_file="${service}_pid_file"
   if [[ -v "${service_pid_file}" ]] && [[ -f "${!service_pid_file}" ]]; then
     if pkill -F "${!service_pid_file}"; then
-      wait "$(cat ${!service_pid_file})" 2>/dev/null || :
+      wait "$(cat "${!service_pid_file}")" 2>/dev/null || :
     fi
   fi
 }
@@ -388,7 +382,7 @@ uninstall_client() {
 
 install_server() {
   mkdir -p "${bin_dir}"
-  make build && install -m 755 go-fdo-server ${bin_dir} && rm -f go-fdo-server
+  make build && install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
 }
 
 uninstall_server() {
