@@ -51,7 +51,7 @@ run_test() {
   trap on_failure ERR
 
   echo "⭐ Environment variables"
-  printenv|sort
+  show_env
 
   echo "⭐ Creating directories"
   # Add uploads directories to be created

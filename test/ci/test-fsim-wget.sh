@@ -56,7 +56,7 @@ run_test() {
   trap on_failure ERR
 
   echo "⭐ Environment variables"
-  printenv|sort
+  show_env
 
   echo "⭐ Creating directories"
   directories+=("${wget_httpd_dir}" "${wget_download_dirs[@]}")

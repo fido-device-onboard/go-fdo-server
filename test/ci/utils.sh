@@ -91,6 +91,10 @@ owner_https_crt="${certs_dir}/owner-http.crt"
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
+show_env(){
+  env -0 | sort -z | tr '\0' '\n'
+}
+
 find_in_log_or_fail() {
   local log=$1
   local pattern=$2

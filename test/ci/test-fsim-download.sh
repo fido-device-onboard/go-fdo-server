@@ -51,7 +51,7 @@ run_test() {
   trap on_failure ERR
 
   echo "⭐ Environment variables"
-  printenv|sort
+  show_env
 
   echo "⭐ Creating directories"
   directories+=("$owner_download_dir" "$device_download_dir")

@@ -10,7 +10,7 @@ run_test() {
   trap on_failure EXIT
 
   echo "⭐ Environment variables"
-  printenv|sort
+  show_env
 
   echo "⭐ Creating directories"
   create_directories
