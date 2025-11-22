@@ -1,0 +1,27 @@
+summary: FDO test plan
+description: Fast smoke tests + comprehensive FDO protocol testing
+
+discover:
+    how: fmf
+    test: integration
+
+provision:
+  hardware:
+    virtualization:
+      is-supported: true
+    cpu:
+      processors: ">= 2"
+    memory: ">= 6 GB"
+    disk: 20GB
+
+prepare:
+  - how: install
+    package:
+      - golang
+      - make
+      - openssl
+      - curl
+      - git
+
+execute:
+    how: tmt

@@ -3,6 +3,7 @@ description: Fast smoke tests + comprehensive FDO protocol testing
 
 discover:
     how: fmf
+    test: test-onboarding
 
 provision:
     how: virtual

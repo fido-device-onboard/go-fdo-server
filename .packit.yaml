@@ -113,6 +113,13 @@ jobs:
     packages: [go-fdo-server-fedora]
     targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
 
+  - job: tests
+    trigger: pull_request
+    identifier: e2e-fedora
+    tmt_plan: test/fmf/plans/integration
+    packages: [go-fdo-server-fedora]
+    targets: ["fedora-latest-stable", "fedora-latest", "fedora-rawhide"]
+
   # CentOS jobs
 
   - &copr_centos
