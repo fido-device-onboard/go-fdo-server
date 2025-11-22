@@ -60,7 +60,8 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("configuration file read failed: %w", err)
 			}
 		} else {
-			filename := cmd.Name() // base filename, no suffix e.g. "manufacturing"
+			// base filename, no suffix e.g. "manufacturing"
+			filename := cmd.Name()
 			viper.SetConfigName(filename)
 			for _, path := range configSearchPaths {
 				viper.AddConfigPath(path)

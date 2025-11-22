@@ -1,134 +1,88 @@
 #!/bin/bash
+# shellcheck disable=SC2034
 
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../ci/utils.sh"
 
-rpm_config_base_dir="/etc/go-fdo-server"
-rpm_sysconfig_dir="/etc/sysconfig"
+rpm_certs_base_dir="/etc/pki/go-fdo-server"
+rpm_systemd_drop_in_dir="/run/systemd/system"
 rpm_group="go-fdo-server"
-
-rpm_device_ca_user="go-fdo-server-manufacturer"
-rpm_device_ca_crt="${rpm_config_base_dir}/device-ca.crt"
-rpm_device_ca_key="${rpm_config_base_dir}/device-ca.key"
 
 rpm_manufacturer_user="go-fdo-server-manufacturer"
 rpm_manufacturer_db_type="sqlite"
 rpm_manufacturer_database_dir="/var/lib/go-fdo-server-manufacturer"
 rpm_manufacturer_db_dsn="file:${rpm_manufacturer_database_dir}/db.sqlite"
-rpm_manufacturer_sysconfig_file="${rpm_sysconfig_dir}/go-fdo-server-manufacturer"
-rpm_manufacturer_key="${rpm_config_base_dir}/manufacturer.key"
-rpm_manufacturer_crt="${rpm_config_base_dir}/manufacturer.crt"
-rpm_manufacturer_https_key="${rpm_config_base_dir}/manufacturer-https.key"
-rpm_manufacturer_https_crt="${rpm_config_base_dir}/manufacturer-https.crt"
+rpm_manufacturer_https_key="${rpm_certs_base_dir}/manufacturer-https-example.key"
+rpm_manufacturer_https_crt="${rpm_certs_base_dir}/manufacturer-https-example.crt"
 
 rpm_rendezvous_user="go-fdo-server-rendezvous"
 rpm_rendezvous_db_type="sqlite"
 rpm_rendezvous_database_dir="/var/lib/go-fdo-server-rendezvous"
 rpm_rendezvous_db_dsn="file:${rpm_rendezvous_database_dir}/db.sqlite"
-rpm_rendezvous_sysconfig_file="${rpm_sysconfig_dir}/go-fdo-server-rendezvous"
-rpm_rendezvous_https_key="${rpm_config_base_dir}/rendezvous-https.key"
-rpm_rendezvous_https_crt="${rpm_config_base_dir}/rendezvous-https.crt"
+rpm_rendezvous_https_key="${rpm_certs_base_dir}/rendezvous-https-example.key"
+rpm_rendezvous_https_crt="${rpm_certs_base_dir}/rendezvous-https-example.crt"
 
 rpm_owner_user="go-fdo-server-owner"
 rpm_owner_db_type="sqlite"
 rpm_owner_database_dir="/var/lib/go-fdo-server-owner"
 rpm_owner_db_dsn="file:${rpm_owner_database_dir}/db.sqlite"
-rpm_owner_sysconfig_file="${rpm_sysconfig_dir}/go-fdo-server-owner"
-rpm_owner_key="${rpm_config_base_dir}/owner.key"
-rpm_owner_crt="${rpm_config_base_dir}/owner.crt"
-rpm_owner_https_key="${rpm_config_base_dir}/owner-https.key"
-rpm_owner_https_crt="${rpm_config_base_dir}/owner-https.crt"
+rpm_owner_https_key="${rpm_certs_base_dir}/owner-https-example.key"
+rpm_owner_https_crt="${rpm_certs_base_dir}/owner-https-example.crt"
 
 configure_service_manufacturer() {
   sudo bash -c "
-  cp ${manufacturer_key} ${rpm_manufacturer_key}
-  cp ${manufacturer_crt} ${rpm_manufacturer_crt}
-  chown ${rpm_manufacturer_user}:${rpm_group} ${rpm_manufacturer_key} ${rpm_manufacturer_crt}
-  chmod g+r ${rpm_manufacturer_crt}
-
-  cp ${device_ca_crt} ${rpm_device_ca_crt}
-  cp ${device_ca_key} ${rpm_device_ca_key}
-
-  chown ${rpm_device_ca_user}:${rpm_group} ${rpm_device_ca_key} ${rpm_device_ca_crt}
-  chmod g+r ${rpm_device_ca_crt}
-
-  > ${rpm_manufacturer_sysconfig_file}
-  echo 'LISTEN_IP=0.0.0.0'                         >> ${rpm_manufacturer_sysconfig_file}
-  echo 'LISTEN_PORT=${manufacturer_port}'          >> ${rpm_manufacturer_sysconfig_file}
-  echo 'DATABASE_TYPE=${rpm_manufacturer_db_type}' >> ${rpm_manufacturer_sysconfig_file}
-  echo 'DATABASE_DSN=${rpm_manufacturer_db_dsn}'   >> ${rpm_manufacturer_sysconfig_file}
-  echo 'MANUFACTURER_KEY=${rpm_manufacturer_key}'  >> ${rpm_manufacturer_sysconfig_file}
-  echo 'OWNER_CRT=${rpm_owner_crt}'                >> ${rpm_manufacturer_sysconfig_file}
-  echo 'DEVICE_CA_CRT=${rpm_device_ca_crt}'        >> ${rpm_manufacturer_sysconfig_file}
-  echo 'DEVICE_CA_KEY=${rpm_device_ca_key}'        >> ${rpm_manufacturer_sysconfig_file}
-
-  # Add additional options to manufacturer if https is used
+  # Enable HTTP if https protocol is used
   if [ '${manufacturer_protocol}' = 'https' ]; then
+    mkdir -p ${rpm_certs_base_dir}
     cp ${manufacturer_https_key} ${rpm_manufacturer_https_key}
     cp ${manufacturer_https_crt} ${rpm_manufacturer_https_crt}
     chown ${rpm_manufacturer_user}:${rpm_group} ${rpm_manufacturer_https_key} ${rpm_manufacturer_https_crt}
-    additional_opts=\"--http-cert=${rpm_manufacturer_https_crt} --http-key=${rpm_manufacturer_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_manufacturer_sysconfig_file}
+    mkdir -p ${rpm_systemd_drop_in_dir}/go-fdo-server-manufacturer.service.d
+    cat <<EOF | tee ${rpm_systemd_drop_in_dir}/go-fdo-server-manufacturer.service.d/10-https.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/go-fdo-server manufacturing --http-cert=${rpm_manufacturer_https_crt} --http-key=${rpm_manufacturer_https_key}
+EOF
+    systemctl daemon-reload
   fi
   "
 }
 
 configure_service_rendezvous() {
   sudo bash -c "
-  cp ${device_ca_crt} ${rpm_device_ca_crt}
-  cp ${device_ca_key} ${rpm_device_ca_key}
-
-  chown ${rpm_device_ca_user}:${rpm_group} ${rpm_device_ca_key} ${rpm_device_ca_crt}
-  chmod g+r ${rpm_device_ca_crt}
-
-  > ${rpm_rendezvous_sysconfig_file}
-  echo 'LISTEN_IP=0.0.0.0'                       >> ${rpm_rendezvous_sysconfig_file}
-  echo 'LISTEN_PORT=${rendezvous_port}'          >> ${rpm_rendezvous_sysconfig_file}
-  echo 'DATABASE_TYPE=${rpm_rendezvous_db_type}' >> ${rpm_rendezvous_sysconfig_file}
-  echo 'DATABASE_DSN=${rpm_rendezvous_db_dsn}'   >> ${rpm_rendezvous_sysconfig_file}
-
-  # Add additional options to rendezvous if https is used
+  # Enable HTTP if https protocol is used
   if [ '${rendezvous_protocol}' = 'https' ]; then
+    mkdir -p ${rpm_certs_base_dir}
     cp ${rendezvous_https_key} ${rpm_rendezvous_https_key}
     cp ${rendezvous_https_crt} ${rpm_rendezvous_https_crt}
     chown ${rpm_rendezvous_user}:${rpm_group} ${rpm_rendezvous_https_key} ${rpm_rendezvous_https_crt}
-    additional_opts=\"--http-cert=${rpm_rendezvous_https_crt} --http-key=${rpm_rendezvous_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_rendezvous_sysconfig_file}
+    mkdir -p ${rpm_systemd_drop_in_dir}/go-fdo-server-rendezvous.service.d
+    cat <<EOF | tee ${rpm_systemd_drop_in_dir}/go-fdo-server-rendezvous.service.d/10-https.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/go-fdo-server rendezvous --http-cert=${rpm_rendezvous_https_crt} --http-key=${rpm_rendezvous_https_key}
+EOF
+    systemctl daemon-reload
   fi
   "
 }
 
-
 configure_service_owner() {
   sudo bash -c "
-  cp ${owner_key} ${rpm_owner_key}
-  cp ${owner_crt} ${rpm_owner_crt}
-  chown ${rpm_owner_user}:${rpm_group} ${rpm_owner_key} ${rpm_owner_crt}
-  chmod g+r ${rpm_owner_crt}
-
-  cp ${device_ca_crt} ${rpm_device_ca_crt}
-  cp ${device_ca_key} ${rpm_device_ca_key}
-
-  chown ${rpm_device_ca_user}:${rpm_group} ${rpm_device_ca_key} ${rpm_device_ca_crt}
-  chmod g+r ${rpm_device_ca_crt}
-
-  > ${rpm_owner_sysconfig_file}
-  echo 'LISTEN_IP=0.0.0.0'                  >> ${rpm_owner_sysconfig_file}
-  echo 'LISTEN_PORT=${owner_port}'          >> ${rpm_owner_sysconfig_file}
-  echo 'DATABASE_TYPE=${rpm_owner_db_type}' >> ${rpm_owner_sysconfig_file}
-  echo 'DATABASE_DSN=${rpm_owner_db_dsn}'   >> ${rpm_owner_sysconfig_file}
-  echo 'OWNER_KEY=${rpm_owner_key}'         >> ${rpm_owner_sysconfig_file}
-  echo 'OWNER_CRT=${rpm_owner_crt}'         >> ${rpm_owner_sysconfig_file}
-  echo 'DEVICE_CA_CRT=${rpm_device_ca_crt}' >> ${rpm_owner_sysconfig_file}
-
-  # Add additional options to owner if https is used
+  # Enable HTTP if https protocol is used
   if [ '${owner_protocol}' = 'https' ]; then
+    mkdir -p ${rpm_certs_base_dir}
     cp ${owner_https_key} ${rpm_owner_https_key}
     cp ${owner_https_crt} ${rpm_owner_https_crt}
     chown ${rpm_owner_user}:${rpm_group} ${rpm_owner_https_key} ${rpm_owner_https_crt}
-    additional_opts=\"--http-cert=${rpm_owner_https_crt} --http-key=${rpm_owner_https_key} --to0-insecure-tls\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_owner_sysconfig_file}
+    mkdir -p ${rpm_systemd_drop_in_dir}/go-fdo-server-owner.service.d
+    cat <<EOF | tee ${rpm_systemd_drop_in_dir}/go-fdo-server-owner.service.d/10-https.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/go-fdo-server owner --http-cert=${rpm_owner_https_crt} --http-key=${rpm_owner_https_key} --to0-insecure-tls
+EOF
+    systemctl daemon-reload
   fi
   "
 }
@@ -169,6 +123,12 @@ install_server() {
 
 uninstall_server() {
   [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-server{,-manufacturer,-owner,-rendezvous}
+}
+
+# Default cert/keys for FDO and the Device CA are automatically
+# generated by systemd on service start if they do not exist.
+generate_service_certs() {
+  return 0
 }
 
 start_service_manufacturer() {
@@ -268,19 +228,33 @@ save_logs() {
   fi
 }
 
+cleanup_drop_ins() {
+  local reload_systemd=0
+  for service in rendezvous manufacturer owner; do
+    local drop_in_dir="${rpm_systemd_drop_in_dir:?}/go-fdo-server-${service}.service.d"
+    if [[ -d "${drop_in_dir}" ]]; then
+      reload_systemd=1
+      sudo rm -vrf "${drop_in_dir}"
+    fi
+  done
+  if [[ ${reload_systemd} -eq 1 ]]; then
+    sudo systemctl daemon-reload
+  fi
+}
+
 remove_files() {
   echo "⭐ Removing files from '${base_dir:?}'"
   sudo rm -vrf "${base_dir:?}"/*
-  echo "⭐ Removing files from '${rpm_sysconfig_dir}'"
-  sudo rm -vf "${rpm_sysconfig_dir:?}/go-fdo-server"/*
-  echo "⭐ Removing files from '${rpm_config_base_dir}'"
-  sudo rm -vf "${rpm_config_base_dir:?}"/*
+  echo "⭐ Removing files from '${rpm_certs_base_dir}'"
+  sudo rm -vf "${rpm_certs_base_dir:?}"/*
   echo "⭐ Removing files from '${rpm_manufacturer_database_dir}'"
   sudo rm -vf "${rpm_manufacturer_database_dir:?}"/*
   echo "⭐ Removing files from '${rpm_rendezvous_database_dir}'"
   sudo rm -vf "${rpm_rendezvous_database_dir:?}"/*
   echo "⭐ Removing files from '${rpm_owner_database_dir}'"
   sudo rm -vf "${rpm_owner_database_dir:?}"/*
+  echo "⭐ Removing systemd drop-in files"
+  cleanup_drop_ins
 }
 
 on_failure() {
