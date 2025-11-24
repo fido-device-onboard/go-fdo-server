@@ -56,7 +56,7 @@ actions:
       bash -xc '
       #! /bin/bash
       export GOTOOLCHAIN=auto
-      export BASE_DIR=${PACKIT_UPSTREAM_REPO}/build/package/rpm
+      export BASE_DIR=build/package/rpm
       export GO_VENDOR_TOOLS_CONFIG=${BASE_DIR}/go-vendor-tools.toml
       export SPEC_FILE=${BASE_DIR}/go-fdo-server.spec
       go_vendor_archive create --config ${GO_VENDOR_TOOLS_CONFIG} ${SPEC_FILE}
