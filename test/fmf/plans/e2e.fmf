@@ -12,11 +12,20 @@ provision:
 prepare:
   - how: shell
     script: |
-      # Enable COPR to get go-fdo-client
-      dnf install -y 'dnf-command(copr)'
-      dnf copr enable -y @fedora-iot/fedora-iot
-      dnf install -y go-fdo-client
+      rpm -q --whatprovides 'dnf-command(copr)' &> /dev/null || dnf install -y 'dnf-command(copr)'
+      dnf copr list | grep 'fedora-iot/fedora-iot' || {
+        . /etc/os-release
+        if [ "${ID}" = "centos" ]; then
+          dnf copr enable -y '@fedora-iot/fedora-iot' ${ID}-stream-${ID_VERSION}
+        else
+          dnf copr enable -y '@fedora-iot/fedora-iot'
+        fi
+      }
+      # testing-farm-tag-repository is causing problems with builds see:
+      # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
+      dnf install --disablerepo=testing-farm-tag-repository -y go-fdo-client
       dnf copr disable -y @fedora-iot/fedora-iot
+
   - how: install
     package:
       - golang

@@ -136,8 +136,10 @@ configure_service_owner() {
 install_from_copr() {
   rpm -q --whatprovides 'dnf-command(copr)' &> /dev/null || sudo dnf install -y 'dnf-command(copr)'
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
-  sudo dnf install -y "${@}"
-  dnf copr remove -y @fedora-iot/fedora-iot
+  # testing-farm-tag-repository is causing problems with builds see:
+  # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
+  sudo dnf install -y "$@"
+  sudo dnf copr disable -y @fedora-iot/fedora-iot
 }
 
 install_client() {
@@ -147,7 +149,12 @@ install_client() {
 }
 
 uninstall_client() {
-  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-client
+  # When running a test locally we remove the client package
+  # after a successful execution.
+  [ -v "PACKIT_COPR_RPMS" ] || {
+    sudo dnf remove -y go-fdo-client;
+    sudo dnf copr remove -y @fedora-iot/fedora-iot;
+  }
 }
 
 install_server() {
