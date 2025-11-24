@@ -297,7 +297,7 @@ on_failure() {
 }
 
 cleanup() {
-  save_logs
+  [ ! -v "PACKIT_COPR_RPMS" ] || save_logs
   stop_services
   unset_hostnames
   uninstall_server
