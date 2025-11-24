@@ -42,9 +42,7 @@ run_test() {
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
 
   log_info "Run Device Initialization"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
 
   log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
@@ -56,16 +54,16 @@ run_test() {
   # TODO: once we have an infinite loop in the client, we should just confirm that the onboarding process is just stuck until the rendezvous is started
   # This mimics the client reaching out to the rendezvous and getting a not found cause to0 is not done yet.
   log_info "Attempting device onboarding before rendezvous is started (expect 'ERROR: TO1 failed')"
-  ! run_fido_device_onboard --debug || log_error "Onboarding expected to fail"
+  ! run_fido_device_onboard "${guid}" --debug || log_error "Onboarding expected to fail"
 
-  find_in_log "$(get_device_onboard_file_path "${guid}")" "ERROR: TO1 failed" || log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
+  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "ERROR: TO1 failed" || log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
 
   log_info "Now starting rendezvous"
   start_service_rendezvous
   wait_for_service_ready rendezvous
 
   log_info "Running FIDO Device Onboard with retries until rendezvous/TO0 become available"
-  run_fido_device_onboard --debug || log_error "Device onboarding did not complete successfully after rendezvous start"
+  run_fido_device_onboard "${guid}" --debug || log_error "Device onboarding did not complete successfully after rendezvous start"
 
   log_info "Unsetting the error trap handler"
   trap - ERR

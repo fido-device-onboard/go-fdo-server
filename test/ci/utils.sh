@@ -11,7 +11,6 @@ pid_dir="${base_dir}/run"
 logs_dir="${base_dir}/logs"
 certs_dir="${base_dir}/certs"
 credentials_dir="${base_dir}/device-credentials"
-device_credentials="${credentials_dir}/creds.bin"
 
 device_ca_key="${certs_dir}/device_ca.key"
 device_ca_crt="${device_ca_key/\.key/.crt}"
@@ -251,16 +250,34 @@ run_go_fdo_client() {
 }
 
 run_device_initialization() {
-  [ ! -f "${device_credentials}" ] || rm -f "${device_credentials}"
-  run_go_fdo_client --blob "${device_credentials}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256 --insecure-tls=true
+  local tmp_credentials_file="$(mktemp --tmpdir="${credentials_dir}")"
+  local tmp_log_file="$(mktemp --tmpdir="${logs_dir}")"}
+  run_go_fdo_client --blob "${tmp_credentials_file}" --debug device-init "${manufacturer_url}" --device-info=gotest --key ec256 --insecure-tls=true | tee -a ${tmp_log_file} >&2
+  guid=$(run_go_fdo_client --blob "${tmp_credentials_file}" print | grep GUID | awk '{print $2}')
+  local device_credentials="$(get_device_credentials_file_path "${guid}")"
+  local log_file="$(get_device_onboard_log_file_path "${guid}")"
+  mv "${tmp_credentials_file}" "${device_credentials}"
+  mv "${tmp_log_file}" "${log_file}"
+  echo "${guid}"
 }
 
-get_device_guid() {
-  run_go_fdo_client --blob "${device_credentials}" print | grep GUID | awk '{print $2}'
+get_device_init_log_file_path() {
+  guid=${1}
+  [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
+  echo "${logs_dir}/${guid}-device-onboard.log"
 }
 
-get_device_onboard_log() {
-  echo "${logs_dir}/onboarding-device-$(get_device_guid).log"
+get_device_credentials_file_path() {
+  guid=${1}
+  [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
+  echo "${credentials_dir}/${guid}.creds"
+}
+
+get_device_onboard_log_file_path() {
+  guid=${1}
+  [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
+  [ -n "${guid}" ] || log_error "Device guid required as first argument"
+  echo "${logs_dir}/${guid}-device-onboard.log"
 }
 
 run_fido_device_onboard() {
@@ -283,8 +300,11 @@ run_fido_device_onboard() {
 }
 
 run_fido_device_onboard_cmd() {
-  log_file="$(get_device_onboard_file_path)"
-  run_go_fdo_client --blob "${device_credentials}" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
+  local guid=$1
+  shift
+  [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
+  local log_file="$(get_device_onboard_log_file_path "${guid}")"
+  run_go_fdo_client --blob "$(get_device_credentials_file_path ${guid})" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
   find_in_log "${log_file}" 'FIDO Device Onboard Complete'
 }
 

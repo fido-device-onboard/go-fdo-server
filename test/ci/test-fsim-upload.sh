@@ -80,9 +80,7 @@ run_test() {
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   log_info "Run Device Initialization"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
 
   log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
@@ -95,7 +93,7 @@ run_test() {
   generate_upload_files
 
   log_info "Running FIDO Device Onboard with FSIM fdo.upload"
-  run_fido_device_onboard --upload "/"
+  run_fido_device_onboard "${guid}" --upload "/"
 
   log_info "Verify uploaded files"
   verify_uploads

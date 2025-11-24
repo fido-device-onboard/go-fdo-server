@@ -87,9 +87,7 @@ run_test() {
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   log_info "Run Device Initialization for Device 1"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(run_device_initialization)
   log_info "Device 1 initialized with GUID: ${guid}"
 
   log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
@@ -99,7 +97,7 @@ run_test() {
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   log_info "Running FIDO Device Onboard for Device 1 with FSIM fdo.wget"
-  run_fido_device_onboard --debug --wget-dir "${wget_device1_download_dir}"
+  run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device1_download_dir}"
 
   log_info "Verify downloaded file ${wget_device1_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device1_download_file}"
@@ -107,9 +105,7 @@ run_test() {
   log_info "Device 1 Success!"
 
   log_info "Run Device Initialization For Device 2"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(run_device_initialization)
   log_info "Device 2 initialized with GUID: ${guid}"
 
   log_info "Sending Device 2 Ownership Voucher to the Owner"
@@ -119,12 +115,12 @@ run_test() {
   stop_service "${wget_httpd_service_name}"
 
   log_info "Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  ! run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}" ||
+  ! run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device2_download_dir}" ||
     log_error "Expected Device 2 onboard to fail!"
 
   log_info "Verifying the error was logged"
   # verify that the wget FSIM error is logged
-  find_in_log "$(get_device_onboard_file_path ${guid})" "error handling device service info .*fdo\.wget:error" ||
+  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "error handling device service info .*fdo\.wget:error" ||
     log_error "The corresponding error was not logged"
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
@@ -133,7 +129,7 @@ run_test() {
   wait_for_service_ready "${wget_httpd_service_name}"
 
   log_info "Re-running FIDO Device Onboard with FSIM fdo.wget"
-  run_fido_device_onboard --debug --wget-dir "${wget_device2_download_dir}"
+  run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device2_download_dir}"
 
   log_info "Verify downloaded file ${wget_device2_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device2_download_file}"

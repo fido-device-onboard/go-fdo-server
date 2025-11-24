@@ -39,9 +39,7 @@ run_test () {
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   log_info "Run Device Initialization"
-  run_device_initialization
-
-  guid=$(get_device_guid ${device_credentials})
+  guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
 
   log_info "Get valid voucher from manufacturer"

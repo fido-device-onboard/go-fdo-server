@@ -37,9 +37,7 @@ run_test() {
   set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
 
   log_info "Run Device Initialization"
-  run_device_initialization
-
-  guid=$(get_device_guid "${device_credentials}")
+  guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
 
   log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
@@ -49,7 +47,7 @@ run_test() {
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   log_info "Running FIDO Device Onboard"
-  run_fido_device_onboard --debug || log_error "Onboarding failed!"
+  run_fido_device_onboard ${guid} --debug || log_error "Onboarding failed!"
 
   log_info "Unsetting the error trap handler"
   trap - EXIT
