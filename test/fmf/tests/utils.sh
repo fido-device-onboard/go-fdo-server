@@ -63,14 +63,15 @@ configure_service_manufacturer() {
   echo 'DEVICE_CA_CRT=${rpm_device_ca_crt}'        >> ${rpm_manufacturer_sysconfig_file}
   echo 'DEVICE_CA_KEY=${rpm_device_ca_key}'        >> ${rpm_manufacturer_sysconfig_file}
 
+  additional_opts='--log-level=debug'
   # Add additional options to manufacturer if https is used
   if [ '${manufacturer_protocol}' = 'https' ]; then
     cp ${manufacturer_https_key} ${rpm_manufacturer_https_key}
     cp ${manufacturer_https_crt} ${rpm_manufacturer_https_crt}
     chown ${rpm_manufacturer_user}:${rpm_group} ${rpm_manufacturer_https_key} ${rpm_manufacturer_https_crt}
-    additional_opts=\"--http-cert=${rpm_manufacturer_https_crt} --http-key=${rpm_manufacturer_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_manufacturer_sysconfig_file}
+    additional_opts=\"\${additional_opts} --http-cert=${rpm_manufacturer_https_crt} --http-key=${rpm_manufacturer_https_key}\"
   fi
+  echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_manufacturer_sysconfig_file}
   "
 }
 
@@ -88,14 +89,15 @@ configure_service_rendezvous() {
   echo 'DATABASE_TYPE=${rpm_rendezvous_db_type}' >> ${rpm_rendezvous_sysconfig_file}
   echo 'DATABASE_DSN=${rpm_rendezvous_db_dsn}'   >> ${rpm_rendezvous_sysconfig_file}
 
+  additional_opts='--log-level=debug'
   # Add additional options to rendezvous if https is used
   if [ '${rendezvous_protocol}' = 'https' ]; then
     cp ${rendezvous_https_key} ${rpm_rendezvous_https_key}
     cp ${rendezvous_https_crt} ${rpm_rendezvous_https_crt}
     chown ${rpm_rendezvous_user}:${rpm_group} ${rpm_rendezvous_https_key} ${rpm_rendezvous_https_crt}
-    additional_opts=\"--http-cert=${rpm_rendezvous_https_crt} --http-key=${rpm_rendezvous_https_key}\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_rendezvous_sysconfig_file}
+    additional_opts=\"\${additional_opts} --http-cert=${rpm_rendezvous_https_crt} --http-key=${rpm_rendezvous_https_key}\"
   fi
+  echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_rendezvous_sysconfig_file}
   "
 }
 
@@ -122,14 +124,15 @@ configure_service_owner() {
   echo 'OWNER_CRT=${rpm_owner_crt}'         >> ${rpm_owner_sysconfig_file}
   echo 'DEVICE_CA_CRT=${rpm_device_ca_crt}' >> ${rpm_owner_sysconfig_file}
 
+  additional_opts='--log-level=debug'
   # Add additional options to owner if https is used
   if [ '${owner_protocol}' = 'https' ]; then
     cp ${owner_https_key} ${rpm_owner_https_key}
     cp ${owner_https_crt} ${rpm_owner_https_crt}
     chown ${rpm_owner_user}:${rpm_group} ${rpm_owner_https_key} ${rpm_owner_https_crt}
-    additional_opts=\"--http-cert=${rpm_owner_https_crt} --http-key=${rpm_owner_https_key} --to0-insecure-tls\"
-    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_owner_sysconfig_file}
+    additional_opts=\"\${additional_opts} --http-cert=${rpm_owner_https_crt} --http-key=${rpm_owner_https_key} --to0-insecure-tls\"
   fi
+    echo ADDITIONAL_OPTS=\\\"\${additional_opts}\\\" >> ${rpm_owner_sysconfig_file}
   "
 }
 
