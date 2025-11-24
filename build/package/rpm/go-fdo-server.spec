@@ -3,7 +3,6 @@
 
 # https://github.com/fido-device-onboard/go-fdo-server
 %global goipath         github.com/fido-device-onboard/go-fdo-server
-%global commit          e48986e6b56ae67f738a2543b5bd2a01e016668c
 
 %global debug_package   %{nil}
 
@@ -46,7 +45,7 @@ devices when they are first powered on in their final location.
 
 %build
 %global gomodulesmode GO111MODULE=on
-export LDFLAGS="-X %{goipath}/internal/version.VERSION=%{commit}"
+export LDFLAGS="-X %{goipath}/internal/version.VERSION=%{version}"
 %gobuild -o %{gobuilddir}/bin/go-fdo-server %{goipath}
 
 %install

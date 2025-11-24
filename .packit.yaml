@@ -39,18 +39,6 @@ packages:
     pkg_tool: centpkg
 
 actions:
-  fix-spec-file:
-    - |
-      bash -xc '
-      #! /bin/bash
-      export BASE_DIR=build/package/rpm
-      export SPEC_FILE=${BASE_DIR}/go-fdo-server.spec
-      # We need the full commit hash
-      export COMMIT=$(git rev-parse ${PACKIT_PROJECT_COMMIT})
-      sed -i "s/^%global commit\(\s*\).*/%global commit\1${COMMIT}/" ${SPEC_FILE}
-      sed -i "s/^Version:\(\s*\).*/Version:\1${PACKIT_PROJECT_VERSION}/" ${SPEC_FILE}
-      sed -i "s/^Release:\(\s*\).*/Release:\1${PACKIT_RPMSPEC_RELEASE}%{?dist}/" ${SPEC_FILE}
-      '
   post-modifications:
     # https://fedora.gitlab.io/sigs/go/go-vendor-tools/scenarios/#manual-update
     - |

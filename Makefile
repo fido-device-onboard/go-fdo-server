@@ -6,10 +6,8 @@ COMMIT_SHORT    := $(shell git rev-parse --short HEAD)
 SOURCE_DIR      := $(CURDIR)/build/package/rpm
 SPEC_FILE_NAME  := $(PROJECT).spec
 SPEC_FILE       := $(SOURCE_DIR)/$(SPEC_FILE_NAME)
-COMMIT          := $(shell git rev-parse HEAD)
-COMMIT_SHORT    := $(shell git rev-parse --short HEAD)
-VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}')
-ARCH            := $(shell uname -m)
+VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}').git$(COMMIT_SHORT)
+
 
 # Default target
 all: build test
@@ -42,17 +40,17 @@ test:
 #
 # Generating sources and vendor tar files
 #
-SOURCE_TARBALL_FILENAME    := go-fdo-server-$(COMMIT).tar.gz
+SOURCE_TARBALL_FILENAME    := go-fdo-server-$(VERSION).tar.gz
 SOURCE_TARBALL             := $(SOURCE_DIR)/${SOURCE_TARBALL_FILENAME}
 $(SOURCE_TARBALL):
-	git archive --prefix=go-fdo-server-$(COMMIT)/ --format=tar.gz HEAD > $(SOURCE_TARBALL)
+	git archive --prefix=go-fdo-server-$(VERSION)/ --format=tar.gz HEAD > $(SOURCE_TARBALL)
 
 .PHONY: source-tarball
 source-tarball: $(SOURCE_TARBALL)
 
 GO_VENDOR_TOOLS_FILE_NAME  := go-vendor-tools.toml
 GO_VENDOR_TOOLS_FILE       := $(SOURCE_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-VENDOR_TARBALL_FILENAME    := go-fdo-server-$(COMMIT)-vendor.tar.bz2
+VENDOR_TARBALL_FILENAME    := go-fdo-server-$(VERSION)-vendor.tar.bz2
 VENDOR_TARBALL             := $(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
 $(VENDOR_TARBALL):
 	rm -rf vendor; \
@@ -96,7 +94,7 @@ RPMBUILD_SRPMS_DIR                    := $(RPMBUILD_TOP_DIR)/srpms
 RPMBUILD_BUILD_DIR                    := $(RPMBUILD_TOP_DIR)/build
 RPMBUILD_BUILDROOT_DIR                := $(RPMBUILD_TOP_DIR)/buildroot
 RPMBUILD_GOLANG_VENDOR_TOOLS_FILE     := $(RPMBUILD_SOURCES_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/go-fdo-server-$(COMMIT).spec
+RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/go-fdo-server-$(VERSION).spec
 RPMBUILD_TARBALL                      := $(RPMBUILD_SOURCES_DIR)/$(SOURCE_TARBALL_FILENAME)
 RPMBUILD_VENDOR_TARBALL               := ${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
 RPMBUILD_GROUP_FILE                   := $(RPMBUILD_SOURCES_DIR)/$(GROUP_FILE_NAME)
@@ -109,8 +107,7 @@ RPMBUILD_RPM_FILE                     := $(RPMBUILD_RPMS_DIR)/$(ARCH)/$(PROJECT)
 
 $(RPMBUILD_SPECFILE):
 	mkdir -p $(RPMBUILD_SPECS_DIR)
-	sed -e "s/^%global commit\(\s*\).*/%global commit\1$(COMMIT)/;" \
-		  -e "s/^Release:\(\s*\).*/Release:\1git$(COMMIT_SHORT)/;" \
+	sed -e "s/^Version:\(\s*\).*/Version:\1$(VERSION)/;" \
 	    $(SPEC_FILE) > $(RPMBUILD_SPECFILE)
 
 $(RPMBUILD_TARBALL): $(SOURCE_TARBALL) $(VENDOR_TARBALL)
