@@ -62,12 +62,12 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 				context.Background(), makeTransport(url.String(), nil, insecureTLS), guid, to2Addrs,
 			)
 			if err != nil {
-				slog.Error("failed to", "connect", url.String())
+				slog.Error("failed registering 'RVTO2Addr' to rendezvous server", "url", url.String(), "error", err)
 				continue
 			}
-			slog.Info("to0 refresh", "duration", time.Duration(refresh)*time.Second)
+			slog.Info("successfully registered 'RVTO2Addr' to rendezvous server", "url", url.String(), "duration", time.Duration(refresh)*time.Second)
 			return refresh, nil
 		}
 	}
-	return 0, nil
+	return 0, fmt.Errorf("unable to register any 'RVTO2Addr' URL for guid='%s'", guid)
 }

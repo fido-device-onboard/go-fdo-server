@@ -341,7 +341,7 @@ func serveOwner(config *OwnerServerConfig) error {
 			// Fetch vouchers that still need TO2
 			vouchers, err := db.ListPendingTO0Vouchers(true)
 			if err != nil {
-				slog.Debug("to0 scheduler: list pending vouchers failed", "err", err)
+				slog.Warn("to0 scheduler: list pending vouchers failed", "err", err)
 				<-ticker.C
 				continue
 			}
@@ -350,14 +350,14 @@ func serveOwner(config *OwnerServerConfig) error {
 				// Parse voucher to get GUID and RVInfo
 				var ov fdo.Voucher
 				if err := cbor.Unmarshal(v.CBOR, &ov); err != nil {
-					slog.Debug("to0 scheduler: unmarshal voucher failed", "err", err)
+					slog.Warn("to0 scheduler: unmarshal voucher failed", "err", err)
 					continue
 				}
 				guidHex := hex.EncodeToString(ov.Header.Val.GUID[:])
 				// Skip if already completed
 				completed, err := db.IsTO2Completed(ov.Header.Val.GUID[:])
 				if err != nil {
-					slog.Debug("to0 scheduler: to2 completion check failed", "guid", guidHex, "err", err)
+					slog.Warn("to0 scheduler: to2 completion check failed", "guid", guidHex, "err", err)
 					continue
 				}
 				if completed {
@@ -371,13 +371,14 @@ func serveOwner(config *OwnerServerConfig) error {
 				refresh, err := to0.RegisterRvBlob(ov.Header.Val.RvInfo, guidHex, state.DB, state, config.Owner.TO0InsecureTLS, defaultTo0TTL)
 				if err != nil {
 					// On failure, retry after 60s
-					nextTry[guidHex] = now.Add(60 * time.Second)
-					slog.Debug("to0 scheduler: to0 register failed", "guid", guidHex, "err", err)
+					nextTry[guidHex] = now.Add(10 * time.Second)
+					slog.Warn("to0 scheduler: register 'RV2TO0Addr' failed", "guid", guidHex, "err", err)
 					continue
 				}
 				if refresh == 0 {
 					refresh = defaultTo0TTL
 				}
+				slog.Debug("to0 scheduler: register 'RV2TO0Addr' completed", "guid", guidHex, "refresh", refresh)
 				nextTry[guidHex] = now.Add(time.Duration(refresh) * time.Second)
 			}
 			<-ticker.C
