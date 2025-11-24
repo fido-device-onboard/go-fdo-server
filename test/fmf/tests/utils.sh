@@ -211,7 +211,7 @@ stop_service_owner() {
 
 get_go_fdo_server_logs() {
   local role=$1
-  journalctl_args=("--no-pager" "--unit" "go-fdo-server-${role}")
+  journalctl_args=("--no-pager" "--output=cat" "--unit" "go-fdo-server-${role}")
   . /etc/os-release
   [[ "${ID}" = "centos" && "${VERSION_ID}" = "9" ]] || journalctl_args+=("--invocation=0")
   systemctl status "go-fdo-server-${role}.service" || true
