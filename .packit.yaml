@@ -11,6 +11,8 @@ files_to_sync:
       - "build/package/rpm/go-fdo-server.spec"
       - "build/package/rpm/go-vendor-tools.toml"
       - "build/package/rpm/go-fdo-server-*-vendor.tar.bz2"
+      - "build/package/rpm/go-fdo-server-group.conf"
+      - "build/package/rpm/go-fdo-server-*-user.conf"
     dest: .
 
 upstream_package_name: go-fdo-server
@@ -39,6 +41,8 @@ packages:
     pkg_tool: centpkg
 
 actions:
+  pre-sync:
+    - bash -c "make vendor-tarball VERSION=${PACKIT_PROJECT_VERSION}"
   post-modifications:
     # https://fedora.gitlab.io/sigs/go/go-vendor-tools/scenarios/#manual-update
     - |
