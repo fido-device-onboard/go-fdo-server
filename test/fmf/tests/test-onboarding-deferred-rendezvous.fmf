@@ -4,7 +4,7 @@ description: |
     Confirms device onboarding attempts fail (not found / rendezvous unavailable),
     then starts rendezvous and verifies TO0 completes and onboarding succeeds.
 
-test: ./test-onboarding-deferred-rendezvous.sh
+test: ../../rpm/test-onboarding-deferred-rendezvous.sh
 
 framework: shell
 

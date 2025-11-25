@@ -7,7 +7,7 @@ description: |
     - ServiceInfo module testing
     - Protocol validation
 
-test: ./test-onboarding.sh
+test: ../../rpm/test-onboarding.sh
 
 framework: shell
 
