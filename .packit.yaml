@@ -8,7 +8,6 @@ merge_pr_in_ci: false
 files_to_sync:
   - src:
       - "build/package/rpm/go-fdo-server.spec"
-      - "build/package/rpm/go-vendor-tools.toml"
       - "build/package/rpm/go-fdo-server-group.conf"
       - "build/package/rpm/go-fdo-server-*-user.conf"
       - "build/package/rpm/go-fdo-server-*-vendor.tar.bz2"
