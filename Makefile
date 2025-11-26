@@ -12,6 +12,53 @@ VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2
 # Default target
 all: build test
 
+#
+# OpenAPI Code Generation
+#
+OPENAPI_SPEC := api/openapi/owner-server.yaml
+GENERATED_DIR := generated
+
+.PHONY: validate-openapi
+validate-openapi:
+	@echo "Validating OpenAPI specification..."
+	@command -v openapi-generator >/dev/null 2>&1 || { \
+		echo "Error: openapi-generator CLI not found. Please install it first:"; \
+		echo "  npm install @openapitools/openapi-generator-cli -g"; \
+		echo "  or"; \
+		echo "  brew install openapi-generator"; \
+		exit 1; \
+	}
+	openapi-generator validate -i $(OPENAPI_SPEC)
+
+.PHONY: generate-api
+generate-api: validate-openapi
+	@echo "Generating Go server and client code from OpenAPI specification..."
+	@mkdir -p $(GENERATED_DIR)/server $(GENERATED_DIR)/client
+	openapi-generator generate \
+		-i $(OPENAPI_SPEC) \
+		-g go-server \
+		-o $(GENERATED_DIR)/server \
+		--additional-properties=packageName=openapi,outputAsLibrary=true,sourceFolder=src/main/go
+	openapi-generator generate \
+		-i $(OPENAPI_SPEC) \
+		-g go \
+		-o $(GENERATED_DIR)/client \
+		--additional-properties=packageName=client
+
+.PHONY: clean-generated
+clean-generated:
+	@echo "Cleaning generated OpenAPI code..."
+	rm -rf $(GENERATED_DIR)
+
+.PHONY: openapi-docs
+openapi-docs:
+	@echo "Starting OpenAPI documentation server..."
+	@command -v swagger-ui-serve >/dev/null 2>&1 || { \
+		echo "Installing swagger-ui-serve..."; \
+		npm install -g swagger-ui-serve; \
+	}
+	swagger-ui-serve $(OPENAPI_SPEC)
+
 # Build the Go project
 .PHONY: build
 build: tidy fmt vet
