@@ -1,0 +1,20 @@
+services:
+  go-fdo-client:
+    container_name: go-fdo-client
+    hostname: go-fdo-client
+    image: go-fdo-client
+    # Build from local go-fdo-client directory with RV bypass support
+    # Path is relative to this compose file: deployments/compose/client/
+    # ../../../ goes to project root, then ../go-fdo-client to sibling dir
+    build: ../../../../go-fdo-client
+    working_dir: ${container_working_dir:-/workdir}/device-credentials
+    user: "${container_user}"
+    networks:
+      - fdo
+    volumes:
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
+    restart: no
+networks:
+  fdo:
+    name: fdo
+    external: true

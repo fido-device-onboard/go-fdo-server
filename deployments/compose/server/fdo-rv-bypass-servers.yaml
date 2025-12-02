@@ -1,0 +1,66 @@
+include:
+  - fdo-networks.yaml
+services:
+  manufacturer:
+    container_name: manufacturer
+    hostname: manufacturer
+    image: manufacturer
+    build: ../../..
+    environment:
+      TZ: Europe/Madrid
+    user: ${container_user}
+    command:
+     - --db-type=sqlite
+     - --db-dsn=file:${container_working_dir:-/workdir}/manufacturer.db
+     - --log-level=debug
+     - manufacturing
+     - manufacturer:8038
+     - --manufacturing-key=${container_working_dir:-/workdir}/certs/manufacturer.key
+     - --owner-cert=${container_working_dir:-/workdir}/certs/owner.crt
+     - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+     - --device-ca-key=${container_working_dir:-/workdir}/certs/device_ca.key
+    working_dir: ${container_working_dir:-/workdir}
+    volumes:
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
+    networks:
+      - fdo
+    ports:
+      - 8038:8038
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://manufacturer:8038/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+
+  owner:
+    container_name: owner
+    hostname: owner
+    image: owner
+    build: ../../..
+    environment:
+      TZ: Europe/Madrid
+    user: ${container_user}
+    command:
+      - --db-type=sqlite
+      - --db-dsn=file:${container_working_dir:-/workdir}/owner.db
+      - --log-level=debug
+      - owner
+      - owner:8043
+      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
+    working_dir: ${container_working_dir:-/workdir}
+    volumes:
+      - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
+    networks:
+      - fdo
+    ports:
+      - 8043:8043
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl --silent --output /dev/null --fail http://owner:8043/health" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s

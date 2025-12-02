@@ -14,7 +14,8 @@ set_rendezvous_info () {
   local rendezvous_ip=$3
   local rendezvous_port=$4
   local rendezvous_protocol=$5
-  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+  local rv_bypass=$([[ "${6}" == "true" ]] && echo true || echo false)
+  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\", \"rv_bypass\": ${rv_bypass}}]"
   curl --fail --verbose --silent --insecure \
        --request POST \
        --header 'Content-Type: text/plain' \
@@ -28,7 +29,8 @@ update_rendezvous_info () {
   local rendezvous_ip=$3
   local rendezvous_port=$4
   local rendezvous_protocol=$5
-  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+  local rv_bypass=$([[ "${6}" == "true" ]] && echo true || echo false)
+  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\", \"rv_bypass\": ${rv_bypass}}]"
   curl --fail --verbose --silent --insecure \
        --request PUT \
        --header 'Content-Type: text/plain' \
