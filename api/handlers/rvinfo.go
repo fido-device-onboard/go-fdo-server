@@ -35,7 +35,17 @@ func RvInfoHandler() http.HandlerFunc {
 // GetOwnerRedirect implements the rvInfo GET endpoint (OpenAPI interface method)
 func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Fetching rvInfo")
-	rvInfoJSON, err := db.FetchRvInfoJSON()
+
+	var rvInfoJSON []byte
+	var err error
+
+	// Use struct database if available, otherwise fall back to global db
+	if s.db != nil {
+		rvInfoJSON, err = s.db.FetchRvInfoJSON()
+	} else {
+		rvInfoJSON, err = db.FetchRvInfoJSON()
+	}
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("No rvInfo found")
@@ -53,12 +63,29 @@ func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 
 // PostOwnerRedirect implements the rvInfo POST endpoint (OpenAPI interface method)
 func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("PostOwnerRedirect: Starting handler")
+	
 	rvInfo, ok := ReadRequestBody(w, r)
 	if !ok {
+		slog.Error("PostOwnerRedirect: Failed to read request body")
 		return
 	}
+	
+	slog.Debug("PostOwnerRedirect: Read request body", "size", len(rvInfo))
 
-	if err := db.InsertRvInfo(rvInfo); err != nil {
+	// Use struct database if available, otherwise fall back to global db
+	var err error
+	if s.db != nil {
+		slog.Debug("PostOwnerRedirect: Using struct database")
+		err = s.db.InsertRvInfo(rvInfo)
+	} else {
+		slog.Debug("PostOwnerRedirect: Using global database (fallback)")
+		err = db.InsertRvInfo(rvInfo)
+	}
+	
+	slog.Debug("PostOwnerRedirect: Insert operation completed", "error", err)
+
+	if err != nil {
 		if HandleDBError(w, r, "rvInfo", err) {
 			return
 		}
@@ -77,6 +104,8 @@ func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(rvInfo)
+	
+	slog.Debug("PostOwnerRedirect: Successfully completed, response sent")
 }
 
 // PutOwnerRedirect implements the rvInfo PUT endpoint (OpenAPI interface method)
@@ -86,7 +115,15 @@ func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.UpdateRvInfo(rvInfo); err != nil {
+	// Use struct database if available, otherwise fall back to global db
+	var err error
+	if s.db != nil {
+		err = s.db.UpdateRvInfo(rvInfo)
+	} else {
+		err = db.UpdateRvInfo(rvInfo)
+	}
+
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("rvInfo does not exist, cannot update")
 			WriteErrorResponse(w, r, http.StatusNotFound, "rvInfo does not exist", "No rvInfo found to update", "rvInfo does not exist")

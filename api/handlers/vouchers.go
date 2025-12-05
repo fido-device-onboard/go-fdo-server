@@ -32,13 +32,15 @@ import (
 type Server struct {
 	ownerPKeys []crypto.PublicKey
 	to2Server  *fdo.TO2Server
+	db         *db.State
 }
 
 // NewServer creates a new Server instance
-func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server) *Server {
+func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server, database *db.State) *Server {
 	return &Server{
 		ownerPKeys: ownerPKeys,
 		to2Server:  to2Server,
+		db:         database,
 	}
 }
 
