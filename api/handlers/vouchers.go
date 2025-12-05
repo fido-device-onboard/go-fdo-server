@@ -32,13 +32,30 @@ import (
 type Server struct {
 	ownerPKeys []crypto.PublicKey
 	to2Server  *fdo.TO2Server
+	db         *db.State
 }
 
-// NewServer creates a new Server instance
-func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server) *Server {
+// NewServer creates a new Server instance with defensive validation for systemd environments
+func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server, database *db.State) *Server {
+	// Defensive validation: ensure database is properly initialized
+	// This handles systemd service initialization timing issues
+	if database != nil && database.DB != nil {
+		// Verify database connection with a simple ping
+		if sqlDB, err := database.DB.DB(); err == nil {
+			if pingErr := sqlDB.Ping(); pingErr != nil {
+				slog.Warn("Database ping failed during server creation, will fall back to global db", "error", pingErr)
+				database = nil
+			}
+		} else {
+			slog.Warn("Unable to get underlying SQL DB, will fall back to global db", "error", err)
+			database = nil
+		}
+	}
+
 	return &Server{
 		ownerPKeys: ownerPKeys,
 		to2Server:  to2Server,
+		db:         database,
 	}
 }
 

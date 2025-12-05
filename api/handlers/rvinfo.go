@@ -35,7 +35,28 @@ func RvInfoHandler() http.HandlerFunc {
 // GetOwnerRedirect implements the rvInfo GET endpoint (OpenAPI interface method)
 func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("Fetching rvInfo")
-	rvInfoJSON, err := db.FetchRvInfoJSON()
+
+	var rvInfoJSON []byte
+	var err error
+
+	// Use struct database with defensive validation, otherwise fall back to global db
+	if s.db != nil && s.db.DB != nil {
+		// Verify database is accessible before using it
+		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
+			if pingErr := sqlDB.Ping(); pingErr == nil {
+				rvInfoJSON, err = s.db.FetchRvInfoJSON()
+			} else {
+				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
+				rvInfoJSON, err = db.FetchRvInfoJSON()
+			}
+		} else {
+			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
+			rvInfoJSON, err = db.FetchRvInfoJSON()
+		}
+	} else {
+		rvInfoJSON, err = db.FetchRvInfoJSON()
+	}
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("No rvInfo found")
@@ -58,7 +79,26 @@ func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.InsertRvInfo(rvInfo); err != nil {
+	// Use struct database with defensive validation, otherwise fall back to global db
+	var err error
+	if s.db != nil && s.db.DB != nil {
+		// Verify database is accessible before using it
+		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
+			if pingErr := sqlDB.Ping(); pingErr == nil {
+				err = s.db.InsertRvInfo(rvInfo)
+			} else {
+				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
+				err = db.InsertRvInfo(rvInfo)
+			}
+		} else {
+			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
+			err = db.InsertRvInfo(rvInfo)
+		}
+	} else {
+		err = db.InsertRvInfo(rvInfo)
+	}
+
+	if err != nil {
 		if HandleDBError(w, r, "rvInfo", err) {
 			return
 		}
@@ -86,7 +126,26 @@ func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.UpdateRvInfo(rvInfo); err != nil {
+	// Use struct database with defensive validation, otherwise fall back to global db
+	var err error
+	if s.db != nil && s.db.DB != nil {
+		// Verify database is accessible before using it
+		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
+			if pingErr := sqlDB.Ping(); pingErr == nil {
+				err = s.db.UpdateRvInfo(rvInfo)
+			} else {
+				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
+				err = db.UpdateRvInfo(rvInfo)
+			}
+		} else {
+			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
+			err = db.UpdateRvInfo(rvInfo)
+		}
+	} else {
+		err = db.UpdateRvInfo(rvInfo)
+	}
+
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("rvInfo does not exist, cannot update")
 			WriteErrorResponse(w, r, http.StatusNotFound, "rvInfo does not exist", "No rvInfo found to update", "rvInfo does not exist")

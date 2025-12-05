@@ -321,7 +321,7 @@ func serveOwner(config *OwnerServerConfig) error {
 	}
 
 	// Create OpenAPI server instance
-	apiServer := handlers.NewServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server)
+	apiServer := handlers.NewServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
 
 	// Create the main HTTP handler with chi router for API endpoints
 	mainHandler := http.NewServeMux()
@@ -329,17 +329,23 @@ func serveOwner(config *OwnerServerConfig) error {
 	// Register FDO protocol endpoints
 	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
 
-	// Register API endpoints using generated OpenAPI handler
+	// Create a custom handler that routes between OpenAPI and ownerinfo
 	apiHandler := openapi.Handler(apiServer)
-	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
+
+	mainHandler.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
+		// Handle ownerinfo requests specially
+		if r.URL.Path == "/api/v1/ownerinfo" {
+			handlers.OwnerInfoHandler(w, r)
+			return
+		}
+		// Strip prefix and pass to OpenAPI handler for all other /api/v1/ requests
+		http.StripPrefix("/api/v1", apiHandler).ServeHTTP(w, r)
+	})
 
 	// Register health endpoint (not part of the OpenAPI spec but needed for backward compatibility)
 	mainHandler.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiServer.GetHealth(w, r)
 	}))
-
-	// Register ownerInfo endpoint (not part of the OpenAPI spec but needed for TO0)
-	mainHandler.HandleFunc("/api/v1/ownerinfo", handlers.OwnerInfoHandler)
 
 	// Listen and serve
 	server := NewOwnerServer(config.HTTP, mainHandler)

@@ -17,6 +17,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // State implements all FDO server state persistence interfaces using GORM
@@ -96,6 +97,50 @@ func (s *State) Close() error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+// FetchRvInfoJSON reads the rvinfo JSON from the database
+func (s *State) FetchRvInfoJSON() ([]byte, error) {
+	var rvInfo RvInfo
+	if err := s.DB.Where("id = ?", 1).First(&rvInfo).Error; err != nil {
+		return nil, err
+	}
+	return rvInfo.Value, nil
+}
+
+// InsertRvInfo inserts new rvinfo JSON into the database
+func (s *State) InsertRvInfo(data []byte) error {
+	// check the data can be parsed into [][]protocol.RvInstruction
+	if _, err := parseHumanReadableRvJSON(data); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
+	}
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: data,
+	}
+	tx := s.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrDuplicatedKey
+	}
+	return nil
+}
+
+// UpdateRvInfo updates existing rvinfo JSON in the database
+func (s *State) UpdateRvInfo(data []byte) error {
+	// check the data can be parsed into [][]protocol.RvInstruction
+	if _, err := parseHumanReadableRvJSON(data); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
+	}
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: data,
+	}
+	return s.DB.Save(&rvInfo).Error
 }
 
 // Compile-time check for interface implementation correctness
