@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,13 +50,6 @@ func resetState(t *testing.T) {
 	manufacturingCmdInit()
 	rendezvousCmdInit()
 
-	// Zero globals populated by load functions
-	date = false
-	wgets = nil
-	uploads = nil
-	uploadDir = ""
-	downloads = nil
-
 	// Reset captured config
 	capturedConfig = nil
 }
@@ -77,6 +71,11 @@ func stubRunE(t *testing.T, cmd *cobra.Command) {
 
 		// Validate the configuration (same as in actual commands)
 		if err := fdoConfig.HTTP.validate(); err != nil {
+			return err
+		}
+
+		// Validate ServiceInfo to trigger UnmarshalParams()
+		if err := fdoConfig.Owner.ServiceInfo.validate(); err != nil {
 			return err
 		}
 
@@ -336,9 +335,6 @@ to0_insecure_tls = false
 			if capturedConfig.Owner.OwnerPrivateKey != tt.expected.ownerKey {
 				t.Fatalf("Owner.OwnerPrivateKey=%q, want %q", capturedConfig.Owner.OwnerPrivateKey, tt.expected.ownerKey)
 			}
-
-			// Note: wgets, uploads, downloads, uploadDir are command-line only arguments
-			// and are not loaded from configuration files, so we don't validate them here
 		})
 	}
 }
@@ -648,9 +644,6 @@ owner:
 	if capturedConfig.Owner.OwnerPrivateKey != "/path/to/yaml-owner.key" {
 		t.Fatalf("Owner.OwnerPrivateKey=%q", capturedConfig.Owner.OwnerPrivateKey)
 	}
-
-	// Note: command-line only options (wgets, uploads, downloads, uploadDir, date) are not loaded from configuration files
-	// They are only available as command-line flags
 }
 
 func TestRendezvous_LoadsFromYAMLConfig(t *testing.T) {
@@ -891,5 +884,462 @@ dsn = "file:/tmp/database.db"
 	}
 	if capturedConfig.HTTP.KeyPath != "/cli/server.key" {
 		t.Fatalf("HTTP.KeyPath=%q, want %q (CLI flag should override config)", capturedConfig.HTTP.KeyPath, "/cli/server.key")
+	}
+}
+
+func TestOwner_FSIMConfigFromTOML(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	// Test checksums (SHA-384, 96 hex characters)
+	checksum1 := "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
+	checksum2 := "ef567890ef567890ef567890ef567890ef567890ef567890ef567890ef567890ef567890ef567890ef567890ef567890"
+
+	// Create temporary files for download test.
+	// These files must exist because the ServiceInfo validation code (triggered by
+	// stubRunE) verifies that fdo.download source files are accessible on the filesystem.
+	// See ServiceInfoConfig.validate() in cmd/config.go for the file existence check.
+	dir := t.TempDir()
+	// Create a subdirectory to test relative paths
+	subdir := filepath.Join(dir, "files")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// file1 will be accessed via relative path
+	file1 := filepath.Join(subdir, "data.bin")
+	if err := os.WriteFile(file1, []byte("test data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// file2 will be accessed via absolute path
+	file2 := filepath.Join(dir, "optional.log")
+	if err := os.WriteFile(file2, []byte("test log"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := fmt.Sprintf(`
+[http]
+ip = "127.0.0.1"
+port = "8082"
+[db]
+type = "sqlite"
+dsn = "file:/tmp/owner.db"
+[device_ca]
+cert = "/path/to/device.ca"
+[owner]
+key = "/path/to/owner.key"
+
+[[owner.service_info]]
+fsim = "fdo.command"
+[owner.service_info.params]
+cmd = "/usr/bin/echo"
+args = ["hello", "world"]
+may_fail = true
+return_stdout = true
+return_stderr = false
+
+[[owner.service_info]]
+fsim = "fdo.upload"
+[owner.service_info.params]
+dir = "/upload/base"
+[[owner.service_info.params.files]]
+src = "/local/file1.txt"
+dst = "subdir/newfile1.txt"
+[[owner.service_info.params.files]]
+src = "/local/file2.txt"
+dst = "/absolute/path/file2.txt"
+
+[[owner.service_info]]
+fsim = "fdo.download"
+[owner.service_info.params]
+dir = "%s"
+[[owner.service_info.params.files]]
+src = "files/data.bin"
+dst = "/local/data.bin"
+may_fail = false
+[[owner.service_info.params.files]]
+src = "%s"
+dst = "/local/optional.log"
+may_fail = true
+
+[[owner.service_info]]
+fsim = "fdo.wget"
+[[owner.service_info.params.files]]
+url = "https://example.com/file1.tar.gz"
+dst = "/tmp/file1.tar.gz"
+length = 12345
+checksum = "%s"
+[[owner.service_info.params.files]]
+url = "http://example.org/file2.zip"
+dst = "/tmp/file2.zip"
+length = 67890
+checksum = "%s"
+`, dir, file2, checksum1, checksum2)
+	path := writeTOMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+
+	if capturedConfig == nil {
+		t.Fatalf("owner config not captured")
+	}
+
+	// Verify service_info has 4 operations
+	if len(capturedConfig.Owner.ServiceInfo) != 4 {
+		t.Fatalf("ServiceInfo length=%d, want 4", len(capturedConfig.Owner.ServiceInfo))
+	}
+
+	// Verify fdo.command operation
+	cmdOp := capturedConfig.Owner.ServiceInfo[0]
+	if cmdOp.FSIM != "fdo.command" {
+		t.Fatalf("ServiceInfo[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
+	}
+	if cmdOp.CommandParams == nil {
+		t.Fatal("ServiceInfo[0].CommandParams is nil")
+	}
+	if cmdOp.CommandParams.Command != "/usr/bin/echo" {
+		t.Fatalf("CommandParams.Command=%q, want %q", cmdOp.CommandParams.Command, "/usr/bin/echo")
+	}
+	if len(cmdOp.CommandParams.Args) != 2 || cmdOp.CommandParams.Args[0] != "hello" || cmdOp.CommandParams.Args[1] != "world" {
+		t.Fatalf("CommandParams.Args=%v, want [hello world]", cmdOp.CommandParams.Args)
+	}
+	if !cmdOp.CommandParams.MayFail {
+		t.Fatalf("CommandParams.MayFail=%v, want true", cmdOp.CommandParams.MayFail)
+	}
+	if !cmdOp.CommandParams.RetStdout {
+		t.Fatalf("CommandParams.RetStdout=%v, want true", cmdOp.CommandParams.RetStdout)
+	}
+	if cmdOp.CommandParams.RetStderr {
+		t.Fatalf("CommandParams.RetStderr=%v, want false", cmdOp.CommandParams.RetStderr)
+	}
+
+	// Verify fdo.upload operation
+	uploadOp := capturedConfig.Owner.ServiceInfo[1]
+	if uploadOp.FSIM != "fdo.upload" {
+		t.Fatalf("ServiceInfo[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
+	}
+	if uploadOp.UploadParams == nil {
+		t.Fatal("ServiceInfo[1].UploadParams is nil")
+	}
+	if uploadOp.UploadParams.Dir != "/upload/base" {
+		t.Fatalf("UploadParams.Dir=%q, want %q", uploadOp.UploadParams.Dir, "/upload/base")
+	}
+	if len(uploadOp.UploadParams.Files) != 2 {
+		t.Fatalf("UploadParams.Files length=%d, want 2", len(uploadOp.UploadParams.Files))
+	}
+	if uploadOp.UploadParams.Files[0].Src != "/local/file1.txt" {
+		t.Fatalf("UploadParams.Files[0].Src=%q, want %q", uploadOp.UploadParams.Files[0].Src, "/local/file1.txt")
+	}
+	if uploadOp.UploadParams.Files[0].Dst != "subdir/newfile1.txt" {
+		t.Fatalf("UploadParams.Files[0].Dst=%q, want %q", uploadOp.UploadParams.Files[0].Dst, "subdir/newfile1.txt")
+	}
+	if uploadOp.UploadParams.Files[1].Src != "/local/file2.txt" {
+		t.Fatalf("UploadParams.Files[1].Src=%q, want %q", uploadOp.UploadParams.Files[1].Src, "/local/file2.txt")
+	}
+	if uploadOp.UploadParams.Files[1].Dst != "/absolute/path/file2.txt" {
+		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "/absolute/path/file2.txt")
+	}
+
+	// Verify fdo.download operation
+	downloadOp := capturedConfig.Owner.ServiceInfo[2]
+	if downloadOp.FSIM != "fdo.download" {
+		t.Fatalf("ServiceInfo[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
+	}
+	if downloadOp.DownloadParams == nil {
+		t.Fatal("ServiceInfo[2].DownloadParams is nil")
+	}
+	if downloadOp.DownloadParams.Dir != dir {
+		t.Fatalf("DownloadParams.Dir=%q, want %q", downloadOp.DownloadParams.Dir, dir)
+	}
+	if len(downloadOp.DownloadParams.Files) != 2 {
+		t.Fatalf("DownloadParams.Files length=%d, want 2", len(downloadOp.DownloadParams.Files))
+	}
+	if downloadOp.DownloadParams.Files[0].Src != "files/data.bin" {
+		t.Fatalf("DownloadParams.Files[0].Src=%q, want %q", downloadOp.DownloadParams.Files[0].Src, "files/data.bin")
+	}
+	if downloadOp.DownloadParams.Files[0].Dst != "/local/data.bin" {
+		t.Fatalf("DownloadParams.Files[0].Dst=%q, want %q", downloadOp.DownloadParams.Files[0].Dst, "/local/data.bin")
+	}
+	if downloadOp.DownloadParams.Files[0].MayFail {
+		t.Fatalf("DownloadParams.Files[0].MayFail=%v, want false", downloadOp.DownloadParams.Files[0].MayFail)
+	}
+	if downloadOp.DownloadParams.Files[1].Src != file2 {
+		t.Fatalf("DownloadParams.Files[1].Src=%q, want %q", downloadOp.DownloadParams.Files[1].Src, file2)
+	}
+	if downloadOp.DownloadParams.Files[1].Dst != "/local/optional.log" {
+		t.Fatalf("DownloadParams.Files[1].Dst=%q, want %q", downloadOp.DownloadParams.Files[1].Dst, "/local/optional.log")
+	}
+	if !downloadOp.DownloadParams.Files[1].MayFail {
+		t.Fatalf("DownloadParams.Files[1].MayFail=%v, want true", downloadOp.DownloadParams.Files[1].MayFail)
+	}
+
+	// Verify fdo.wget operation
+	wgetOp := capturedConfig.Owner.ServiceInfo[3]
+	if wgetOp.FSIM != "fdo.wget" {
+		t.Fatalf("ServiceInfo[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
+	}
+	if wgetOp.WgetParams == nil {
+		t.Fatal("ServiceInfo[3].WgetParams is nil")
+	}
+	if len(wgetOp.WgetParams.Files) != 2 {
+		t.Fatalf("WgetParams.Files length=%d, want 2", len(wgetOp.WgetParams.Files))
+	}
+	if wgetOp.WgetParams.Files[0].URL != "https://example.com/file1.tar.gz" {
+		t.Fatalf("WgetParams.Files[0].URL=%q, want %q", wgetOp.WgetParams.Files[0].URL, "https://example.com/file1.tar.gz")
+	}
+	if wgetOp.WgetParams.Files[0].Dst != "/tmp/file1.tar.gz" {
+		t.Fatalf("WgetParams.Files[0].Dst=%q, want %q", wgetOp.WgetParams.Files[0].Dst, "/tmp/file1.tar.gz")
+	}
+	if wgetOp.WgetParams.Files[0].Length != 12345 {
+		t.Fatalf("WgetParams.Files[0].Length=%d, want 12345", wgetOp.WgetParams.Files[0].Length)
+	}
+	if wgetOp.WgetParams.Files[0].Checksum != checksum1 {
+		t.Fatalf("WgetParams.Files[0].Checksum=%q, want %q", wgetOp.WgetParams.Files[0].Checksum, checksum1)
+	}
+	if wgetOp.WgetParams.Files[1].URL != "http://example.org/file2.zip" {
+		t.Fatalf("WgetParams.Files[1].URL=%q, want %q", wgetOp.WgetParams.Files[1].URL, "http://example.org/file2.zip")
+	}
+	if wgetOp.WgetParams.Files[1].Dst != "/tmp/file2.zip" {
+		t.Fatalf("WgetParams.Files[1].Dst=%q, want %q", wgetOp.WgetParams.Files[1].Dst, "/tmp/file2.zip")
+	}
+	if wgetOp.WgetParams.Files[1].Length != 67890 {
+		t.Fatalf("WgetParams.Files[1].Length=%d, want 67890", wgetOp.WgetParams.Files[1].Length)
+	}
+	if wgetOp.WgetParams.Files[1].Checksum != checksum2 {
+		t.Fatalf("WgetParams.Files[1].Checksum=%q, want %q", wgetOp.WgetParams.Files[1].Checksum, checksum2)
+	}
+}
+
+func TestOwner_FSIMConfigFromYAML(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	// Test checksums (SHA-384, 96 hex characters)
+	checksum1 := "ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEF01"
+	checksum2 := "0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef012345"
+
+	// Create temporary files for download test.
+	// These files must exist because the ServiceInfo validation code (triggered by
+	// stubRunE) verifies that fdo.download source files are accessible on the filesystem.
+	// See ServiceInfoConfig.validate() in cmd/config.go for the file existence check.
+	dir := t.TempDir()
+	// Create a subdirectory to test relative paths
+	subdir := filepath.Join(dir, "data")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// file1 will be accessed via relative path
+	file1 := filepath.Join(subdir, "critical.dat")
+	if err := os.WriteFile(file1, []byte("critical data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// file2 will be accessed via absolute path
+	file2 := filepath.Join(dir, "extra.txt")
+	if err := os.WriteFile(file2, []byte("extra data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := fmt.Sprintf(`
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    - fsim: "fdo.command"
+      params:
+        may_fail: false
+        return_stdout: false
+        return_stderr: true
+        cmd: "/bin/bash"
+        args:
+          - "-c"
+          - |
+            #! /bin/bash
+            set -xeuo pipefail
+            echo "Current Date:"
+            date
+            dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
+    - fsim: "fdo.upload"
+      params:
+        dir: "/var/upload"
+        files:
+          - src: "/source/config.yaml"
+            dst: "configs/app-config.yaml"
+          - src: "/source/data.json"
+            dst: "/absolute/dest/app-data.json"
+
+    - fsim: "fdo.download"
+      params:
+        dir: "%s"
+        files:
+          - src: "data/critical.dat"
+            dst: "/client/critical.dat"
+            may_fail: false
+          - src: "%s"
+            dst: "/client/extra.txt"
+            may_fail: true
+
+    - fsim: "fdo.wget"
+      params:
+        files:
+          - url: "https://cdn.example.com/package.rpm"
+            dst: "/tmp/package.rpm"
+            length: 98765
+            checksum: "%s"
+          - url: "http://repo.example.net/archive.tar.gz"
+            dst: "/tmp/archive.tar.gz"
+            length: 54321
+            checksum: "%s"
+`, dir, file2, checksum1, checksum2)
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+
+	if capturedConfig == nil {
+		t.Fatalf("owner config not captured")
+	}
+
+	// Verify service_info has 4 operations
+	if len(capturedConfig.Owner.ServiceInfo) != 4 {
+		t.Fatalf("ServiceInfo length=%d, want 4", len(capturedConfig.Owner.ServiceInfo))
+	}
+
+	// Verify fdo.command operation
+	cmdOp := capturedConfig.Owner.ServiceInfo[0]
+	if cmdOp.FSIM != "fdo.command" {
+		t.Fatalf("ServiceInfo[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
+	}
+	if cmdOp.CommandParams == nil {
+		t.Fatal("ServiceInfo[0].CommandParams is nil")
+	}
+	if cmdOp.CommandParams.Command != "/bin/bash" {
+		t.Fatalf("CommandParams.Command=%q, want %q", cmdOp.CommandParams.Command, "/bin/bash")
+	}
+	for i, cmd := range cmdOp.CommandParams.Args {
+		fmt.Printf("Arg [%d] = %s\n", i, cmd)
+	}
+	expected_args := `#! /bin/bash
+set -xeuo pipefail
+echo "Current Date:"
+date
+dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
+`
+	if len(cmdOp.CommandParams.Args) != 2 || cmdOp.CommandParams.Args[0] != "-c" || cmdOp.CommandParams.Args[1] != expected_args {
+		t.Fatalf("CommandParams.Args=%v, want [\"-c\", %s ]", cmdOp.CommandParams.Args, expected_args)
+	}
+	if cmdOp.CommandParams.MayFail {
+		t.Fatalf("CommandParams.MayFail=%v, want false", cmdOp.CommandParams.MayFail)
+	}
+	if cmdOp.CommandParams.RetStdout {
+		t.Fatalf("CommandParams.RetStdout=%v, want false", cmdOp.CommandParams.RetStdout)
+	}
+	if !cmdOp.CommandParams.RetStderr {
+		t.Fatalf("CommandParams.RetStderr=%v, want true", cmdOp.CommandParams.RetStderr)
+	}
+
+	// Verify fdo.upload operation
+	uploadOp := capturedConfig.Owner.ServiceInfo[1]
+	if uploadOp.FSIM != "fdo.upload" {
+		t.Fatalf("ServiceInfo[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
+	}
+	if uploadOp.UploadParams == nil {
+		t.Fatal("ServiceInfo[1].UploadParams is nil")
+	}
+	if uploadOp.UploadParams.Dir != "/var/upload" {
+		t.Fatalf("UploadParams.Dir=%q, want %q", uploadOp.UploadParams.Dir, "/var/upload")
+	}
+	if len(uploadOp.UploadParams.Files) != 2 {
+		t.Fatalf("UploadParams.Files length=%d, want 2", len(uploadOp.UploadParams.Files))
+	}
+	if uploadOp.UploadParams.Files[0].Src != "/source/config.yaml" {
+		t.Fatalf("UploadParams.Files[0].Src=%q, want %q", uploadOp.UploadParams.Files[0].Src, "/source/config.yaml")
+	}
+	if uploadOp.UploadParams.Files[0].Dst != "configs/app-config.yaml" {
+		t.Fatalf("UploadParams.Files[0].Dst=%q, want %q", uploadOp.UploadParams.Files[0].Dst, "configs/app-config.yaml")
+	}
+	if uploadOp.UploadParams.Files[1].Src != "/source/data.json" {
+		t.Fatalf("UploadParams.Files[1].Src=%q, want %q", uploadOp.UploadParams.Files[1].Src, "/source/data.json")
+	}
+	if uploadOp.UploadParams.Files[1].Dst != "/absolute/dest/app-data.json" {
+		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "/absolute/dest/app-data.json")
+	}
+
+	// Verify fdo.download operation
+	downloadOp := capturedConfig.Owner.ServiceInfo[2]
+	if downloadOp.FSIM != "fdo.download" {
+		t.Fatalf("ServiceInfo[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
+	}
+	if downloadOp.DownloadParams == nil {
+		t.Fatal("ServiceInfo[2].DownloadParams is nil")
+	}
+	if downloadOp.DownloadParams.Dir != dir {
+		t.Fatalf("DownloadParams.Dir=%q, want %q", downloadOp.DownloadParams.Dir, dir)
+	}
+	if len(downloadOp.DownloadParams.Files) != 2 {
+		t.Fatalf("DownloadParams.Files length=%d, want 2", len(downloadOp.DownloadParams.Files))
+	}
+	if downloadOp.DownloadParams.Files[0].Src != "data/critical.dat" {
+		t.Fatalf("DownloadParams.Files[0].Src=%q, want %q", downloadOp.DownloadParams.Files[0].Src, "data/critical.dat")
+	}
+	if downloadOp.DownloadParams.Files[0].Dst != "/client/critical.dat" {
+		t.Fatalf("DownloadParams.Files[0].Dst=%q, want %q", downloadOp.DownloadParams.Files[0].Dst, "/client/critical.dat")
+	}
+	if downloadOp.DownloadParams.Files[0].MayFail {
+		t.Fatalf("DownloadParams.Files[0].MayFail=%v, want false", downloadOp.DownloadParams.Files[0].MayFail)
+	}
+	if downloadOp.DownloadParams.Files[1].Src != file2 {
+		t.Fatalf("DownloadParams.Files[1].Src=%q, want %q", downloadOp.DownloadParams.Files[1].Src, file2)
+	}
+	if downloadOp.DownloadParams.Files[1].Dst != "/client/extra.txt" {
+		t.Fatalf("DownloadParams.Files[1].Dst=%q, want %q", downloadOp.DownloadParams.Files[1].Dst, "/client/extra.txt")
+	}
+	if !downloadOp.DownloadParams.Files[1].MayFail {
+		t.Fatalf("DownloadParams.Files[1].MayFail=%v, want true", downloadOp.DownloadParams.Files[1].MayFail)
+	}
+
+	// Verify fdo.wget operation
+	wgetOp := capturedConfig.Owner.ServiceInfo[3]
+	if wgetOp.FSIM != "fdo.wget" {
+		t.Fatalf("ServiceInfo[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
+	}
+	if wgetOp.WgetParams == nil {
+		t.Fatal("ServiceInfo[3].WgetParams is nil")
+	}
+	if len(wgetOp.WgetParams.Files) != 2 {
+		t.Fatalf("WgetParams.Files length=%d, want 2", len(wgetOp.WgetParams.Files))
+	}
+	if wgetOp.WgetParams.Files[0].URL != "https://cdn.example.com/package.rpm" {
+		t.Fatalf("WgetParams.Files[0].URL=%q, want %q", wgetOp.WgetParams.Files[0].URL, "https://cdn.example.com/package.rpm")
+	}
+	if wgetOp.WgetParams.Files[0].Dst != "/tmp/package.rpm" {
+		t.Fatalf("WgetParams.Files[0].Dst=%q, want %q", wgetOp.WgetParams.Files[0].Dst, "/tmp/package.rpm")
+	}
+	if wgetOp.WgetParams.Files[0].Length != 98765 {
+		t.Fatalf("WgetParams.Files[0].Length=%d, want 98765", wgetOp.WgetParams.Files[0].Length)
+	}
+	if wgetOp.WgetParams.Files[0].Checksum != checksum1 {
+		t.Fatalf("WgetParams.Files[0].Checksum=%q, want %q", wgetOp.WgetParams.Files[0].Checksum, checksum1)
+	}
+	if wgetOp.WgetParams.Files[1].URL != "http://repo.example.net/archive.tar.gz" {
+		t.Fatalf("WgetParams.Files[1].URL=%q, want %q", wgetOp.WgetParams.Files[1].URL, "http://repo.example.net/archive.tar.gz")
+	}
+	if wgetOp.WgetParams.Files[1].Dst != "/tmp/archive.tar.gz" {
+		t.Fatalf("WgetParams.Files[1].Dst=%q, want %q", wgetOp.WgetParams.Files[1].Dst, "/tmp/archive.tar.gz")
+	}
+	if wgetOp.WgetParams.Files[1].Length != 54321 {
+		t.Fatalf("WgetParams.Files[1].Length=%d, want 54321", wgetOp.WgetParams.Files[1].Length)
+	}
+	if wgetOp.WgetParams.Files[1].Checksum != checksum2 {
+		t.Fatalf("WgetParams.Files[1].Checksum=%q, want %q", wgetOp.WgetParams.Files[1].Checksum, checksum2)
 	}
 }

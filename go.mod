@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/fido-device-onboard/go-fdo v0.0.0-20251217141835-8aceb06ebe21
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1

@@ -1,14 +1,4 @@
 services:
-  owner:
-    command:
-      - --db-type=sqlite
-      - --db-dsn=file:${container_working_dir:-/workdir}/owner.db
-      - --log-level=debug
-      - owner
-      - owner:8043
-      - --owner-key=${container_working_dir:-/workdir}/certs/owner.key
-      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
-      - --command-wget=http://wget_httpd:8888/file1
   wget_httpd:
     container_name: wget_httpd
     hostname: wget_httpd
