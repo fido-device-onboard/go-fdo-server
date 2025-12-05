@@ -3,6 +3,7 @@ description: Fast smoke tests + comprehensive FDO protocol testing
 
 discover:
     how: fmf
+    filter: tag:rpm
 
 provision:
     how: virtual
