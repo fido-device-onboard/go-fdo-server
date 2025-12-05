@@ -12,9 +12,47 @@ VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2
 # Default target
 all: build test
 
+#
+# OpenAPI Code Generation
+#
+OPENAPI_SPEC := api/openapi/owner-server.yaml
+GENERATED_FILE := api/openapi/generated.go
+
+.PHONY: validate-openapi
+validate-openapi:
+	@echo "Validating OpenAPI specification..."
+	@command -v oapi-codegen >/dev/null 2>&1 || command -v $$(go env GOPATH)/bin/oapi-codegen >/dev/null 2>&1 || { \
+		echo "Error: oapi-codegen not found. Please install it first:"; \
+		echo "  go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest"; \
+		exit 1; \
+	}
+	@echo "OpenAPI spec validation (oapi-codegen validates during generation)"
+
+# Real dependency rule for generated file
+$(GENERATED_FILE): $(OPENAPI_SPEC) validate-openapi
+	@echo "Generating Go types and server code from OpenAPI specification..."
+	$$(command -v oapi-codegen || echo $$(go env GOPATH)/bin/oapi-codegen) -package openapi -generate types,chi-server -o $(GENERATED_FILE) $(OPENAPI_SPEC)
+
+.PHONY: generate-api
+generate-api: $(GENERATED_FILE)
+
+.PHONY: clean-generated
+clean-generated:
+	@echo "Cleaning generated OpenAPI code..."
+	rm -f $(GENERATED_FILE)
+
+.PHONY: openapi-docs
+openapi-docs:
+	@echo "Starting OpenAPI documentation server..."
+	@command -v swagger-ui-serve >/dev/null 2>&1 || { \
+		echo "Installing swagger-ui-serve..."; \
+		npm install -g swagger-ui-serve; \
+	}
+	swagger-ui-serve $(OPENAPI_SPEC)
+
 # Build the Go project
 .PHONY: build
-build: tidy fmt vet
+build: $(GENERATED_FILE) tidy fmt vet
 	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: tidy

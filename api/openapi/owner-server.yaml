@@ -1,0 +1,177 @@
+openapi: 3.0.3
+info:
+  title: FDO Owner Server API
+  version: 1.1.0
+
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Server health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /owner/vouchers:
+    post:
+      requestBody:
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Vouchers processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoucherInsertResponse'
+
+  /owner/redirect:
+    get:
+      responses:
+        '200':
+          description: Owner redirect configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerRedirect'
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRedirect'
+      responses:
+        '201':
+          description: Owner redirect configuration created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerRedirect'
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRedirect'
+      responses:
+        '200':
+          description: Owner redirect configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerRedirect'
+
+  /vouchers:
+    get:
+      parameters:
+        - name: guid
+          in: query
+          schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
+        - name: device_info
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/VoucherMetadata'}
+
+  /vouchers/{guid}:
+    get:
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoucherResponse'}
+
+  /owner/resell/{guid}:
+    post:
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
+      requestBody:
+        content:
+          application/x-pem-file: {schema: {type: string, format: binary}}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoucherResponse'}
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [version, status]
+      properties:
+        version:
+          type: string
+        status:
+          type: string
+    
+    VoucherInsertResponse:
+      type: object
+      required: [processed, inserted]
+      properties:
+        processed:
+          type: integer
+        inserted:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+    
+    OwnerRedirect:
+      type: array
+      items:
+        type: object
+        required: [dns, port, protocol]
+        properties:
+          dns:
+            type: string
+          port:
+            type: string
+          protocol:
+            type: string
+            enum: [http, https]
+    
+    VoucherResponse:
+      type: object
+      required: [voucher, encoding, guid]
+      properties:
+        voucher:
+          type: string
+        encoding:
+          type: string
+        guid:
+          type: string
+    
+    VoucherMetadata:
+      type: object
+      required: [guid, device_info, created_at]
+      properties:
+        guid:
+          type: string
+        device_info:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

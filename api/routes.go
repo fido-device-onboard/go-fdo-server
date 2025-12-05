@@ -11,8 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	transport "github.com/fido-device-onboard/go-fdo/http"
-
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 )
 
 // HTTPHandler handles HTTP requests
@@ -62,6 +60,16 @@ func (h *HTTPHandler) RegisterRoutes(apiRouter *http.ServeMux) *http.ServeMux {
 		handler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
 
 	}
-	handler.HandleFunc("/health", handlers.HealthHandler)
+	// Health endpoint for backward compatibility (used by manufacturing server)
+	handler.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte("Method not allowed"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"OK","version":"0.0.1"}`))
+	})
 	return handler
 }
