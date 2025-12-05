@@ -110,11 +110,159 @@ The owner server configuration is under the `[owner]` section:
 | `key` | string | Owner private key file path | Yes (for owner server) |
 | `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
+| `service_info` | list | List of ServiceInfo Modules to execute on device onboarding (See below) | No |
 
 The owner server also requires:
 - `[device_ca]` section with `cert` field (see Device CA Configuration above)
 
 **Note**: The `owner.cert` field is used by the manufacturing server to specify the owner certificate. The `owner.key` field is used by the owner server to specify its private key.
+
+### Service Info Configuration (FSIM Operations)
+
+The owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. FSIM operations are defined as an ordered list under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
+
+### Supported FSIM Modules
+
+The following FSIM modules are supported:
+
+1. **fdo.command** - Execute commands on the device
+2. **fdo.download** - Download files from the owner server to the device
+3. **fdo.upload** - Upload files from the device to the owner server
+4. **fdo.wget** - Instruct the device to download files from specified URLs
+
+### Service Info Operation Structure
+
+Each operation in the `service_info` list has the following structure:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `fsim` | string | The FSIM module type (one of: "fdo.command", "fdo.download", "fdo.upload", "fdo.wget") | Yes |
+| `params` | object | Parameters for the FSIM module (structure depends on the fsim type) | Yes |
+
+### fdo.command Parameters
+
+Execute commands on the device.
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `cmd` | string | The command processor to execute (e.g., "sh", "bash", "cmd"). | Yes |
+| `args` | array of strings | Command arguments | No |
+| `may_fail` | boolean | If true, allow the command to fail without aborting onboarding | No (default: false) |
+| `return_stdout` | boolean | If true, the device's stdout stream from the command will be sent to the owner server and written to the logs | No (default: false) |
+| `return_stderr` | boolean | If true, the device's stderr stream from the command will be sent to the owner server and written to the logs | No (default: false) |
+
+### fdo.command Example
+
+```yaml
+fsim: "fdo.command"
+params:
+  may_fail: false
+  return_stdout: true
+  cmd: "bash"
+  args:
+    - "-c"
+    - |
+      #! /bin/bash
+      set -xeuo pipefail
+      echo "Current Date:"
+      date
+      dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
+```
+
+### fdo.download Parameters
+
+Download files from the owner server to the device.
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `dir` | string | Base directory path on the owner server where source files are located (used when `files.src` is relative) | Yes |
+| `files` | array of objects | List of files to download | Yes |
+
+Each file object in the `files` array has:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `src` | string | Path to the file on the owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). | Yes |
+| `dst` | string | Destination path on the device. Can be absolute or relative (to device working directory). | Yes |
+| `may_fail` | boolean | If true, allow the download to fail without aborting onboarding | No (default: false) |
+
+### fdo.download Example
+
+```yaml
+fsim: "fdo.download"
+params:
+  dir: "/var/lib/fdo/downloads"
+  files:
+    - src: "configs/app-config.json"  # relative to dir, file at /var/lib/fdo/downloads/configs/app-config.json
+      dst: "/etc/myapp/config.json"  # absolute path on device
+    - src: "/opt/scripts/setup.sh"  # absolute path, ignores dir
+      dst: "setup.sh"  # relative to device working directory
+      may_fail: true  # this file download is optional
+```
+
+### fdo.upload Parameters
+
+Upload files from the device to the owner server.
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `dir` | string | Base directory path on the owner server where uploaded files will be stored (used when `files.dst` is relative or omitted) | Yes |
+| `files` | array of objects | List of files to request from the device | Yes |
+
+Each file object in the `files` array has:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `src` | string | Path to the file on the device to upload. Can be absolute or relative (to device working directory). | Yes |
+| `dst` | string | Destination path on the owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). If omitted, saved to `params.dir` with the basename of `src`. | No |
+
+### fdo.upload Example
+
+```yaml
+fsim: "fdo.upload"
+params:
+  dir: "/var/lib/fdo/uploads"
+  files:
+    - src: "/etc/hostname"
+      dst: "device-hostname.txt"  # saved to /var/lib/fdo/uploads/device-hostname.txt
+    - src: "/var/log/device.log"
+      dst: "logs/device-12345.log"  # saved to /var/lib/fdo/uploads/logs/device-12345.log
+    - src: "/sys/class/dmi/id/product_uuid"
+      dst: "/var/system-info/uuid"  # absolute path, saved to /var/system-info/uuid
+    - src: "/etc/machine-id"
+      # dst omitted - saved to /var/lib/fdo/uploads/machine-id
+```
+
+### fdo.wget Parameters
+
+Instruct the device to download content from an HTTP server.
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `files` | array of objects | List of URLs that the device will retrieve content from and the file paths where the content will be stored. | Yes |
+
+Each file object in the `files` array has:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `url` | string | URL to download from (must be http or https) | Yes |
+| `dst` | string | Destination path on the device for the retrieved content. Can be absolute or relative (to device working directory). If not specified, uses basename of URL path. | No |
+| `length` | integer | For validation: expected size of downloaded content in bytes | No |
+| `checksum` | string | For validation: Expected SHA-384 checksum of the file (96 hexadecimal characters) | No |
+
+### fdo.wget Example
+
+```yaml
+fsim: "fdo.wget"
+params:
+  files:
+    - url: "https://example.com/packages/app-v1.2.3.rpm"
+      dst: "/tmp/app.rpm"
+      length: 2048576
+      checksum: "a1b2c3d4e5f..."
+    - url: "https://cdn.example.com/updates/firmware.bin"
+      dst: "/tmp/firmware.bin"
+```
 
 ## Rendezvous Server Configuration
 
@@ -174,6 +322,38 @@ cert = "/path/to/device.ca"
 key = "/path/to/owner.key"
 reuse_credentials = true
 to0_insecure_tls = false
+
+# Example FSIM operations configuration
+[[owner.service_info]]
+fsim = "fdo.command"
+[owner.service_info.params]
+cmd = "sh"
+args = ["-c", "echo Current date: ; date"]
+return_stdout = true
+
+[[owner.service_info]]
+fsim = "fdo.download"
+[owner.service_info.params]
+dir = "/var/lib/fdo/downloads"
+[[owner.service_info.params.files]]
+src = "/path/to/file1.txt"
+dst = "config.txt"
+may_fail = false
+
+[[owner.service_info]]
+fsim = "fdo.upload"
+[owner.service_info.params]
+dir = "/var/lib/fdo/uploads"
+[[owner.service_info.params.files]]
+src = "/etc/device-info.txt"
+dst = "device-info.txt"
+
+[[owner.service_info]]
+fsim = "fdo.wget"
+[[owner.service_info.params.files]]
+url = "https://example.com/package.tar.gz"
+dst = "package.tar.gz"
+checksum = "abc123..."
 ```
 
 ### Rendezvous Server Configuration
@@ -220,6 +400,57 @@ device_ca:
 
 owner:
   cert: "/path/to/owner.crt"
+```
+
+### Owner Server with FSIM Configuration (YAML)
+
+```yaml
+log:
+  level: "debug"
+
+http:
+  ip: "127.0.0.1"
+  port: "8043"
+
+db:
+  type: "sqlite"
+  dsn: "file:owner.db"
+
+device_ca:
+  cert: "/path/to/device.ca"
+
+owner:
+  key: "/path/to/owner.key"
+  reuse_credentials: true
+  service_info:
+    - fsim: "fdo.command"
+      params:
+        cmd: "sh"
+        args: ["-c", "echo Current date: ; date"]
+        return_stdout: true
+
+    - fsim: "fdo.download"
+      params:
+        dir: "/var/lib/fdo/downloads"
+        files:
+          - src: "/path/to/file1.txt"
+            dst: "config.txt"
+            may_fail: false
+          - src: "/path/to/file2.txt"
+            dst: "data.txt"
+
+    - fsim: "fdo.upload"
+      params:
+        dir: "/var/lib/fdo/uploads"
+        files:
+          - src: "/etc/device-info.txt"
+            dst: "device-info.txt"
+
+    - fsim: "fdo.wget"
+      params:
+        files:
+          - url: "https://example.com/package.tar.gz"
+            dst: "package.tar.gz"
 ```
 
 ## Notes

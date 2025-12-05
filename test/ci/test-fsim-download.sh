@@ -2,46 +2,66 @@
 
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-fsim-config.sh"
 
 # FSIM fdo.download specific configuration
 fsim_download_dir="${base_dir}/fsim/download"
 owner_download_dir="${fsim_download_dir}/owner"
+owner_download_subdir="${owner_download_dir}/subdir"
 device_download_dir="${fsim_download_dir}/device"
 
-# downloads using relative subdir paths doesn't work
-#download_files=("relative1" "subdir1/relative2" "subdir1/subdir2/relative3" "${owner_download_dir}/absolute")
-download_files=("file1" "${owner_download_dir}/file2" "${owner_download_dir}/subdir1/file3")
+# Owner files are all relative to the $owner_download_dir. These are the source files:
+owner_files=("owner-file1" "owner-file2" "subdir/owner-file3")
+# Destination files on the device. Either absolute, or relative to client working dir:
+device_files=("${device_download_dir}/device-file1" "device-file2" "device-file3")
 
-# Overwrite the owner service start function to configure download FSIM
-start_service_owner() {
-  download_commands=()
-  for file in "${download_files[@]}"; do
-    download_commands+=("--command-download=${file}")
-  done
-  cd ${owner_download_dir}
-  run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
-    --owner-key="${owner_key}" \
-    --device-ca-cert="${device_ca_crt}" \
-    "${download_commands[@]}"
-  cd - >/dev/null
+configure_service_owner() {
+  cat > "${owner_config_file}" <<EOF
+log:
+  level: "debug"
+db:
+  type: "sqlite"
+  dsn: "file:${base_dir}/owner.db"
+http:
+  ip: "${owner_dns}"
+  port: ${owner_port}
+device_ca:
+  cert: "${device_ca_crt}"
+owner:
+  key: "${owner_key}"
+  to0_insecure_tls: true
+  service_info:
+    - fsim: "fdo.download"
+      params:
+        dir: "${owner_download_dir}"
+        files:
+          - src: "${owner_files[0]}"
+            dst: "${device_files[0]}"
+          - src: "${owner_files[1]}"
+            dst: "${device_files[1]}"
+          - src: "${owner_files[2]}"
+            dst: "${device_files[2]}"
+EOF
 }
 
 generate_download_files() {
-  cd ${owner_download_dir}
-  for owner_file in "${download_files[@]}"; do
+  cd "${owner_download_dir}"
+  for owner_file in "${owner_files[@]}"; do
     prepare_payload "${owner_file}"
   done
   cd - >/dev/null
 }
 
 verify_downloads() {
-  cd ${owner_download_dir}
-  for owner_file in "${download_files[@]}"; do
-    device_file="${device_download_dir}/$(basename "${owner_file}")"
-    verify_equal_files "${device_file}" "${owner_file}"
+  for (( i=0; i<${#owner_files[@]}; i+=1 )); do
+    src="${owner_download_dir}/${owner_files[$i]}"
+    dst="${device_files[$i]}"
+    if [ "${dst:0:1}" != "/" ]; then
+      # destination is relative and was written to the go-fdo-client working dir
+      dst="${credentials_dir:?}/${dst}"
+    fi
+    verify_equal_files "${src}" "${dst}"
   done
-  cd - >/dev/null
 }
 
 # Public entrypoint used by CI
@@ -54,7 +74,7 @@ run_test() {
   show_env
 
   log_info "Creating directories"
-  directories+=("$owner_download_dir" "$device_download_dir")
+  directories+=("$owner_download_subdir" "$device_download_dir")
   create_directories
 
   log_info "Generating service certificates"
@@ -69,7 +89,7 @@ run_test() {
   log_info "Configuring services"
   configure_services
 
-  log_info "Generate the download payloads on owner side: ${download_files[*]}"
+  log_info "Generate the download payloads on owner side: ${owner_files[*]}"
   generate_download_files
 
   log_info "Configure DNS and start services"
@@ -92,7 +112,7 @@ run_test() {
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   log_info "Running FIDO Device Onboard with FSIM fdo.download"
-  run_fido_device_onboard "${guid}" --download "${device_download_dir}"
+  run_fido_device_onboard "${guid}"
 
   log_info "Verify downloaded files"
   verify_downloads

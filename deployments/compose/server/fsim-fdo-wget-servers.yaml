@@ -1,4 +1,4 @@
 include:
   - path:
-    - fdo-onboarding-servers.yaml
+    - fdo-onboarding-servers-config.yaml
     - fsim-fdo-wget-override.yaml

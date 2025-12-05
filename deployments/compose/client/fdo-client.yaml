@@ -11,6 +11,9 @@ services:
     volumes:
       - ${base_dir:-./test/workdir}:${container_working_dir:-/workdir}
     restart: no
+    environment:
+      # https://github.com/fido-device-onboard/go-fdo/issues/210
+      TMPDIR: ${container_working_dir:-/workdir}/tmp
 networks:
   fdo:
     name: fdo

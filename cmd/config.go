@@ -4,11 +4,16 @@
 package cmd
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/mitchellh/mapstructure"
 )
 
 // Log configuration
@@ -79,4 +84,219 @@ func (dc *DatabaseConfig) getState() (*db.State, error) {
 	}
 
 	return db.InitDb(dc.Type, dc.DSN)
+}
+
+// FSIM configuration structures
+
+// FSIMCommandParams holds the parameters for fdo.command FSIM module
+type FSIMCommandParams struct {
+	Command   string   `mapstructure:"cmd"`
+	Args      []string `mapstructure:"args"`
+	MayFail   bool     `mapstructure:"may_fail"`
+	RetStdout bool     `mapstructure:"return_stdout"`
+	RetStderr bool     `mapstructure:"return_stderr"`
+}
+
+// FSIMUploadFileSpec defines a file to be uploaded
+type FSIMUploadFileSpec struct {
+	Src string `mapstructure:"src"`
+	Dst string `mapstructure:"dst"`
+}
+
+// FSIMUploadParams holds the parameters for fdo.upload FSIM module
+type FSIMUploadParams struct {
+	Dir   string               `mapstructure:"dir"`
+	Files []FSIMUploadFileSpec `mapstructure:"files"`
+}
+
+// FSIMDownloadFileSpec defines a file to be downloaded
+type FSIMDownloadFileSpec struct {
+	Src     string `mapstructure:"src"`
+	Dst     string `mapstructure:"dst"`
+	MayFail bool   `mapstructure:"may_fail"`
+}
+
+// FSIMDownloadParams holds the parameters for fdo.download FSIM module
+type FSIMDownloadParams struct {
+	Dir   string                 `mapstructure:"dir"`
+	Files []FSIMDownloadFileSpec `mapstructure:"files"`
+}
+
+// FSIMWgetFileSpec defines a file to be downloaded via wget
+type FSIMWgetFileSpec struct {
+	URL      string `mapstructure:"url"`
+	Dst      string `mapstructure:"dst"`
+	Length   int64  `mapstructure:"length"`
+	Checksum string `mapstructure:"checksum"`
+}
+
+// FSIMWgetParams holds the parameters for fdo.wget FSIM module
+type FSIMWgetParams struct {
+	Files []FSIMWgetFileSpec `mapstructure:"files"`
+}
+
+// ServiceInfoOperation represents a single FSIM operation in the service_info list
+// Unmarshalling the configuration into this structure requires two steps: first
+// the FSIM is decoded. Once we know the FSIM we can properly decode the RawParams
+// into the specific command parameters.  See UnmarshalParams() below.
+type ServiceInfoOperation struct {
+	FSIM           string                 `mapstructure:"fsim"`
+	RawParams      map[string]interface{} `mapstructure:"params"`
+	CommandParams  *FSIMCommandParams
+	UploadParams   *FSIMUploadParams
+	DownloadParams *FSIMDownloadParams
+	WgetParams     *FSIMWgetParams
+}
+
+// ServiceInfoConfig holds the ordered list of FSIM operations
+// The service_info configuration is a list of FSIM operations
+type ServiceInfoConfig []ServiceInfoOperation
+
+// UnmarshalParams converts RawParams to the appropriate typed parameter field
+// based on the FSIM value. This must be called after Viper unmarshaling.
+func (s *ServiceInfoOperation) UnmarshalParams() error {
+	if s.RawParams == nil {
+		return fmt.Errorf("params field is required for fsim %q", s.FSIM)
+	}
+
+	switch s.FSIM {
+	case "fdo.command":
+		var params FSIMCommandParams
+		if err := mapstructure.Decode(s.RawParams, &params); err != nil {
+			return fmt.Errorf("failed to decode params for fdo.command: %w", err)
+		}
+		s.CommandParams = &params
+
+	case "fdo.upload":
+		var params FSIMUploadParams
+		if err := mapstructure.Decode(s.RawParams, &params); err != nil {
+			return fmt.Errorf("failed to decode params for fdo.upload: %w", err)
+		}
+		s.UploadParams = &params
+
+	case "fdo.download":
+		var params FSIMDownloadParams
+		if err := mapstructure.Decode(s.RawParams, &params); err != nil {
+			return fmt.Errorf("failed to decode params for fdo.download: %w", err)
+		}
+		s.DownloadParams = &params
+
+	case "fdo.wget":
+		var params FSIMWgetParams
+		if err := mapstructure.Decode(s.RawParams, &params); err != nil {
+			return fmt.Errorf("failed to decode params for fdo.wget: %w", err)
+		}
+		s.WgetParams = &params
+
+	default:
+		return fmt.Errorf("unsupported FSIM type %q", s.FSIM)
+	}
+
+	// Clear RawParams to save memory
+	s.RawParams = nil
+	return nil
+}
+
+// validate checks that the ServiceInfoConfig is valid
+func (s ServiceInfoConfig) validate() error {
+	for i := range s {
+		// First, unmarshal the raw params into typed fields
+		if err := s[i].UnmarshalParams(); err != nil {
+			return fmt.Errorf("service_info operation %d: %w", i, err)
+		}
+
+		op := &s[i]
+		if op.FSIM == "" {
+			return fmt.Errorf("service_info operation %d: fsim type is required", i)
+		}
+
+		// Validate based on FSIM type
+		switch op.FSIM {
+		case "fdo.command":
+			if op.CommandParams == nil {
+				return fmt.Errorf("service_info operation %d: command parameters are required for fdo.command", i)
+			}
+			if op.CommandParams.Command == "" {
+				return fmt.Errorf("service_info operation %d: command is required", i)
+			}
+
+		case "fdo.upload":
+			if op.UploadParams == nil {
+				return fmt.Errorf("service_info operation %d: upload parameters are required for fdo.upload", i)
+			}
+			if len(op.UploadParams.Files) == 0 {
+				return fmt.Errorf("service_info operation %d: at least one file must be specified for upload", i)
+			}
+			for j, file := range op.UploadParams.Files {
+				if file.Src == "" {
+					return fmt.Errorf("service_info operation %d, file %d: src is required", i, j)
+				}
+			}
+
+		case "fdo.download":
+			if op.DownloadParams == nil {
+				return fmt.Errorf("service_info operation %d: download parameters are required for fdo.download", i)
+			}
+			if op.DownloadParams.Dir == "" {
+				return fmt.Errorf("service_info operation %d: dir is required for fdo.download", i)
+			}
+			if len(op.DownloadParams.Files) == 0 {
+				return fmt.Errorf("service_info operation %d: at least one file must be specified for download", i)
+			}
+			for j, file := range op.DownloadParams.Files {
+				if file.Src == "" {
+					return fmt.Errorf("service_info operation %d, file %d: src is required", i, j)
+				}
+				if file.Dst == "" {
+					return fmt.Errorf("service_info operation %d, file %d: dst is required", i, j)
+				}
+				// Determine absolute path for src to validate file exists
+				var srcPath string
+				if filepath.IsAbs(file.Src) {
+					srcPath = file.Src
+				} else {
+					srcPath = filepath.Join(op.DownloadParams.Dir, file.Src)
+				}
+				// Validate that file exists and is readable
+				if _, err := os.Stat(srcPath); err != nil {
+					return fmt.Errorf("service_info operation %d, file %d: cannot access file %q: %w", i, j, srcPath, err)
+				}
+			}
+
+		case "fdo.wget":
+			if op.WgetParams == nil {
+				return fmt.Errorf("service_info operation %d: wget parameters are required for fdo.wget", i)
+			}
+			if len(op.WgetParams.Files) == 0 {
+				return fmt.Errorf("service_info operation %d: at least one file must be specified for wget", i)
+			}
+			for j, file := range op.WgetParams.Files {
+				if file.URL == "" {
+					return fmt.Errorf("service_info operation %d, file %d: url is required", i, j)
+				}
+				// Validate URL format
+				parsedURL, err := url.Parse(file.URL)
+				if err != nil {
+					return fmt.Errorf("service_info operation %d, file %d: invalid URL %q: %w", i, j, file.URL, err)
+				}
+				if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+					return fmt.Errorf("service_info operation %d, file %d: URL %q must use http or https scheme", i, j, file.URL)
+				}
+				if parsedURL.Host == "" {
+					return fmt.Errorf("service_info operation %d, file %d: URL %q missing host", i, j, file.URL)
+				}
+				// Validate checksum if present.
+				if file.Checksum != "" {
+					_, err := hex.DecodeString(file.Checksum)
+					if err != nil {
+						return fmt.Errorf("service_info operation %d, file %d: error decoding checksum %q: %v", i, j, file.Checksum, err)
+					}
+				}
+			}
+
+		default:
+			return fmt.Errorf("service_info operation %d: unsupported FSIM type %q (supported: fdo.command, fdo.upload, fdo.download, fdo.wget)", i, op.FSIM)
+		}
+	}
+	return nil
 }
