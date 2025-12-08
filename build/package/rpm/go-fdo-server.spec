@@ -6,7 +6,7 @@
 
 %global debug_package   %{nil}
 
-Version:        0.0.1
+Version:        0.0.2
 
 %gometa -L -f
 
