@@ -329,18 +329,12 @@ func serveOwner(config *OwnerServerConfig) error {
 	// Register FDO protocol endpoints
 	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
 
-	// Create a custom handler that routes between OpenAPI and ownerinfo
-	apiHandler := openapi.Handler(apiServer)
+	// Register ownerinfo endpoint manually (not part of OpenAPI spec but needed for TO0)
+	mainHandler.HandleFunc("/api/v1/ownerinfo", handlers.OwnerInfoHandler)
 
-	mainHandler.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle ownerinfo requests specially
-		if r.URL.Path == "/api/v1/ownerinfo" {
-			handlers.OwnerInfoHandler(w, r)
-			return
-		}
-		// Strip prefix and pass to OpenAPI handler for all other /api/v1/ requests
-		http.StripPrefix("/api/v1", apiHandler).ServeHTTP(w, r)
-	})
+	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
+	apiHandler := openapi.Handler(apiServer)
+	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
 
 	// Register health endpoint (not part of the OpenAPI spec but needed for backward compatibility)
 	mainHandler.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

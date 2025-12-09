@@ -471,48 +471,6 @@ send_manufacturer_ov_to_owner() {
   send_ov_to_owner "${owner_url}" "${ov_file}"
 }
 
-get_owner_redirect_info() {
-  local owner_url=$1
-  local response
-  response=$(curl -s -w "HTTP_STATUS:%{http_code}" "${owner_url}/api/v1/ownerinfo" 2>/dev/null)
-  local http_status=$(echo "$response" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
-  local body=$(echo "$response" | sed 's/HTTP_STATUS:[0-9]*$//')
-  
-  # Return empty string if not found (404) or any error, otherwise return body
-  if [ "$http_status" = "200" ]; then
-    echo "$body"
-  else
-    echo ""
-  fi
-}
-
-set_owner_redirect_info() {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  local protocol=$5
-  local owner_redirect_json
-  owner_redirect_json='[{"dns":"'${dns}'","port":"'${port}'","protocol":"'${protocol}'"}]'
-  curl -X POST "${owner_url}/api/v1/ownerinfo" \
-    -H "Content-Type: application/json" \
-    -d "${owner_redirect_json}" \
-    -s
-}
-
-update_owner_redirect_info() {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  local protocol=$5
-  local owner_redirect_json
-  owner_redirect_json='[{"dns":"'${dns}'","port":"'${port}'","protocol":"'${protocol}'"}]'
-  curl -X PUT "${owner_url}/api/v1/ownerinfo" \
-    -H "Content-Type: application/json" \
-    -d "${owner_redirect_json}" \
-    -s
-}
 
 set_or_update_owner_redirect_info() {
   local owner_url=$1
@@ -523,12 +481,12 @@ set_or_update_owner_redirect_info() {
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   log_info "Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
-  if [ -z "$(get_owner_redirect_info "${owner_url}")" ]; then
+  if [ -z "$(get_ownerinfo "${owner_url}")" ]; then
     log_warn "'RVTO2Addr' not found, creating it"
-    set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
+    set_ownerinfo "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   else
     log_info "'RVTO2Addr' found, updating it"
-    update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
+    update_ownerinfo "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   fi
   echo
 }

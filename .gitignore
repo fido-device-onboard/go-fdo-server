@@ -7,5 +7,3 @@ go-fdo-server-*.tar.*
 rpmbuild
 test/workdir
 
-# Generated OpenAPI code
-generated/

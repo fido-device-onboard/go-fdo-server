@@ -18,28 +18,21 @@ all: build test
 OPENAPI_SPEC := api/openapi/owner-server.yaml
 GENERATED_FILE := api/openapi/generated.go
 
-.PHONY: validate-openapi
-validate-openapi:
+.PHONY: oapi-codegen
+oapi-codegen:
+	@echo "Installing oapi-codegen..."
+	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+
+.PHONY: validate
+validate: oapi-codegen
 	@echo "Validating OpenAPI specification..."
-	@command -v oapi-codegen >/dev/null 2>&1 || command -v $$(go env GOPATH)/bin/oapi-codegen >/dev/null 2>&1 || { \
-		echo "Error: oapi-codegen not found. Please install it first:"; \
-		echo "  go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest"; \
-		exit 1; \
-	}
 	@echo "OpenAPI spec validation (oapi-codegen validates during generation)"
 
-# Real dependency rule for generated file
-$(GENERATED_FILE): $(OPENAPI_SPEC) validate-openapi
+.PHONY: generate
+generate: oapi-codegen
 	@echo "Generating Go types and server code from OpenAPI specification..."
-	$$(command -v oapi-codegen || echo $$(go env GOPATH)/bin/oapi-codegen) -package openapi -generate types,chi-server -o $(GENERATED_FILE) $(OPENAPI_SPEC)
+	go generate ./...
 
-.PHONY: generate-api
-generate-api: $(GENERATED_FILE)
-
-.PHONY: clean-generated
-clean-generated:
-	@echo "Cleaning generated OpenAPI code..."
-	rm -f $(GENERATED_FILE)
 
 .PHONY: openapi-docs
 openapi-docs:
@@ -52,7 +45,7 @@ openapi-docs:
 
 # Build the Go project
 .PHONY: build
-build: $(GENERATED_FILE) tidy fmt vet
+build: validate generate tidy fmt vet
 	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: tidy
