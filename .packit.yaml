@@ -108,7 +108,6 @@ jobs:
 
   - job: koji_build
     trigger: commit
-    allowed_pr_authors: [all_committers]
     dist_git_branches: &fedora_dist_git_branches
       - "fedora-latest-stable"
       - "fedora-latest"
@@ -116,7 +115,6 @@ jobs:
 
   - job: bodhi_update
     trigger: commit
-    allowed_builders: [all_committers]
     dist_git_branches: *fedora_dist_git_branches
 
   # Fedora E2E Testing jobs
