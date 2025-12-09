@@ -14,6 +14,8 @@ files_to_sync:
       - "build/package/rpm/go-fdo-server-*-vendor.tar.bz2"
     dest: .
 
+issue_repository: https://github.com/fido-device-onboard/go-fdo-server
+
 upstream_package_name: go-fdo-server
 downstream_package_name: go-fdo-server
 
