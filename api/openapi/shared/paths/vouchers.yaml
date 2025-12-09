@@ -1,0 +1,32 @@
+# Voucher endpoints used by manufacturer and owner servers
+/vouchers:
+  get:
+    parameters:
+      - name: guid
+        in: query
+        schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
+      - name: device_info
+        in: query
+        schema: {type: string}
+    responses:
+      '200':
+        content:
+          application/json:
+            schema:
+              type: array
+              items: 
+                $ref: '../schemas/common.yaml#/VoucherMetadata'
+
+/vouchers/{guid}:
+  get:
+    parameters:
+      - name: guid
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
+    responses:
+      '200':
+        content:
+          application/json:
+            schema: 
+              $ref: '../schemas/common.yaml#/VoucherResponse'

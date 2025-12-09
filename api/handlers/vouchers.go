@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"crypto"
 	"crypto/x509"
 	"encoding/base64"
@@ -14,7 +13,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -43,11 +41,9 @@ func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server, database
 		// Verify database connection with a simple ping
 		if sqlDB, err := database.DB.DB(); err == nil {
 			if pingErr := sqlDB.Ping(); pingErr != nil {
-				slog.Warn("Database ping failed during server creation, will fall back to global db", "error", pingErr)
 				database = nil
 			}
 		} else {
-			slog.Warn("Unable to get underlying SQL DB, will fall back to global db", "error", err)
 			database = nil
 		}
 	}
@@ -107,7 +103,6 @@ func (s *Server) GetVouchers(w http.ResponseWriter, r *http.Request, params open
 
 	vouchers, err := db.QueryVouchers(filters, false)
 	if err != nil {
-		slog.Debug("Error querying vouchers", "error", err)
 		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error querying vouchers", err.Error(), "Error querying vouchers")
 		return
 	}
@@ -176,10 +171,6 @@ func VerifyVoucherOwnership(ov *fdo.Voucher, ownerPKeys []crypto.PublicKey) erro
 //   - Manufacturer key hash verification (ov.VerifyManufacturerKey): Requires trusted manufacturer
 //     key hashes to be configured (owner server has no source for these hashes)
 func VerifyOwnershipVoucher(ov *fdo.Voucher) error {
-	// TODO: Investigate whether protocol version should be verified for all messages received by the server
-	// and whether FDOProtocolVersion const should be moved to a common package (e.g., api package)
-	const FDOProtocolVersion uint16 = 101 // FDO spec v1.1
-
 	// Header Field Validation
 	if ov.Version != FDOProtocolVersion {
 		return fmt.Errorf("unsupported protocol version: %d (expected %d)", ov.Version, FDOProtocolVersion)
@@ -320,7 +311,6 @@ func PostOwnerVouchersWithKeys(w http.ResponseWriter, r *http.Request, ownerPKey
 		// Ov Verification
 		if err := VerifyVoucher(&ov, ownerPKeys); err != nil {
 			AppendError(&response, "Voucher verification failed for GUID %s: %v", hex.EncodeToString(ov.Header.Val.GUID[:]), err)
-			slog.Error("Ownership voucher verification failed", "guid", ov.Header.Val.GUID[:], "err", err)
 			continue
 		}
 
@@ -396,7 +386,6 @@ func PostOwnerResellGuidWithServer(w http.ResponseWriter, r *http.Request, guid 
 	state, ok := to2Server.VouchersForExtension.(*db.State)
 	if !ok {
 		WriteErrorResponse(w, r, http.StatusInternalServerError, "Internal server error", "Invalid state type", "Internal server error: invalid state type")
-		slog.Error("VouchersForExtension is not *db.State", "type", fmt.Sprintf("%T", to2Server.VouchersForExtension))
 		return
 	}
 
@@ -414,7 +403,7 @@ func PostOwnerResellGuidWithServer(w http.ResponseWriter, r *http.Request, guid 
 
 		// Call Resell on the copy - it will use the transactional wrapper
 		var resellErr error
-		extended, resellErr = txTO2Server.Resell(context.TODO(), guidProtocol, nextOwner, nil)
+		extended, resellErr = txTO2Server.Resell(r.Context(), guidProtocol, nextOwner, nil)
 		return resellErr
 	})
 

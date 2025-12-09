@@ -4,6 +4,7 @@ info:
   version: 1.1.0
 
 paths:
+  # Shared endpoint used by all FDO servers (owner, manufacturer, rendezvous)
   /health:
     get:
       responses:
@@ -14,6 +15,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
+  # Owner-specific endpoints
   /owner/vouchers:
     post:
       requestBody:
@@ -66,6 +68,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/OwnerRedirect'
 
+  # Shared voucher endpoints (used by manufacturer and owner servers)  
   /vouchers:
     get:
       parameters:
@@ -81,7 +84,8 @@ paths:
             application/json:
               schema:
                 type: array
-                items: {$ref: '#/components/schemas/VoucherMetadata'}
+                items: 
+                  $ref: '#/components/schemas/VoucherMetadata'
 
   /vouchers/{guid}:
     get:
@@ -94,7 +98,8 @@ paths:
         '200':
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/VoucherResponse'}
+              schema: 
+                $ref: '#/components/schemas/VoucherResponse'
 
   /owner/resell/{guid}:
     post:
@@ -110,45 +115,25 @@ paths:
         '200':
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/VoucherResponse'}
+              schema: 
+                $ref: '#/components/schemas/VoucherResponse'
 
 components:
   schemas:
+    # =============================================================================
+    # SHARED SCHEMAS - Used by multiple FDO servers (owner, manufacturer, rendezvous)
+    # Note: These schemas should be extracted to shared files when creating
+    # manufacturer-server.yaml and rendezvous-server.yaml specifications
+    # =============================================================================
+    
     HealthResponse:
       type: object
-      required: [version, status]
+      required: [version, status]  
       properties:
         version:
           type: string
         status:
           type: string
-    
-    VoucherInsertResponse:
-      type: object
-      required: [processed, inserted]
-      properties:
-        processed:
-          type: integer
-        inserted:
-          type: integer
-        errors:
-          type: array
-          items:
-            type: string
-    
-    OwnerRedirect:
-      type: array
-      items:
-        type: object
-        required: [dns, port, protocol]
-        properties:
-          dns:
-            type: string
-          port:
-            type: string
-          protocol:
-            type: string
-            enum: [http, https]
     
     VoucherResponse:
       type: object
@@ -175,3 +160,35 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    VoucherInsertResponse:
+      type: object
+      required: [processed, inserted]
+      properties:
+        processed:
+          type: integer
+        inserted:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+
+    # =============================================================================  
+    # OWNER-SPECIFIC SCHEMAS - Only used by owner server
+    # =============================================================================
+    
+    OwnerRedirect:
+      type: array
+      items:
+        type: object
+        required: [dns, port, protocol]
+        properties:
+          dns:
+            type: string
+          port:
+            type: string
+          protocol:
+            type: string
+            enum: [http, https]
+

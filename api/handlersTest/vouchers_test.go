@@ -253,9 +253,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 		t.Fatalf("Failed to get owner public key: %v", err)
 	}
 
-	// TODO: This should reference a common constant once FDOProtocolVersion is moved to a common package
-	// See: api/handlers/vouchers.go VerifyOwnershipVoucher function for related TODO
-	const fdoProtocolVersion uint16 = 101 // FDO spec v1.1
+	// Using shared FDOProtocolVersion constant from handlers package
 
 	testCases := []struct {
 		name          string
@@ -273,7 +271,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 		{
 			name: "Protocol version mismatch",
 			modifyVoucher: func(v *fdo.Voucher) {
-				v.Version = fdoProtocolVersion
+				v.Version = handlers.FDOProtocolVersion
 				v.Header.Val.Version = 100 // Mismatch
 			},
 			expectedError: "Invalid ownership voucher\n",

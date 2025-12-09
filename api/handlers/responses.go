@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
@@ -23,6 +22,11 @@ const (
 	ContentTypeJSON = "application/json"
 	ContentTypePEM  = "application/x-pem-file"
 	ContentTypeForm = "application/x-www-form-urlencoded"
+)
+
+// Protocol constants
+const (
+	FDOProtocolVersion uint16 = 101 // FDO spec v1.1
 )
 
 // ErrorResponse represents a standard error response
@@ -119,7 +123,6 @@ func AppendError(response *openapi.VoucherInsertResponse, format string, args ..
 func ReadRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("Error reading body", "error", err)
 		WriteErrorResponse(w, r, http.StatusInternalServerError, "Failed to read request body", err.Error(), "Error reading body")
 		return nil, false
 	}
@@ -129,12 +132,10 @@ func ReadRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 // HandleDBError handles GORM errors consistently (duplicate key or not found)
 func HandleDBError(w http.ResponseWriter, r *http.Request, entityName string, err error) bool {
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		slog.Error(entityName+" already exists (constraint)", "error", err)
 		WriteErrorResponse(w, r, http.StatusConflict, entityName+" already exists", "A "+entityName+" with the same identifier already exists", entityName+" already exists")
 		return true
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Error("No " + entityName + " found")
 		WriteErrorResponse(w, r, http.StatusNotFound, "No "+entityName+" found", entityName+" has not been configured", "No "+entityName+" found")
 		return true
 	}

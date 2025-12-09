@@ -1,0 +1,48 @@
+# Shared schemas used across multiple FDO servers (owner, manufacturer, rendezvous)
+HealthResponse:
+  type: object
+  required: [version, status]
+  properties:
+    version:
+      type: string
+    status:
+      type: string
+
+VoucherResponse:
+  type: object
+  required: [voucher, encoding, guid]
+  properties:
+    voucher:
+      type: string
+    encoding:
+      type: string
+    guid:
+      type: string
+
+VoucherMetadata:
+  type: object
+  required: [guid, device_info, created_at]
+  properties:
+    guid:
+      type: string
+    device_info:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+VoucherInsertResponse:
+  type: object
+  required: [processed, inserted]
+  properties:
+    processed:
+      type: integer
+    inserted:
+      type: integer
+    errors:
+      type: array
+      items:
+        type: string
