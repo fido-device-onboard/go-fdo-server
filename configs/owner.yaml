@@ -1,0 +1,21 @@
+# FDO Owner server default configuration
+log:
+  level: "info"
+db:
+  type: "sqlite"
+  dsn: "file:/var/lib/go-fdo-server-owner/db.sqlite"
+http:
+  ip: "0.0.0.0"
+  port: "8043"
+  # To enable HTTPS provide the server certificate and matching
+  # private key below. If the certificate is signed by a certificate
+  # authority, the certFile should be the concatenation of the
+  # server's certificate, any intermediates, and the CA's certificate.
+  ##cert: /etc/pki/go-fdo-server/owner-https-example.crt
+  ##key: /etc/pki/go-fdo-server/owner-https-example.key
+device_ca:
+  cert: "/etc/pki/go-fdo-server/device-ca-example.crt"
+owner:
+  cert: "/etc/pki/go-fdo-server/owner-example.crt"
+  key: "/etc/pki/go-fdo-server/owner-example.key"
+

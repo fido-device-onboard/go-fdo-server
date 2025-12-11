@@ -2,12 +2,15 @@
 
 source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/cert-utils.sh"
 
-ENV_FILE="/etc/sysconfig/go-fdo-server-device-ca"
-[ ! -f "${ENV_FILE}" ] || source "${ENV_FILE}"
+cert_dir="/etc/pki/go-fdo-server"
+subj="/C=US/O=FDO/CN=Device CA"
+key="${cert_dir}/device-ca-example.key"
+crt="${cert_dir}/device-ca-example.crt"
 
-conf_dir="${DEVICE_CA_CONF_DIR:-/etc/go-fdo-server}"
-subj="${DEVICE_CA_SUBJECT:-/C=US/O=FDO/CN=Device CA}"
-key="${DEVICE_CA_KEY:-${conf_dir}/device-ca.key}"
-crt="${DEVICE_CA_CRT:-${conf_dir}/device-ca.crt}"
-
+# Do not overwrite existing cert/key files unless one of the pair is
+# missing
+if [[ ! -f "${key}" || ! -f "${crt}" ]]; then
+  rm -f "${key}" "${crt}"
+fi
 generate_cert "${key}" "${crt}" "${subj}"
+chmod g+r "${key}"
