@@ -15,7 +15,7 @@
             schema:
               type: array
               items: 
-                $ref: '../schemas/common.yaml#/VoucherMetadata'
+                $ref: '../schemas/common.yaml#/components/schemas/VoucherMetadata'
 
 /vouchers/{guid}:
   get:
@@ -29,4 +29,4 @@
         content:
           application/json:
             schema: 
-              $ref: '../schemas/common.yaml#/VoucherResponse'
+              $ref: '../schemas/common.yaml#/components/schemas/VoucherResponse'

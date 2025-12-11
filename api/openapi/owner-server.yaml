@@ -6,14 +6,7 @@ info:
 paths:
   # Shared endpoint used by all FDO servers (owner, manufacturer, rendezvous)
   /health:
-    get:
-      responses:
-        '200':
-          description: Server health status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
+    $ref: './shared/paths/health.yaml'
 
   # Owner-specific endpoints
   /owner/vouchers:
@@ -30,7 +23,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VoucherInsertResponse'
+                $ref: 'shared/schemas/common.yaml#/components/schemas/VoucherInsertResponse'
 
   /owner/redirect:
     get:
@@ -70,36 +63,10 @@ paths:
 
   # Shared voucher endpoints (used by manufacturer and owner servers)  
   /vouchers:
-    get:
-      parameters:
-        - name: guid
-          in: query
-          schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
-        - name: device_info
-          in: query
-          schema: {type: string}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items: 
-                  $ref: '#/components/schemas/VoucherMetadata'
+    $ref: './shared/paths/vouchers.yaml#/~1vouchers'
 
   /vouchers/{guid}:
-    get:
-      parameters:
-        - name: guid
-          in: path
-          required: true
-          schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: 
-                $ref: '#/components/schemas/VoucherResponse'
+    $ref: './shared/paths/vouchers.yaml#/~1vouchers~1{guid}'
 
   /owner/resell/{guid}:
     post:
@@ -116,68 +83,11 @@ paths:
           content:
             application/json:
               schema: 
-                $ref: '#/components/schemas/VoucherResponse'
+                $ref: 'shared/schemas/common.yaml#/components/schemas/VoucherResponse'
 
 components:
   schemas:
-    # =============================================================================
-    # SHARED SCHEMAS - Used by multiple FDO servers (owner, manufacturer, rendezvous)
-    # Note: These schemas should be extracted to shared files when creating
-    # manufacturer-server.yaml and rendezvous-server.yaml specifications
-    # =============================================================================
-    
-    HealthResponse:
-      type: object
-      required: [version, status]  
-      properties:
-        version:
-          type: string
-        status:
-          type: string
-    
-    VoucherResponse:
-      type: object
-      required: [voucher, encoding, guid]
-      properties:
-        voucher:
-          type: string
-        encoding:
-          type: string
-        guid:
-          type: string
-    
-    VoucherMetadata:
-      type: object
-      required: [guid, device_info, created_at]
-      properties:
-        guid:
-          type: string
-        device_info:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    VoucherInsertResponse:
-      type: object
-      required: [processed, inserted]
-      properties:
-        processed:
-          type: integer
-        inserted:
-          type: integer
-        errors:
-          type: array
-          items:
-            type: string
-
-    # =============================================================================  
-    # OWNER-SPECIFIC SCHEMAS - Only used by owner server
-    # =============================================================================
-    
+    # Only owner-specific schemas - shared schemas are in shared/schemas/common.yaml
     OwnerRedirect:
       type: array
       items:

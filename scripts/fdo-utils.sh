@@ -36,56 +36,6 @@ update_rendezvous_info () {
        "${manufacturer_url}/api/v1/rvinfo"
 }
 
-get_owner_redirect_info () {
-  local owner_url=$1
-  curl --fail --verbose --silent --insecure \
-       --header 'Content-Type: text/plain' \
-       "${owner_url}/api/v1/owner/redirect"
-}
-
-set_owner_redirect_info () {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  # TransportProtocol /= (
-  #     ProtTCP:    1,     ;; bare TCP stream
-  #     ProtTLS:    2,     ;; bare TLS stream
-  #     ProtHTTP:   3,
-  #     ProtCoAP:   4,
-  #     ProtHTTPS:  5,
-  #     ProtCoAPS:  6,
-  # )
-  local protocol=$5
-  rvto2addr="[{\"ip\": \"${ip}\", \"dns\": \"${dns}\", \"port\": \"${port}\", \"protocol\": \"${protocol}\"}]"
-  curl --fail --verbose --silent --insecure \
-       --request POST \
-       --header 'Content-Type: text/plain' \
-       --data-raw "${rvto2addr}" \
-       "${owner_url}/api/v1/owner/redirect"
-}
-
-update_owner_redirect_info () {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  # TransportProtocol /= (
-  #     ProtTCP:    1,     ;; bare TCP stream
-  #     ProtTLS:    2,     ;; bare TLS stream
-  #     ProtHTTP:   3,
-  #     ProtCoAP:   4,
-  #     ProtHTTPS:  5,
-  #     ProtCoAPS:  6,
-  # )
-  local protocol=$5
-  rvto2addr="[{\"ip\": \"${ip}\", \"dns\": \"${dns}\", \"port\": \"${port}\", \"protocol\": \"${protocol}\"}]"
-  curl --fail --verbose --silent --insecure \
-       --request PUT \
-       --header 'Content-Type: text/plain' \
-       --data-raw "${rvto2addr}" \
-       "${owner_url}/api/v1/owner/redirect"
-}
 
 get_ov_from_manufacturer () {
   local manufacturer_url=$1

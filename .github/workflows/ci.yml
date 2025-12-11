@@ -23,7 +23,6 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-
       - name: Run make all
         env:
           CGO_ENABLED: 1
@@ -50,7 +49,6 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-
       - name: Build SRPM
         run: |
           git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
@@ -75,7 +73,6 @@ jobs:
 
       - name: Check out repository code
         uses: actions/checkout@v4
-
 
       - name: Test FIDO device onboarding
         run: |
@@ -106,7 +103,6 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-
       - name: Test Ownership Voucher verification
         run: |
           source test/ci/test-ov-verification.sh
@@ -135,7 +131,6 @@ jobs:
 
       - name: Check out repository code
         uses: actions/checkout@v4
-
 
       - name: Test FIDO resale protocol
         run: |
@@ -166,7 +161,6 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-
       - name: Test FSIM fdo.wget
         run: |
           source test/ci/test-fsim-wget.sh
@@ -195,7 +189,6 @@ jobs:
 
       - name: Check out repository code
         uses: actions/checkout@v4
-
 
       - name: Test FSIM fdo.upload
         run: |
@@ -226,7 +219,6 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-
       - name: Test FSIM fdo.download
         run: |
           source test/ci/test-fsim-download.sh
@@ -255,7 +247,6 @@ jobs:
 
       - name: Check out repository code
         uses: actions/checkout@v4
-
 
       - name: Test FIDO device onboarding
         run: |

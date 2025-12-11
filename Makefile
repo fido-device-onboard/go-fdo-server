@@ -30,7 +30,9 @@ validate: oapi-codegen
 
 .PHONY: generate
 generate: oapi-codegen
-	@echo "Generating Go types and server code from OpenAPI specification..."
+	@echo "Generating shared types from common schemas..."
+	cd api/openapi && go tool oapi-codegen -package openapi -generate types shared/schemas/common.yaml > shared-types.go
+	@echo "Generating owner server code..."
 	go generate ./...
 
 

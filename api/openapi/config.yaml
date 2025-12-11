@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
 package: openapi
 generate:
-  chi-server: true
+  std-http-server: true
   models: true
-output: generated.go
+output: owner-server-generated.go
+import-mapping:
+  "shared/schemas/common.yaml": "github.com/fido-device-onboard/go-fdo-server/api/openapi"
+  "../schemas/common.yaml": "github.com/fido-device-onboard/go-fdo-server/api/openapi"

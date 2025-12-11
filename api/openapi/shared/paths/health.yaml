@@ -6,4 +6,4 @@ get:
       content:
         application/json:
           schema:
-            $ref: '../schemas/common.yaml#/HealthResponse'
+            $ref: '../schemas/common.yaml#/components/schemas/HealthResponse'
