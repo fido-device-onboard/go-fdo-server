@@ -96,9 +96,13 @@ components:
         properties:
           dns:
             type: string
+          ip:
+            type: string
+            description: IP address for the redirect target
           port:
             type: string
           protocol:
             type: string
-            enum: [http, https]
+            enum: [tcp, tls, http, coap, https, coaps]
+            description: Transport protocol as defined by FDO specification
 

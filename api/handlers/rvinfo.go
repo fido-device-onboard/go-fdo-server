@@ -17,14 +17,13 @@ import (
 func RvInfoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
-		s := &Server{} // Empty server for compatibility
 		switch r.Method {
 		case http.MethodGet:
-			s.GetOwnerRedirect(w, r)
+			getRvInfo(w, r)
 		case http.MethodPost:
-			s.PostOwnerRedirect(w, r)
+			createRvInfo(w, r)
 		case http.MethodPut:
-			s.PutOwnerRedirect(w, r)
+			updateRvInfo(w, r)
 		default:
 			slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
 			WriteErrorResponse(w, r, http.StatusMethodNotAllowed, "Method not allowed", "HTTP method "+r.Method+" is not supported for this endpoint", "Method not allowed")
@@ -32,37 +31,95 @@ func RvInfoHandler() http.HandlerFunc {
 	}
 }
 
-// GetOwnerRedirect implements the rvInfo GET endpoint (OpenAPI interface method)
+// GetOwnerRedirect implements the owner redirect GET endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
 func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
-	slog.Debug("Fetching rvInfo")
+	slog.Debug("Fetching owner redirect addresses (TO2)")
 
-	var rvInfoJSON []byte
-	var err error
-
-	// Use struct database with defensive validation, otherwise fall back to global db
-	if s.db != nil && s.db.DB != nil {
-		// Verify database is accessible before using it
-		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
-			if pingErr := sqlDB.Ping(); pingErr == nil {
-				rvInfoJSON, err = s.db.FetchRvInfoJSON()
-			} else {
-				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
-				rvInfoJSON, err = db.FetchRvInfoJSON()
-			}
-		} else {
-			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
-			rvInfoJSON, err = db.FetchRvInfoJSON()
-		}
-	} else {
-		rvInfoJSON, err = db.FetchRvInfoJSON()
-	}
-
+	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("No rvInfo found")
+			slog.Error("No owner redirect addresses found")
+			WriteErrorResponse(w, r, http.StatusNotFound, "No owner redirect addresses found", "Owner redirect addresses have not been configured", "No owner redirect addresses found")
+		} else {
+			slog.Error("Error fetching owner redirect addresses", "error", err)
+			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching owner redirect addresses", err.Error(), "Error fetching owner redirect addresses")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Write(ownerInfoJSON)
+}
+
+// PostOwnerRedirect implements the owner redirect POST endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
+func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	ownerInfo, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
+
+	err := db.InsertOwnerInfo(ownerInfo)
+	if err != nil {
+		if HandleDBError(w, r, "owner redirect addresses", err) {
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid owner redirect addresses payload", "error", err)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid owner redirect addresses", err.Error(), "Invalid owner redirect addresses")
+			return
+		}
+		slog.Error("Error inserting owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting owner redirect addresses", err.Error(), "Error inserting owner redirect addresses")
+		return
+	}
+
+	slog.Debug("owner redirect addresses created")
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.WriteHeader(http.StatusCreated)
+	w.Write(ownerInfo)
+}
+
+// PutOwnerRedirect implements the owner redirect PUT endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
+func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	ownerInfo, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
+
+	err := db.UpdateOwnerInfo(ownerInfo)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.Error("owner redirect addresses do not exist, cannot update")
+			WriteErrorResponse(w, r, http.StatusNotFound, "owner redirect addresses do not exist", "No owner redirect addresses found to update", "owner redirect addresses do not exist")
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid owner redirect addresses payload", "error", err)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid owner redirect addresses", err.Error(), "Invalid owner redirect addresses")
+			return
+		}
+		slog.Error("Error updating owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating owner redirect addresses", err.Error(), "Error updating owner redirect addresses")
+		return
+	}
+
+	slog.Debug("owner redirect addresses updated")
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Write(ownerInfo)
+}
+
+// Original RvInfo functions for manufacturing server backward compatibility
+func getRvInfo(w http.ResponseWriter, r *http.Request) {
+	rvInfoJSON, err := db.FetchRvInfoJSON()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			WriteErrorResponse(w, r, http.StatusNotFound, "No rvInfo found", "rvInfo has not been configured", "No rvInfo found")
 		} else {
-			slog.Error("Error fetching rvInfo", "error", err)
 			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching rvInfo", err.Error(), "Error fetching rvInfo")
 		}
 		return
@@ -72,96 +129,47 @@ func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	w.Write(rvInfoJSON)
 }
 
-// PostOwnerRedirect implements the rvInfo POST endpoint (OpenAPI interface method)
-func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+func createRvInfo(w http.ResponseWriter, r *http.Request) {
 	rvInfo, ok := ReadRequestBody(w, r)
 	if !ok {
 		return
 	}
 
-	// Use struct database with defensive validation, otherwise fall back to global db
-	var err error
-	if s.db != nil && s.db.DB != nil {
-		// Verify database is accessible before using it
-		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
-			if pingErr := sqlDB.Ping(); pingErr == nil {
-				err = s.db.InsertRvInfo(rvInfo)
-			} else {
-				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
-				err = db.InsertRvInfo(rvInfo)
-			}
-		} else {
-			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
-			err = db.InsertRvInfo(rvInfo)
-		}
-	} else {
-		err = db.InsertRvInfo(rvInfo)
-	}
-
-	if err != nil {
+	if err := db.InsertRvInfo(rvInfo); err != nil {
 		if HandleDBError(w, r, "rvInfo", err) {
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
-			slog.Error("Invalid rvInfo payload", "error", err)
 			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
-		slog.Error("Error inserting rvInfo", "error", err)
 		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting rvInfo", err.Error(), "Error inserting rvInfo")
 		return
 	}
-
-	slog.Debug("rvInfo created")
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(rvInfo)
 }
 
-// PutOwnerRedirect implements the rvInfo PUT endpoint (OpenAPI interface method)
-func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+func updateRvInfo(w http.ResponseWriter, r *http.Request) {
 	rvInfo, ok := ReadRequestBody(w, r)
 	if !ok {
 		return
 	}
 
-	// Use struct database with defensive validation, otherwise fall back to global db
-	var err error
-	if s.db != nil && s.db.DB != nil {
-		// Verify database is accessible before using it
-		if sqlDB, dbErr := s.db.DB.DB(); dbErr == nil {
-			if pingErr := sqlDB.Ping(); pingErr == nil {
-				err = s.db.UpdateRvInfo(rvInfo)
-			} else {
-				slog.Warn("Struct database ping failed, falling back to global db", "error", pingErr)
-				err = db.UpdateRvInfo(rvInfo)
-			}
-		} else {
-			slog.Warn("Unable to get underlying SQL DB, falling back to global db", "error", dbErr)
-			err = db.UpdateRvInfo(rvInfo)
-		}
-	} else {
-		err = db.UpdateRvInfo(rvInfo)
-	}
-
-	if err != nil {
+	if err := db.UpdateRvInfo(rvInfo); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("rvInfo does not exist, cannot update")
 			WriteErrorResponse(w, r, http.StatusNotFound, "rvInfo does not exist", "No rvInfo found to update", "rvInfo does not exist")
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
-			slog.Error("Invalid rvInfo payload", "error", err)
 			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
-		slog.Error("Error updating rvInfo", "error", err)
 		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating rvInfo", err.Error(), "Error updating rvInfo")
 		return
 	}
-
-	slog.Debug("rvInfo updated")
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(rvInfo)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
+	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -59,7 +60,7 @@ func NewServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server, database
 // TODO: Remove these once manufacturing server is refactored to use OpenAPI interface
 func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 	// Create a dummy GetVouchersParams from query parameters
-	params := openapi.GetVouchersParams{}
+	params := oapi_owner.GetVouchersParams{}
 	if guid := r.URL.Query().Get("guid"); guid != "" {
 		params.Guid = &guid
 	}
@@ -86,7 +87,7 @@ func InsertVoucherHandler(ownerPKeys []crypto.PublicKey) http.HandlerFunc {
 	}
 }
 
-func (s *Server) GetVouchers(w http.ResponseWriter, r *http.Request, params openapi.GetVouchersParams) {
+func (s *Server) GetVouchers(w http.ResponseWriter, r *http.Request, params oapi_owner.GetVouchersParams) {
 	filters := make(map[string]interface{})
 
 	if params.Guid != nil {

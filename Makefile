@@ -23,11 +23,6 @@ oapi-codegen:
 	@echo "Installing oapi-codegen..."
 	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 
-.PHONY: validate
-validate: oapi-codegen
-	@echo "Validating OpenAPI specification..."
-	@echo "OpenAPI spec validation (oapi-codegen validates during generation)"
-
 .PHONY: generate
 generate: oapi-codegen
 	@echo "Generating shared types from common schemas..."
@@ -36,18 +31,10 @@ generate: oapi-codegen
 	go generate ./...
 
 
-.PHONY: openapi-docs
-openapi-docs:
-	@echo "Starting OpenAPI documentation server..."
-	@command -v swagger-ui-serve >/dev/null 2>&1 || { \
-		echo "Installing swagger-ui-serve..."; \
-		npm install -g swagger-ui-serve; \
-	}
-	swagger-ui-serve $(OPENAPI_SPEC)
 
 # Build the Go project
 .PHONY: build
-build: validate generate tidy fmt vet
+build: generate tidy fmt vet
 	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: tidy

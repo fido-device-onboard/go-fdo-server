@@ -28,7 +28,7 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/api/openapi"
+	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
@@ -333,7 +333,7 @@ func serveOwner(config *OwnerServerConfig) error {
 	mainHandler.HandleFunc("/api/v1/ownerinfo", handlers.OwnerInfoHandler)
 
 	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
-	apiHandler := openapi.Handler(apiServer)
+	apiHandler := oapi_owner.Handler(apiServer)
 	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
 
 	// Register health endpoint (not part of the OpenAPI spec but needed for backward compatibility)
