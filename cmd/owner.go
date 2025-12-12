@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
@@ -320,15 +320,29 @@ func serveOwner(config *OwnerServerConfig) error {
 		TO2Responder: to2Server,
 	}
 
-	// Handle messages
-	apiRouter := http.NewServeMux()
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
-	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
-	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
+	// Create OpenAPI server instance
+	apiServer := handlers.NewServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
+
+	// Create the main HTTP handler with chi router for API endpoints
+	mainHandler := http.NewServeMux()
+
+	// Register FDO protocol endpoints
+	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
+
+	// Register ownerinfo endpoint manually (not part of OpenAPI spec but needed for TO0)
+	mainHandler.HandleFunc("/api/v1/ownerinfo", handlers.OwnerInfoHandler)
+
+	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
+	apiHandler := oapi_owner.Handler(apiServer)
+	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
+
+	// Register health endpoint (not part of the OpenAPI spec but needed for backward compatibility)
+	mainHandler.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiServer.GetHealth(w, r)
+	}))
 
 	// Listen and serve
-	server := NewOwnerServer(config.HTTP, httpHandler)
+	server := NewOwnerServer(config.HTTP, mainHandler)
 
 	// Background TO0 scheduler: after restarts, continue attempting TO0 for any
 	// devices without completed TO2 as recorded in the database.
