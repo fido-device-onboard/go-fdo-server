@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: voucher
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+output: handlers/voucher/gen.go
+import-mapping:
+ ./components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+output-options:
+  # to make sure that all types are generated
+  skip-prune: true

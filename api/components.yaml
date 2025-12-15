@@ -1,0 +1,118 @@
+openapi: 3.0.0
+info:
+  title: Common API Objects
+  version: 0.0.1
+  description:
+  contact:
+    name: API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: http://localhost/api/v1
+    description: API Server
+tags:
+  - name:
+    description:
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication using username and password.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer Token authentication. The token can be a JWT or an opaque token.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key authentication via the X-API-Key header.
+    OidcAuth:
+      type: openIdConnect
+      openIdConnectUrl: https://localhost/.well-known/openid-configuration
+      description: OpenID Connect authentication using a JWT obtained from an OIDC provider.
+    Oauth2Auth:
+      type: oauth2
+      description: OAuth 2.0 authentication.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost/oauth/token
+          scopes:
+            read:trusted-device-ca-certs: "Grants read access to trusted device CA certificates."
+            write:trusted-device-ca-certs: "Grants create, update, and delete access to trusted device CA certificates."
+  schemas:
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: A human-readable error message.
+  parameters:
+    UUID:
+      name: UUID
+      in: path
+      required: true
+      description: The unique object identifier.
+      schema:
+        type: string
+        format: uuid
+        example: 'a1b2c3d4-e5f6-7890-1234-567890abcdef'
+  responses:
+    BadRequest:
+      description: Bad Request - The request was malformed or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              summary: Example of a bad request error
+              value:
+                message: "Invalid Request."
+    Unauthorized:
+      description: Unauthorized - Authentication credentials missing, invalid, or expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              summary: Example of an unauthorized error
+              value:
+                message: "Authentication token is invalid or has expired."
+    Forbidden:
+      description: Forbidden - The authenticated user does not have permission to perform this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            forbidden:
+              summary: Example of a forbidden error
+              value:
+                message: "User does not have the right access level."
+    NotFound:
+      description: Not Found - The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              summary: Example of a not found error
+              value:
+                message: "Object not found."
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            serverError:
+              summary: Example of a server error
+              value:
+                message: "An unexpected error occurred."

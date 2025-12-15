@@ -71,6 +71,7 @@ func InitDb(dbType, dsn string) (*State, error) {
 		&OwnerInfo{},
 		&RvInfo{},
 		&DeviceOnboarding{},
+		&DeviceCACertificate{},
 	)
 	if err != nil {
 		slog.Error("Failed to migrate database schema", "error", err)

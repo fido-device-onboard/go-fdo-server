@@ -1,0 +1,233 @@
+openapi: 3.0.0
+info:
+  title: RendezvousInfo management API
+  version: 0.0.1
+  description: An API for managing the RendezvousInfo
+  contact:
+    name: API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: http://localhost/api/v1
+    description: RendezvousInfo API
+tags:
+  - name: RendezvousInfo management API
+    description: Operations related to RendezvousInfo management
+paths:
+  /rvinfo:
+    get:
+      responses:
+        '200':
+          description: Get the RendezvousInfo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVInfo"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    post:
+      requestBody:
+        description: Set the RendezvousInfo
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/RVInfo"
+      responses:
+        '200':
+          description: Returns the new RendezvousInfo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVInfo"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    put:
+      requestBody:
+        description: Set the RendezvousInfo
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/RVInfo"
+      responses:
+        '200':
+          description: Returns the new RendezvousInfo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVInfo"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    delete:
+      responses:
+        '200':
+          description: Returns the deleted RendezvousInfo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVInfo"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+components:
+  $ref: './components.yaml#/components/securitySchemes'
+  schemas:
+    RVInfo:
+      type: array
+      items:
+        $ref: "#/components/schemas/RVInstruction"
+    RVInstruction:
+      type: array
+      items:
+        anyOf:
+          - $ref: "#/components/schemas/DNS"
+          - $ref: "#/components/schemas/IP"
+          - $ref: "#/components/schemas/Protocol"
+          - $ref: "#/components/schemas/Medium"
+          - $ref: "#/components/schemas/DevicePort"
+          - $ref: "#/components/schemas/OwnerPort"
+          - $ref: "#/components/schemas/WifiSSID"
+          - $ref: "#/components/schemas/WifiPW"
+          - $ref: "#/components/schemas/DevOnly"
+          - $ref: "#/components/schemas/OwnerOnly"
+          - $ref: "#/components/schemas/RVBypass"
+          - $ref: "#/components/schemas/DelaySeconds"
+          - $ref: "#/components/schemas/SvCertHash"
+          - $ref: "#/components/schemas/ClCertHash"
+          - $ref: "#/components/schemas/UserInput"
+          - $ref: "#/components/schemas/ExtRV"
+    DNS:
+      type: object
+      properties:
+        dns:
+          type: string
+          format: hostname
+    IP:
+      type: object
+      properties:
+        ip:
+          type: string
+          format: ipv4
+    Protocol:
+      type: object
+      properties:
+        protocol:
+          type: string
+          enum:
+            - "rest"
+            - "http"
+            - "https"
+            - "tcp"
+            - "tls"
+            - "coap+tcp"
+            - "coap"
+    Medium:
+      type: object
+      properties:
+        medium:
+          type: string
+          enum:
+            - "wired_1"
+            - "wired_2"
+            - "wired_3"
+            - "wired_4"
+            - "wired_5"
+            - "wired_6"
+            - "wired_7"
+            - "wired_8"
+            - "wired_9"
+            - "wifi_1"
+            - "wifi_2"
+            - "wifi_3"
+            - "wifi_4"
+            - "wifi_5"
+            - "wifi_6"
+            - "wifi_7"
+            - "wifi_8"
+            - "wifi_9"
+            - "wired_all"
+            - "wifi_all"
+    DevicePort:
+      type: object
+      properties:
+        device_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+    OwnerPort:
+      type: object
+      properties:
+        owner_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+    WifiSSID:
+      type: object
+      properties:
+        wifi_ssid:
+          type: string
+    WifiPW:
+      type: object
+      properties:
+        wifi_pw:
+          type: string
+          format: password
+    DevOnly:
+      type: object
+      properties:
+        dev_only:
+          type: boolean
+    OwnerOnly:
+      type: object
+      properties:
+        owner_only:
+          type: boolean
+    RVBypass:
+      type: object
+      properties:
+        rv_bypass:
+          type: boolean
+    DelaySeconds:
+      type: object
+      properties:
+        delay_seconds:
+          type: integer
+          format: uint32
+          minimum: 0
+    SvCertHash:
+      type: object
+      properties:
+        sv_cert_hash:
+          type: string
+          pattern: '^[0-9a-fA-F]*$'
+    ClCertHash:
+      type: object
+      properties:
+        cl_cert_hash:
+          type: string
+          pattern: '^[0-9a-fA-F]*$'
+    UserInput:
+      type: object
+      properties:
+        user_input:
+          type: string
+    ExtRV:
+      type: object
+      properties:
+        ext_rv:
+          type: string

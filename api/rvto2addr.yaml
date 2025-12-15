@@ -1,0 +1,113 @@
+openapi: 3.0.0
+info:
+  title: RVTO2Addr management API
+  version: 0.0.1
+  description: An API for managing the RVTO2Addr
+  contact:
+    name: API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: http://localhost/api/v1
+    description: Owner server
+tags:
+  - name: RVTO2Addr management API
+    description: Operations related to RVTO2Addr management
+paths:
+  /rvto2addr:
+    get:
+      responses:
+        '200':
+          description: Get the RVTO2Addr
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    post:
+      requestBody:
+        description: Set the RVTO2Addr
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+      responses:
+        '200':
+          description: Returns the new RVTO2Addr
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+
+    put:
+      requestBody:
+        description: Set the RVTO2Addr
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+      responses:
+        '200':
+          description: Returns the new RVTO2Addr
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    delete:
+      responses:
+        '200':
+          description: Returns the deleted RVTO2Addr
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+
+components:
+  $ref: './components.yaml#/components/securitySchemes'
+  schemas:
+    RVTO2Addr:
+      type: array
+      items:
+        $ref: "#/components/schemas/RVTO2AddrEntry"
+    RVTO2AddrEntry:
+      type: object
+      properties:
+        protocol:
+          type: string
+          enum:
+            - "http"
+            - "https"
+        dns:
+          type: string
+          format: hostname
+        ip:
+          type: string
+          format: ipv4
+        port:
+          type: integer
+          maximum: 65535
+          minimum: 0
