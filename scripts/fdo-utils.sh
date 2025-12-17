@@ -36,56 +36,6 @@ update_rendezvous_info () {
        "${manufacturer_url}/api/v1/rvinfo"
 }
 
-get_owner_redirect_info () {
-  local owner_url=$1
-  curl --fail --verbose --silent --insecure \
-       --header 'Content-Type: text/plain' \
-       "${owner_url}/api/v1/owner/redirect"
-}
-
-set_owner_redirect_info () {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  # TransportProtocol /= (
-  #     ProtTCP:    1,     ;; bare TCP stream
-  #     ProtTLS:    2,     ;; bare TLS stream
-  #     ProtHTTP:   3,
-  #     ProtCoAP:   4,
-  #     ProtHTTPS:  5,
-  #     ProtCoAPS:  6,
-  # )
-  local protocol=$5
-  rvto2addr="[{\"ip\": \"${ip}\", \"dns\": \"${dns}\", \"port\": \"${port}\", \"protocol\": \"${protocol}\"}]"
-  curl --fail --verbose --silent --insecure \
-       --request POST \
-       --header 'Content-Type: text/plain' \
-       --data-raw "${rvto2addr}" \
-       "${owner_url}/api/v1/owner/redirect"
-}
-
-update_owner_redirect_info () {
-  local owner_url=$1
-  local ip=$2
-  local dns=$3
-  local port=$4
-  # TransportProtocol /= (
-  #     ProtTCP:    1,     ;; bare TCP stream
-  #     ProtTLS:    2,     ;; bare TLS stream
-  #     ProtHTTP:   3,
-  #     ProtCoAP:   4,
-  #     ProtHTTPS:  5,
-  #     ProtCoAPS:  6,
-  # )
-  local protocol=$5
-  rvto2addr="[{\"ip\": \"${ip}\", \"dns\": \"${dns}\", \"port\": \"${port}\", \"protocol\": \"${protocol}\"}]"
-  curl --fail --verbose --silent --insecure \
-       --request PUT \
-       --header 'Content-Type: text/plain' \
-       --data-raw "${rvto2addr}" \
-       "${owner_url}/api/v1/owner/redirect"
-}
 
 get_ov_from_manufacturer () {
   local manufacturer_url=$1
@@ -113,4 +63,31 @@ resell() {
   [ -s "${new_owner_pubkey}" ] || { echo "❌ Public key file not found or empty: ${new_owner_pubkey}" >&2; return 1; }
   curl --fail --verbose --silent --insecure "${owner_url}/api/v1/owner/resell/${guid}" --data-binary @"${new_owner_pubkey}" -o "${output}"
 }
+
+# JSON API functions for /api/v1/owner/redirect endpoint
+get_ownerinfo() {
+  local owner_url=$1
+  local response
+  response=$(curl --fail --verbose --silent --insecure -w "HTTP_STATUS:%{http_code}" "${owner_url}/api/v1/owner/redirect" 2>/dev/null)
+  local http_status=$(echo "$response" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
+  local body=$(echo "$response" | sed 's/HTTP_STATUS:[0-9]*$//')
+  
+  # Return empty string if not found (404) or any error, otherwise return body
+  if [ "$http_status" = "200" ]; then
+    echo "$body"
+  else
+    echo ""
+  fi
+}
+
+# Helper function for POST/PUT operations on /api/v1/owner/redirect
+_ownerinfo_request() {
+  local method=$1 owner_url=$2 ip=$3 dns=$4 port=$5 protocol=$6
+  local json='[{"dns":"'${dns}'","port":"'${port}'","protocol":"'${protocol}'"}]'
+  curl --fail --verbose --silent --insecure -X "${method}" "${owner_url}/api/v1/owner/redirect" \
+    -H "Content-Type: application/json" -d "${json}"
+}
+
+set_ownerinfo() { _ownerinfo_request POST "$@"; }
+update_ownerinfo() { _ownerinfo_request PUT "$@"; }
 

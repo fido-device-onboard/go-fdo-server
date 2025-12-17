@@ -12,9 +12,29 @@ VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2
 # Default target
 all: build test
 
+#
+# OpenAPI Code Generation
+#
+OPENAPI_SPEC := api/openapi/owner-server.yaml
+GENERATED_FILE := api/openapi/generated.go
+
+.PHONY: oapi-codegen
+oapi-codegen:
+	@echo "Installing oapi-codegen..."
+	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+
+.PHONY: generate
+generate: oapi-codegen
+	@echo "Generating shared types from common schemas..."
+	cd api/openapi && go tool oapi-codegen -package openapi -generate types shared/schemas/common.yaml > shared-types.go
+	@echo "Generating owner server code..."
+	go generate ./...
+
+
+
 # Build the Go project
 .PHONY: build
-build: tidy fmt vet
+build: generate tidy fmt vet
 	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: tidy

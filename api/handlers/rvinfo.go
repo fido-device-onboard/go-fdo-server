@@ -4,15 +4,29 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 
+	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"gorm.io/gorm"
 )
 
+// isValidProtocol validates that the protocol is one of the allowed FDO transport protocols
+func isValidProtocol(protocol string) bool {
+	switch oapi_owner.OwnerRedirectProtocol(protocol) {
+	case oapi_owner.Tcp, oapi_owner.Tls, oapi_owner.Http, oapi_owner.Coap, oapi_owner.Https, oapi_owner.Coaps:
+		return true
+	default:
+		return false
+	}
+}
+
+// TEMPORARY: Backward compatibility wrapper for manufacturing server
+// TODO: Remove once manufacturing server is refactored to use OpenAPI interface
 func RvInfoHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
@@ -25,86 +39,217 @@ func RvInfoHandler() http.HandlerFunc {
 			updateRvInfo(w, r)
 		default:
 			slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			WriteErrorResponse(w, r, http.StatusMethodNotAllowed, "Method not allowed", "HTTP method "+r.Method+" is not supported for this endpoint", "Method not allowed")
 		}
 	}
 }
 
-func getRvInfo(w http.ResponseWriter, _ *http.Request) {
-	slog.Debug("Fetching rvInfo")
-	rvInfoJSON, err := db.FetchRvInfoJSON()
+// GetOwnerRedirect implements the owner redirect GET endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
+func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("Fetching owner redirect addresses (TO2)")
+
+	ownerInfoJSON, err := db.FetchOwnerInfoJSON()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("No rvInfo found")
-			http.Error(w, "No rvInfo found", http.StatusNotFound)
+			slog.Error("No owner redirect addresses found")
+			WriteErrorResponse(w, r, http.StatusNotFound, "No owner redirect addresses found", "Owner redirect addresses have not been configured", "No owner redirect addresses found")
 		} else {
-			slog.Error("Error fetching rvInfo", "error", err)
-			http.Error(w, "Error fetching rvInfo", http.StatusInternalServerError)
+			slog.Error("Error fetching owner redirect addresses", "error", err)
+			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching owner redirect addresses", err.Error(), "Error fetching owner redirect addresses")
 		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Write(ownerInfoJSON)
+}
+
+// PostOwnerRedirect implements the owner redirect POST endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
+func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	// Read raw request body
+	body, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
+
+	// Unmarshal into generated OpenAPI struct for validation
+	var ownerRedirect oapi_owner.OwnerRedirect
+	if err := json.Unmarshal(body, &ownerRedirect); err != nil {
+		slog.Error("Invalid JSON payload for owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid JSON", err.Error(), "Invalid JSON")
+		return
+	}
+
+	// Validate required fields and protocol enum
+	for i, redirect := range ownerRedirect {
+		if redirect.Dns == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "dns field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		if redirect.Port == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "port field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		// Protocol enum validation happens automatically during JSON unmarshal due to the generated type
+		if !isValidProtocol(string(redirect.Protocol)) {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid protocol", "protocol must be one of: tcp, tls, http, coap, https, coaps", "Invalid protocol")
+			return
+		}
+	}
+
+	// Marshal the validated struct back to JSON for the existing database function
+	validatedJSON, err := json.Marshal(ownerRedirect)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error processing request", err.Error(), "Error processing request")
+		return
+	}
+
+	err = db.InsertOwnerInfo(validatedJSON)
+	if err != nil {
+		if HandleDBError(w, r, "owner redirect addresses", err) {
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid owner redirect addresses payload", "error", err)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid owner redirect addresses", err.Error(), "Invalid owner redirect addresses")
+			return
+		}
+		slog.Error("Error inserting owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting owner redirect addresses", err.Error(), "Error inserting owner redirect addresses")
+		return
+	}
+
+	slog.Debug("owner redirect addresses created")
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.WriteHeader(http.StatusCreated)
+	w.Write(validatedJSON)
+}
+
+// PutOwnerRedirect implements the owner redirect PUT endpoint (OpenAPI interface method)
+// Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
+func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
+	// Read raw request body
+	body, ok := ReadRequestBody(w, r)
+	if !ok {
+		return
+	}
+
+	// Unmarshal into generated OpenAPI struct for validation
+	var ownerRedirect oapi_owner.OwnerRedirect
+	if err := json.Unmarshal(body, &ownerRedirect); err != nil {
+		slog.Error("Invalid JSON payload for owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid JSON", err.Error(), "Invalid JSON")
+		return
+	}
+
+	// Validate required fields and protocol enum
+	for i, redirect := range ownerRedirect {
+		if redirect.Dns == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "dns field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		if redirect.Port == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "port field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		// Protocol enum validation happens automatically during JSON unmarshal due to the generated type
+		if !isValidProtocol(string(redirect.Protocol)) {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid protocol", "protocol must be one of: tcp, tls, http, coap, https, coaps", "Invalid protocol")
+			return
+		}
+	}
+
+	// Marshal the validated struct back to JSON for the existing database function
+	validatedJSON, err := json.Marshal(ownerRedirect)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error processing request", err.Error(), "Error processing request")
+		return
+	}
+
+	err = db.UpdateOwnerInfo(validatedJSON)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.Error("owner redirect addresses do not exist, cannot update")
+			WriteErrorResponse(w, r, http.StatusNotFound, "owner redirect addresses do not exist", "No owner redirect addresses found to update", "owner redirect addresses do not exist")
+			return
+		}
+		if errors.Is(err, db.ErrInvalidOwnerInfo) {
+			slog.Error("Invalid owner redirect addresses payload", "error", err)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid owner redirect addresses", err.Error(), "Invalid owner redirect addresses")
+			return
+		}
+		slog.Error("Error updating owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating owner redirect addresses", err.Error(), "Error updating owner redirect addresses")
+		return
+	}
+
+	slog.Debug("owner redirect addresses updated")
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Write(validatedJSON)
+}
+
+// Original RvInfo functions for manufacturing server backward compatibility
+func getRvInfo(w http.ResponseWriter, r *http.Request) {
+	rvInfoJSON, err := db.FetchRvInfoJSON()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			WriteErrorResponse(w, r, http.StatusNotFound, "No rvInfo found", "rvInfo has not been configured", "No rvInfo found")
+		} else {
+			WriteErrorResponse(w, r, http.StatusInternalServerError, "Error fetching rvInfo", err.Error(), "Error fetching rvInfo")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(rvInfoJSON)
 }
 
 func createRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+	rvInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.InsertRvInfo(rvInfo); err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			slog.Error("rvInfo already exists (constraint)", "error", err)
-			http.Error(w, "rvInfo already exists", http.StatusConflict)
+		if HandleDBError(w, r, "rvInfo", err) {
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
-			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
-		slog.Error("Error inserting rvInfo", "error", err)
-		http.Error(w, "Error inserting rvInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error inserting rvInfo", err.Error(), "Error inserting rvInfo")
 		return
 	}
 
-	slog.Debug("rvInfo created")
-
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
 	w.Write(rvInfo)
 }
 
 func updateRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
+	rvInfo, ok := ReadRequestBody(w, r)
+	if !ok {
 		return
 	}
 
 	if err := db.UpdateRvInfo(rvInfo); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.Error("rvInfo does not exist, cannot update")
-			http.Error(w, "rvInfo does not exist", http.StatusNotFound)
+			WriteErrorResponse(w, r, http.StatusNotFound, "rvInfo does not exist", "No rvInfo found to update", "rvInfo does not exist")
 			return
 		}
 		if errors.Is(err, db.ErrInvalidRvInfo) {
-			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid rvInfo", err.Error(), "Invalid rvInfo")
 			return
 		}
-		slog.Error("Error updating rvInfo", "error", err)
-		http.Error(w, "Error updating rvInfo", http.StatusInternalServerError)
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error updating rvInfo", err.Error(), "Error updating rvInfo")
 		return
 	}
 
-	slog.Debug("rvInfo updated")
-
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Write(rvInfo)
 }

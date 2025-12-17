@@ -471,6 +471,7 @@ send_manufacturer_ov_to_owner() {
   send_ov_to_owner "${owner_url}" "${ov_file}"
 }
 
+
 set_or_update_owner_redirect_info() {
   local owner_url=$1
   local owner_service_name=$2
@@ -480,12 +481,12 @@ set_or_update_owner_redirect_info() {
   local real_owner_ip
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
   log_info "Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
-  if [ -z "$(get_owner_redirect_info "${owner_url}")" ]; then
+  if [ -z "$(get_ownerinfo "${owner_url}")" ]; then
     log_warn "'RVTO2Addr' not found, creating it"
-    set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
+    set_ownerinfo "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   else
     log_info "'RVTO2Addr' found, updating it"
-    update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
+    update_ownerinfo "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
   fi
   echo
 }
