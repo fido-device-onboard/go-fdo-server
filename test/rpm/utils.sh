@@ -39,7 +39,6 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../ci/ut
 configs_dir="${base_dir}/configs"
 directories+=("${configs_dir}")
 
-rpm_config_base_dir="/etc/go-fdo-server"  # RPMs install the default configs here
 rpm_certs_dir="/etc/pki/go-fdo-server"    # RPMs generate the default certs/keys
 rpm_server_group="go-fdo-server"  # server Group ID created by RPM install
 
@@ -379,8 +378,6 @@ remove_files() {
   sudo rm -vrf "${base_dir:?}"/*
   log_info "Removing files from '${rpm_certs_dir}'"
   sudo rm -vf "${rpm_certs_dir:?}"/*
-  log_info "Removing files from '${rpm_config_base_dir}'"
-  sudo rm -vf "${rpm_config_base_dir:?}"/*
   log_info "Removing systemd drop-in files"
   cleanup_drop_ins
   log_info "Removing database files"

@@ -70,9 +70,7 @@ install -m 0644 -vp -D init/systemd/* %{buildroot}%{_unitdir}
 # Helpers
 install -m 0755 -vd %{buildroot}%{_libexecdir}/%{name}
 install -m 0755 -vp scripts/cert-utils.sh %{buildroot}%{_libexecdir}/%{name}
-install -m 0755 -vp scripts/generate-device-ca-certs.sh %{buildroot}%{_libexecdir}/%{name}
-install -m 0755 -vp scripts/generate-manufacturer-certs.sh %{buildroot}%{_libexecdir}/%{name}
-install -m 0755 -vp scripts/generate-owner-certs.sh %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libexecdir}/%{name}
 
 %check
 %if %{with check}
@@ -88,9 +86,7 @@ install -m 0755 -vp scripts/generate-owner-certs.sh %{buildroot}%{_libexecdir}/%
 %{_sysusersdir}/%{name}.conf
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/cert-utils.sh
-%{_libexecdir}/%{name}/generate-manufacturer-certs.sh
-%{_libexecdir}/%{name}/generate-device-ca-certs.sh
-%{_libexecdir}/%{name}/generate-owner-certs.sh
+%{_libexecdir}/%{name}/generate-go-fdo-server-certs.sh
 # Systemd unit
 %{_unitdir}/go-fdo-server-init.service
 

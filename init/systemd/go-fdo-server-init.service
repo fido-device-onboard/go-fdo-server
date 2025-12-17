@@ -12,7 +12,4 @@ ConditionPathExists=|!/etc/pki/go-fdo-server/owner-example.crt
 Type=oneshot
 RemainAfterExit=no
 Group=go-fdo-server
-
-ExecStart=/usr/libexec/go-fdo-server/generate-manufacturer-certs.sh
-ExecStart=/usr/libexec/go-fdo-server/generate-owner-certs.sh
-ExecStart=/usr/libexec/go-fdo-server/generate-device-ca-certs.sh
+ExecStart=/usr/libexec/go-fdo-server/generate-go-fdo-server-certs.sh
