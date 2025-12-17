@@ -71,6 +71,7 @@ func InitDb(dbType, dsn string) (*State, error) {
 		&OwnerInfo{},
 		&RvInfo{},
 		&DeviceOnboarding{},
+		&DeviceCACertificate{},
 	)
 	if err != nil {
 		slog.Error("Failed to migrate database schema", "error", err)
@@ -87,6 +88,15 @@ func InitDb(dbType, dsn string) (*State, error) {
 
 	slog.Info("Database initialized successfully", "type", dbType)
 	return state, nil
+}
+
+func (s *State) Ping() error {
+	// Send a ping to make sure the database connection is alive.
+	sqlDB, err := s.DB.DB()
+	if err != nil {
+		return fmt.Errorf("unable to get db connection")
+	}
+	return sqlDB.Ping()
 }
 
 // Close closes the database connection
