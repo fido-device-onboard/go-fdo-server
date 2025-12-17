@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
@@ -81,5 +82,35 @@ func TestRvInfo_Put404ThenCreateThenUpdateAndGet(t *testing.T) {
 	}
 	if got := rec.Body.String(); got != string(updateBody) {
 		t.Fatalf("expected body %q, got %q", string(updateBody), got)
+	}
+}
+
+// TestOwnerRedirect_ValidationBasics tests key type validation features
+func TestOwnerRedirect_ValidationBasics(t *testing.T) {
+	setupTestDB(t)
+	server := &handlers.Server{}
+
+	// Test invalid JSON
+	req := httptest.NewRequest("POST", "/api/v1/owner/redirect", strings.NewReader(`{"invalid": json`))
+	rec := httptest.NewRecorder()
+	server.PostOwnerRedirect(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Invalid JSON") {
+		t.Fatalf("expected 400 with JSON error, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Test invalid protocol
+	req = httptest.NewRequest("POST", "/api/v1/owner/redirect", strings.NewReader(`[{"dns":"test","port":"8043","protocol":"invalid"}]`))
+	rec = httptest.NewRecorder()
+	server.PostOwnerRedirect(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Invalid protocol") {
+		t.Fatalf("expected 400 with protocol error, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Test valid request
+	req = httptest.NewRequest("POST", "/api/v1/owner/redirect", strings.NewReader(`[{"dns":"owner.example","port":"8043","protocol":"http"}]`))
+	rec = httptest.NewRecorder()
+	server.PostOwnerRedirect(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for valid request, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

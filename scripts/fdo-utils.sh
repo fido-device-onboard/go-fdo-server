@@ -64,11 +64,11 @@ resell() {
   curl --fail --verbose --silent --insecure "${owner_url}/api/v1/owner/resell/${guid}" --data-binary @"${new_owner_pubkey}" -o "${output}"
 }
 
-# JSON API functions for /api/v1/ownerinfo endpoint
+# JSON API functions for /api/v1/owner/redirect endpoint
 get_ownerinfo() {
   local owner_url=$1
   local response
-  response=$(curl --fail --verbose --silent --insecure -w "HTTP_STATUS:%{http_code}" "${owner_url}/api/v1/ownerinfo" 2>/dev/null)
+  response=$(curl --fail --verbose --silent --insecure -w "HTTP_STATUS:%{http_code}" "${owner_url}/api/v1/owner/redirect" 2>/dev/null)
   local http_status=$(echo "$response" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
   local body=$(echo "$response" | sed 's/HTTP_STATUS:[0-9]*$//')
   
@@ -80,11 +80,11 @@ get_ownerinfo() {
   fi
 }
 
-# Helper function for POST/PUT operations on /api/v1/ownerinfo
+# Helper function for POST/PUT operations on /api/v1/owner/redirect
 _ownerinfo_request() {
   local method=$1 owner_url=$2 ip=$3 dns=$4 port=$5 protocol=$6
   local json='[{"dns":"'${dns}'","port":"'${port}'","protocol":"'${protocol}'"}]'
-  curl --fail --verbose --silent --insecure -X "${method}" "${owner_url}/api/v1/ownerinfo" \
+  curl --fail --verbose --silent --insecure -X "${method}" "${owner_url}/api/v1/owner/redirect" \
     -H "Content-Type: application/json" -d "${json}"
 }
 

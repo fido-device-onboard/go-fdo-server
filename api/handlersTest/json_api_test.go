@@ -34,7 +34,6 @@ func TestJSONResponsesRequired(t *testing.T) {
 		handler http.HandlerFunc
 	}{
 		{"health", handlers.HealthHandler},
-		{"owner_info", handlers.OwnerInfoHandler},
 	}
 
 	for _, tt := range tests {

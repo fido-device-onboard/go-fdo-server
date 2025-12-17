@@ -323,14 +323,11 @@ func serveOwner(config *OwnerServerConfig) error {
 	// Create OpenAPI server instance
 	apiServer := handlers.NewServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
 
-	// Create the main HTTP handler with chi router for API endpoints
+	// Create the main HTTP handler with ServeMux for API endpoints
 	mainHandler := http.NewServeMux()
 
 	// Register FDO protocol endpoints
 	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
-
-	// Register ownerinfo endpoint manually (not part of OpenAPI spec but needed for TO0)
-	mainHandler.HandleFunc("/api/v1/ownerinfo", handlers.OwnerInfoHandler)
 
 	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
 	apiHandler := oapi_owner.Handler(apiServer)

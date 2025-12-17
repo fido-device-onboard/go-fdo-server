@@ -4,13 +4,26 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
+	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"gorm.io/gorm"
 )
+
+// isValidProtocol validates that the protocol is one of the allowed FDO transport protocols
+func isValidProtocol(protocol string) bool {
+	switch oapi_owner.OwnerRedirectProtocol(protocol) {
+	case oapi_owner.Tcp, oapi_owner.Tls, oapi_owner.Http, oapi_owner.Coap, oapi_owner.Https, oapi_owner.Coaps:
+		return true
+	default:
+		return false
+	}
+}
 
 // TEMPORARY: Backward compatibility wrapper for manufacturing server
 // TODO: Remove once manufacturing server is refactored to use OpenAPI interface
@@ -55,12 +68,45 @@ func (s *Server) GetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 // PostOwnerRedirect implements the owner redirect POST endpoint (OpenAPI interface method)
 // Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
 func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
-	ownerInfo, ok := ReadRequestBody(w, r)
+	// Read raw request body
+	body, ok := ReadRequestBody(w, r)
 	if !ok {
 		return
 	}
 
-	err := db.InsertOwnerInfo(ownerInfo)
+	// Unmarshal into generated OpenAPI struct for validation
+	var ownerRedirect oapi_owner.OwnerRedirect
+	if err := json.Unmarshal(body, &ownerRedirect); err != nil {
+		slog.Error("Invalid JSON payload for owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid JSON", err.Error(), "Invalid JSON")
+		return
+	}
+
+	// Validate required fields and protocol enum
+	for i, redirect := range ownerRedirect {
+		if redirect.Dns == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "dns field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		if redirect.Port == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "port field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		// Protocol enum validation happens automatically during JSON unmarshal due to the generated type
+		if !isValidProtocol(string(redirect.Protocol)) {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid protocol", "protocol must be one of: tcp, tls, http, coap, https, coaps", "Invalid protocol")
+			return
+		}
+	}
+
+	// Marshal the validated struct back to JSON for the existing database function
+	validatedJSON, err := json.Marshal(ownerRedirect)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error processing request", err.Error(), "Error processing request")
+		return
+	}
+
+	err = db.InsertOwnerInfo(validatedJSON)
 	if err != nil {
 		if HandleDBError(w, r, "owner redirect addresses", err) {
 			return
@@ -79,18 +125,51 @@ func (s *Server) PostOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(http.StatusCreated)
-	w.Write(ownerInfo)
+	w.Write(validatedJSON)
 }
 
 // PutOwnerRedirect implements the owner redirect PUT endpoint (OpenAPI interface method)
 // Manages TO2 redirect addresses (RvTO2Addr), not rendezvous instructions (RvInstruction)
 func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
-	ownerInfo, ok := ReadRequestBody(w, r)
+	// Read raw request body
+	body, ok := ReadRequestBody(w, r)
 	if !ok {
 		return
 	}
 
-	err := db.UpdateOwnerInfo(ownerInfo)
+	// Unmarshal into generated OpenAPI struct for validation
+	var ownerRedirect oapi_owner.OwnerRedirect
+	if err := json.Unmarshal(body, &ownerRedirect); err != nil {
+		slog.Error("Invalid JSON payload for owner redirect addresses", "error", err)
+		WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid JSON", err.Error(), "Invalid JSON")
+		return
+	}
+
+	// Validate required fields and protocol enum
+	for i, redirect := range ownerRedirect {
+		if redirect.Dns == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "dns field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		if redirect.Port == "" {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Missing required field", "port field is required for redirect entry "+fmt.Sprintf("%d", i), "Missing required field")
+			return
+		}
+		// Protocol enum validation happens automatically during JSON unmarshal due to the generated type
+		if !isValidProtocol(string(redirect.Protocol)) {
+			WriteErrorResponse(w, r, http.StatusBadRequest, "Invalid protocol", "protocol must be one of: tcp, tls, http, coap, https, coaps", "Invalid protocol")
+			return
+		}
+	}
+
+	// Marshal the validated struct back to JSON for the existing database function
+	validatedJSON, err := json.Marshal(ownerRedirect)
+	if err != nil {
+		WriteErrorResponse(w, r, http.StatusInternalServerError, "Error processing request", err.Error(), "Error processing request")
+		return
+	}
+
+	err = db.UpdateOwnerInfo(validatedJSON)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("owner redirect addresses do not exist, cannot update")
@@ -110,7 +189,7 @@ func (s *Server) PutOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("owner redirect addresses updated")
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	w.Write(ownerInfo)
+	w.Write(validatedJSON)
 }
 
 // Original RvInfo functions for manufacturing server backward compatibility
