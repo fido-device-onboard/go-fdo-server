@@ -220,6 +220,22 @@ func (s *State) SetDeviceCertChain(ctx context.Context, chain []*x509.Certificat
 		FirstOrCreate(&deviceInfo).Error
 }
 
+func (s *State) GetReplacementGUID(ctx context.Context) (protocol.GUID, error) {
+	sessionID, err := s.getSessionID(ctx)
+	if err != nil {
+		return protocol.GUID{}, err
+	}
+
+	var replacementVoucher ReplacementVoucher
+	if err = s.DB.Where("session = ?", sessionID).First(&replacementVoucher).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return protocol.GUID{}, fdo.ErrNotFound
+		}
+		return protocol.GUID{}, err
+	}
+	return protocol.GUID(replacementVoucher.GUID), nil
+}
+
 // DeviceCertChain retrieves the device certificate chain
 func (s *State) DeviceCertChain(ctx context.Context) ([]*x509.Certificate, error) {
 	sessionID, err := s.getSessionID(ctx)

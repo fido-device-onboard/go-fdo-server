@@ -36,12 +36,20 @@ generate_upload_files() {
 }
 
 verify_uploads() {
+  local device_guid=$1
   cd ${device_uploads_dir}
   for device_file in "${upload_files[@]}"; do
-    owner_file="${owner_uploads_dir}/$(basename "${device_file}")"
+    owner_file="${owner_uploads_dir}/${device_guid}/$(basename "${device_file}")"
     verify_equal_files "${owner_file}" "${device_file}"
   done
   cd - >/dev/null
+}
+
+get_device_guid() {
+  local owner_url=$1
+  local guid=$2
+  local device_guid=$(curl -s "${owner_url}/api/v1/owner/devices?old_guid=${guid}" | jq -r '.[0].guid')
+  echo "${device_guid}"
 }
 
 # Public entrypoint used by CI
@@ -95,8 +103,11 @@ run_test() {
   log_info "Running FIDO Device Onboard with FSIM fdo.upload"
   run_fido_device_onboard "${guid}" --upload "/"
 
+  device_guid=$(get_device_guid "${owner_url}" "${guid}")
+  log_info "Device GUID after onboarding: ${device_guid}"
+
   log_info "Verify uploaded files"
-  verify_uploads
+  verify_uploads "${device_guid}"
 
   log_info "Unsetting the error trap handler"
   trap - ERR

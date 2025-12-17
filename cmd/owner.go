@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -431,7 +430,7 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(modules))
+		next, stop := iter.Pull2(ownerModules(ctx, modules, s.DB))
 		module = &moduleStateMachineState{
 			Next: next,
 			Stop: stop,
@@ -457,13 +456,26 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 	delete(s.states, token)
 }
 
-func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
+func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
+	replacementGUID, err := dbState.GetReplacementGUID(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get replacement GUID: %w", err)
+	}
+	deviceUploadDir := filepath.Join(baseDir, hex.EncodeToString(replacementGUID[:]))
+	if err := os.MkdirAll(deviceUploadDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create device upload directory %q: %w", deviceUploadDir, err)
+	}
+	return deviceUploadDir, nil
+}
+
+func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if slices.Contains(modules, "fdo.download") {
 			for i, cleanPath := range downloadPaths {
 				f, err := os.Open(cleanPath)
 				if err != nil {
-					log.Fatalf("error opening %q for download FSIM: %v", cleanPath, err)
+					slog.Error("error opening %q for download FSIM: %v", cleanPath, err)
+					continue
 				}
 				defer func() { _ = f.Close() }()
 
@@ -478,12 +490,17 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 		}
 
 		if slices.Contains(modules, "fdo.upload") {
+			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
+			if err != nil {
+				slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
+				return
+			}
 			for _, name := range uploads {
 				if !yield("fdo.upload", &fsim.UploadRequest{
-					Dir:  uploadDir,
+					Dir:  deviceUploadDir,
 					Name: name,
 					CreateTemp: func() (*os.File, error) {
-						return os.CreateTemp(uploadDir, ".fdo-upload_*")
+						return os.CreateTemp(deviceUploadDir, ".fdo-upload_*")
 					},
 				}) {
 					return
