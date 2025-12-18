@@ -1,0 +1,33 @@
+openapi: 3.0.0
+info:
+  title: Health API
+  version: 0.0.1
+  description: An API to check server's health
+  contact:
+    name: API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: http://localhost/api/v1
+    description: Health API
+tags:
+  - name: Health API
+    description: Operations related to server's health
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Server health status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                 - version
+                 - status
+                properties:
+                  version:
+                    type: string
+                  status:
+                    type: string
+
