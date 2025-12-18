@@ -52,7 +52,7 @@ rendezvous_protocol=http
 rendezvous_url="${rendezvous_protocol}://${rendezvous_service}"
 #shellcheck disable=SC2034
 # needed for 'wait_for_services_ready' do not remove
-rendezvous_health_url="${rendezvous_url}/health"
+rendezvous_health_url="${rendezvous_url}/api/v1/health"
 
 owner_service_name="owner"
 owner_dns=owner
