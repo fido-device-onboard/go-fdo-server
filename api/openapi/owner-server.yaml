@@ -80,10 +80,16 @@ paths:
           application/x-pem-file: {schema: {type: string, format: binary}}
       responses:
         '200':
+          description: Resold voucher in requested format
           content:
             application/json:
               schema: 
                 $ref: 'shared/schemas/common.yaml#/components/schemas/VoucherResponse'
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+                description: PEM-encoded ownership voucher for backward compatibility
 
 components:
   schemas:

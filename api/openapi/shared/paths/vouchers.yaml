@@ -26,7 +26,13 @@
         schema: {type: string, pattern: '^[0-9a-fA-F]{32}$'}
     responses:
       '200':
+        description: Voucher data in requested format
         content:
           application/json:
             schema: 
               $ref: '../schemas/common.yaml#/components/schemas/VoucherResponse'
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+              description: PEM-encoded ownership voucher for backward compatibility
