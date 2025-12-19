@@ -8,12 +8,12 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"iter"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -430,7 +430,7 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(modules))
+		next, stop := iter.Pull2(ownerModules(ctx, modules, s.DB))
 		module = &moduleStateMachineState{
 			Next: next,
 			Stop: stop,
@@ -456,13 +456,69 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 	delete(s.states, token)
 }
 
-func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
+// getPerDeviceUploadDir creates a device-specific upload directory based on
+// certificate chain or devmod information associated with the current session.
+// It prefers values stored in the request context via serviceinfo helpers, but
+// falls back to looking them up in the database when the context is empty.
+func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
+	// Determine unique identifier from available sources
+	var uniqueID string
+
+	// 1) Try to get certificate chain from context, then DB
+	if chain, ok := serviceinfo.DeviceCertificateFromContext(ctx); ok && len(chain) > 0 {
+		uniqueID = chain[0].SerialNumber.Text(16) // hex, path‑safe
+	} else if dbState != nil {
+		if chain, err := dbState.DeviceCertChain(ctx); err == nil && len(chain) > 0 {
+			uniqueID = chain[0].SerialNumber.Text(16)
+		}
+	}
+
+	// 2) If still empty, try devmod from context, then DB
+	if uniqueID == "" {
+		var devmodPtr *serviceinfo.Devmod
+
+		if d, ok := serviceinfo.DevmodFromContext(ctx); ok && d != nil {
+			devmodPtr = d
+		} else if dbState != nil {
+			if dVal, _, _, err := dbState.Devmod(ctx); err == nil {
+				devmodPtr = &dVal
+			}
+		}
+
+		if devmodPtr != nil {
+			devmod := devmodPtr
+			if len(devmod.Serial) > 0 {
+				// Hex encoding is safe for paths
+				uniqueID = hex.EncodeToString(devmod.Serial)
+			} else if devmod.Device != "" {
+				// Device string may contain path traversal characters (e.g., "..", "/")
+				// Use base64 URL encoding to sanitize
+				uniqueID = base64.RawURLEncoding.EncodeToString([]byte(devmod.Device))
+			}
+		}
+	}
+
+	if uniqueID == "" {
+		return "", fmt.Errorf("no unique identifier found")
+	}
+
+	// Create the device-specific directory
+	deviceUploadDir := filepath.Join(baseDir, uniqueID)
+	if err := os.MkdirAll(deviceUploadDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create device upload directory %q: %w", deviceUploadDir, err)
+	}
+
+	return deviceUploadDir, nil
+}
+
+func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if slices.Contains(modules, "fdo.download") {
 			for i, cleanPath := range downloadPaths {
 				f, err := os.Open(cleanPath)
 				if err != nil {
-					log.Fatalf("error opening %q for download FSIM: %v", cleanPath, err)
+					slog.Error("error opening %q for download FSIM: %v", cleanPath, err)
+					continue
 				}
 				defer func() { _ = f.Close() }()
 
@@ -477,12 +533,17 @@ func ownerModules(modules []string) iter.Seq2[string, serviceinfo.OwnerModule] {
 		}
 
 		if slices.Contains(modules, "fdo.upload") {
+			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
+			if err != nil {
+				slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
+				return
+			}
 			for _, name := range uploads {
 				if !yield("fdo.upload", &fsim.UploadRequest{
-					Dir:  uploadDir,
+					Dir:  deviceUploadDir,
 					Name: name,
 					CreateTemp: func() (*os.File, error) {
-						return os.CreateTemp(uploadDir, ".fdo-upload_*")
+						return os.CreateTemp(deviceUploadDir, ".fdo-upload_*")
 					},
 				}) {
 					return
