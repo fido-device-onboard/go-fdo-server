@@ -25,7 +25,7 @@ get_real_ip() {
 
 set_hostnames() {
   for service_name in $(docker compose -f ${servers_compose_file} config --services | grep -v db); do
-    service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
+    service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}' 2>/dev/null || true)"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
     set_hostname "$service_dns" "127.0.0.1"
   done
@@ -34,7 +34,7 @@ set_hostnames() {
 unset_hostnames() {
   log_info "Removing hostnames from '/etc/hosts'"
   for service_name in $(docker compose -f ${servers_compose_file} config --services "{{.Name}}" | grep -v db); do
-    service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}')"
+    service_dns="$(docker inspect "${service_name}" --format='{{index .NetworkSettings.Networks.fdo.Aliases 0}}' 2>/dev/null || true)"
     [ -n "${service_dns}" ] || service_dns="${service_name}"
     unset_hostname "$service_dns" "127.0.0.1"
   done
