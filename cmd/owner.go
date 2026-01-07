@@ -27,10 +27,6 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
 	transport "github.com/fido-device-onboard/go-fdo/http"
@@ -38,6 +34,11 @@ import (
 	"github.com/fido-device-onboard/go-fdo/serviceinfo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/fido-device-onboard/go-fdo-server/api"
+	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 )
 
 // The owner server configuration
@@ -426,11 +427,11 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	module, ok := s.states[token]
 	if !ok {
 		// Create a new module state machine
-		_, modules, _, err := s.DB.Devmod(ctx)
+		devmod, supportedModules, _, err := s.DB.Devmod(ctx)
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(ctx, modules, s.DB))
+		next, stop := iter.Pull2(ownerModules(ctx, devmod, supportedModules, s.DB))
 		module = &moduleStateMachineState{
 			Next: next,
 			Stop: stop,
@@ -460,41 +461,30 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 // certificate chain or devmod information associated with the current session.
 // It prefers values stored in the request context via serviceinfo helpers, but
 // falls back to looking them up in the database when the context is empty.
-func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
+func getPerDeviceUploadDir(ctx context.Context, baseDir string, devmod serviceinfo.Devmod, dbState *db.State) (string, error) {
 	// Determine unique identifier from available sources
 	var uniqueID string
 
-	// 1) Try to get certificate chain from context, then DB
-	if chain, ok := serviceinfo.DeviceCertificateFromContext(ctx); ok && len(chain) > 0 {
-		uniqueID = chain[0].SerialNumber.Text(16) // hex, path‑safe
-	} else if dbState != nil {
-		if chain, err := dbState.DeviceCertChain(ctx); err == nil && len(chain) > 0 {
-			uniqueID = chain[0].SerialNumber.Text(16)
-		}
+	// 1) Try to get certificate chain from DB
+	if chain, err := dbState.DeviceCertChain(ctx); err == nil && len(chain) > 0 {
+		// FIXME: Use subject key ID instead, since that's related to the public key
+		//
+		// There is a very small chance it's empty, but this is rare now and
+		// only would happen if the certificate was created with an old version
+		// of OpenSSL or such.
+		uniqueID = chain[0].SerialNumber.Text(16)
 	}
 
-	// 2) If still empty, try devmod from context, then DB
+	// 2) If still empty try devmod
+	// TODO: Ensure serial/device is _actually_ unique-ish
 	if uniqueID == "" {
-		var devmodPtr *serviceinfo.Devmod
-
-		if d, ok := serviceinfo.DevmodFromContext(ctx); ok && d != nil {
-			devmodPtr = d
-		} else if dbState != nil {
-			if dVal, _, _, err := dbState.Devmod(ctx); err == nil {
-				devmodPtr = &dVal
-			}
-		}
-
-		if devmodPtr != nil {
-			devmod := devmodPtr
-			if len(devmod.Serial) > 0 {
-				// Hex encoding is safe for paths
-				uniqueID = hex.EncodeToString(devmod.Serial)
-			} else if devmod.Device != "" {
-				// Device string may contain path traversal characters (e.g., "..", "/")
-				// Use base64 URL encoding to sanitize
-				uniqueID = base64.RawURLEncoding.EncodeToString([]byte(devmod.Device))
-			}
+		if len(devmod.Serial) > 0 {
+			// Hex encoding is safe for paths
+			uniqueID = hex.EncodeToString(devmod.Serial)
+		} else if devmod.Device != "" {
+			// Device string may contain path traversal characters (e.g., "..", "/")
+			// Use base64 URL encoding to sanitize
+			uniqueID = base64.RawURLEncoding.EncodeToString([]byte(devmod.Device))
 		}
 	}
 
@@ -511,7 +501,7 @@ func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.Stat
 	return deviceUploadDir, nil
 }
 
-func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
+func ownerModules(ctx context.Context, devmod serviceinfo.Devmod, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if slices.Contains(modules, "fdo.download") {
 			for i, cleanPath := range downloadPaths {
@@ -533,7 +523,7 @@ func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter
 		}
 
 		if slices.Contains(modules, "fdo.upload") {
-			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
+			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, devmod, dbState)
 			if err != nil {
 				slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
 				return
