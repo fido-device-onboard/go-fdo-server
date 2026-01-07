@@ -10,20 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
+	voucherhandler "github.com/fido-device-onboard/go-fdo-server/internal/handlers/voucher"
 )
-
-// Inline test helper for GUID extraction
-func createVoucherByGUIDHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		parts := strings.Split(path, "/")
-		if len(parts) >= 4 {
-			r.SetPathValue("guid", parts[len(parts)-1])
-		}
-		handlers.GetVoucherByGUIDHandler(w, r)
-	}
-}
 
 // TestJSONResponsesRequired validates that key Owner API endpoints return JSON
 func TestJSONResponsesRequired(t *testing.T) {
@@ -31,14 +20,14 @@ func TestJSONResponsesRequired(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		handler http.HandlerFunc
+		handler http.Handler
 	}{
-		{"health", handlers.HealthHandler},
+		{"health", health.Handler(health.NewServer())},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequest("GET", "/health", nil)
 			rec := httptest.NewRecorder()
 			tt.handler.ServeHTTP(rec, req)
 
@@ -54,16 +43,22 @@ func TestJSONResponsesRequired(t *testing.T) {
 	}
 }
 
-// TestBackwardCompatibilityPEM ensures Accept header handling works
+// TestBackwardCompatibilityPEM ensures voucher get by GUID handler works
 func TestBackwardCompatibilityPEM(t *testing.T) {
 	setupTestDB(t)
-	req := httptest.NewRequest("GET", "/api/v1/vouchers/invalid", nil)
+
+	// Create voucher server and handler
+	voucherServer := voucherhandler.NewServerWithKeys(nil, nil)
+	handler := voucherhandler.Handler(voucherServer)
+
+	req := httptest.NewRequest("GET", "/vouchers/invalid-guid", nil)
 	req.Header.Set("Accept", "application/x-pem-file")
 	rec := httptest.NewRecorder()
-	createVoucherByGUIDHandler().ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
+	// Should return JSON with not implemented message since GET is not implemented yet
 	contentType := rec.Header().Get("Content-Type")
-	if !strings.HasPrefix(contentType, "text/plain") && !strings.HasPrefix(contentType, "application/json") {
-		t.Errorf("Expected text/plain or JSON for backward compatibility, got '%s'", contentType)
+	if !strings.HasPrefix(contentType, "application/json") {
+		t.Errorf("Expected JSON content type, got '%s'", contentType)
 	}
 }

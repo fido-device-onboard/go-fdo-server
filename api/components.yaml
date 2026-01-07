@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: FDO Server - Shared Components
+  version: 1.0.0
+  description: Shared components for FDO Server APIs
+
+paths: {}
+
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type identifier
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: string
+          description: Additional error details
+
+    VoucherInsertResponse:
+      type: object
+      required:
+        - processed
+        - inserted
+      properties:
+        processed:
+          type: integer
+          description: Number of vouchers processed
+        inserted:
+          type: integer
+          description: Number of vouchers successfully inserted
+
+    VoucherResponse:
+      type: object
+      required:
+        - voucher
+        - encoding
+      properties:
+        voucher:
+          type: string
+          description: Base64 encoded voucher data
+        encoding:
+          type: string
+          enum: ["pem"]
+          description: Voucher encoding format
+
+    RVTO2Addr:
+      type: object
+      required:
+        - rvto2addr
+      properties:
+        rvto2addr:
+          type: array
+          items:
+            type: array
+            items:
+              oneOf:
+                - type: integer
+                - type: string
+          description: Rendezvous TO2 address information

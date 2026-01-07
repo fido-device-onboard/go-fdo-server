@@ -23,8 +23,9 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/rvto2addr"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/voucher"
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -244,9 +245,15 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 
 	// Handle messages
 	apiRouter := http.NewServeMux()
-	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
-	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
+
+	// Create modular handlers following Miguel's pattern
+	voucherServer := voucher.NewServer(dbState)
+	voucherHandler := voucher.Handler(voucherServer)
+	apiRouter.Handle("/vouchers/", http.StripPrefix("/vouchers", voucherHandler))
+
+	rvto2addrServer := rvto2addr.NewServer(dbState)
+	rvto2addrHandler := rvto2addr.Handler(rvto2addrServer)
+	apiRouter.Handle("/rvinfo", rvto2addrHandler)
 	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve

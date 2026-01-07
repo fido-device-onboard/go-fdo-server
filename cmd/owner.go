@@ -27,9 +27,10 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	oapi_owner "github.com/fido-device-onboard/go-fdo-server/api/openapi/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
+	voucherhandler "github.com/fido-device-onboard/go-fdo-server/internal/handlers/voucher" // Only for VerifyVoucher function
+	ownerserver "github.com/fido-device-onboard/go-fdo-server/internal/server"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
@@ -311,7 +312,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
-			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
+			return voucherhandler.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
 		},
 	}
 
@@ -320,9 +321,6 @@ func serveOwner(config *OwnerServerConfig) error {
 		TO2Responder: to2Server,
 	}
 
-	// Create OpenAPI server instance
-	apiServer := handlers.NewServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
-
 	// Create the main HTTP handler with ServeMux for API endpoints
 	mainHandler := http.NewServeMux()
 
@@ -330,13 +328,12 @@ func serveOwner(config *OwnerServerConfig) error {
 	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
 
 	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
-	apiHandler := oapi_owner.Handler(apiServer)
-	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
+	ownerServer := ownerserver.NewOwnerServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
+	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", ownerServer))
 
-	// Register health endpoint (not part of the OpenAPI spec but needed for backward compatibility)
-	mainHandler.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiServer.GetHealth(w, r)
-	}))
+	// Register health endpoint following Miguel's pattern
+	healthServer := health.NewServer()
+	mainHandler.Handle("/health", health.Handler(healthServer))
 
 	// Listen and serve
 	server := NewOwnerServer(config.HTTP, mainHandler)

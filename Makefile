@@ -15,8 +15,8 @@ all: build test
 #
 # OpenAPI Code Generation
 #
-OPENAPI_SPEC := api/openapi/owner-server.yaml
-GENERATED_FILE := api/openapi/generated.go
+API_SPECS := api/components.yaml api/health.yaml api/rvto2addr.yaml api/voucher.yaml api/resell.yaml
+GENERATED_DIRS := internal/handlers/components internal/handlers/health internal/handlers/rvto2addr internal/handlers/voucher internal/handlers/resell
 
 .PHONY: oapi-codegen
 oapi-codegen:
@@ -25,9 +25,6 @@ oapi-codegen:
 
 .PHONY: generate
 generate: oapi-codegen
-	@echo "Generating shared types from common schemas..."
-	cd api/openapi && go tool oapi-codegen -package openapi -generate types shared/schemas/common.yaml > shared-types.go
-	@echo "Generating owner server code..."
 	go generate ./...
 
 

@@ -1,9 +1,0 @@
-# Health endpoint used by all FDO servers (owner, manufacturer, rendezvous)
-get:
-  responses:
-    '200':
-      description: Server health status
-      content:
-        application/json:
-          schema:
-            $ref: '../schemas/common.yaml#/components/schemas/HealthResponse'

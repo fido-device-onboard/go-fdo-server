@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: FDO Server - Resell API
+  version: 1.0.0
+  description: Voucher resell endpoints
+
+paths:
+  /owner/resell/{guid}:
+    post:
+      summary: Resell a voucher to a new owner
+      operationId: resellVoucher
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-fA-F0-9]{32}$'
+          description: GUID of the voucher to resell
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResellRequest'
+      responses:
+        '200':
+          description: Voucher resold successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResellResponse'
+        '400':
+          description: Bad request (invalid GUID, invalid JWK, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '404':
+          description: Voucher not found
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+
+components:
+  schemas:
+    ResellRequest:
+      type: object
+      required:
+        - nextOwnerKey
+      properties:
+        nextOwnerKey:
+          type: object
+          description: Public key of the new owner in JWK format
+          example:
+            kty: "EC"
+            crv: "P-256"
+            x: "ZE_kMbAYRSzW2ylAFriRnfojfT9tSJVhSY4Cixt_E4g"
+            y: "JvDCeLDrH2oW8JAL7dudJylF2H6AqaOGb-eEjqyt8tU"
+
+    ResellResponse:
+      type: object
+      required:
+        - success
+        - extendedVoucher
+      properties:
+        success:
+          type: boolean
+          description: Whether the resell operation was successful
+        extendedVoucher:
+          type: string
+          format: byte
+          description: Extended voucher in PEM format
+        guid:
+          type: string
+          description: GUID of the resold voucher

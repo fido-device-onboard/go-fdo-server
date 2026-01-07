@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: FDO Server - Voucher API
+  version: 1.0.0
+  description: Voucher management endpoints
+
+paths:
+  /owner/vouchers:
+    post:
+      summary: Upload ownership vouchers
+      operationId: uploadOwnerVouchers
+      requestBody:
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+          application/x-www-form-urlencoded:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Vouchers processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/VoucherInsertResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+
+  /vouchers:
+    get:
+      summary: List all vouchers
+      operationId: getVouchers
+      responses:
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+
+  /vouchers/{guid}:
+    get:
+      summary: Get voucher by GUID
+      operationId: getVoucherByGUID
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-fA-F0-9]{32}$'
+      responses:
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'

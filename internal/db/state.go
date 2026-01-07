@@ -143,6 +143,24 @@ func (s *State) UpdateRvInfo(data []byte) error {
 	return s.DB.Save(&rvInfo).Error
 }
 
+// FetchOwnerInfo reads the owner info JSON from the database
+func (s *State) FetchOwnerInfo() ([]byte, error) {
+	var ownerInfo OwnerInfo
+	if err := s.DB.Where("id = ?", 1).First(&ownerInfo).Error; err != nil {
+		return nil, err
+	}
+	return ownerInfo.Value, nil
+}
+
+// SetOwnerInfo inserts or updates owner info JSON in the database
+func (s *State) SetOwnerInfo(data []byte) error {
+	ownerInfo := OwnerInfo{
+		ID:    1,
+		Value: data,
+	}
+	return s.DB.Save(&ownerInfo).Error
+}
+
 // Compile-time check for interface implementation correctness
 var _ interface {
 	protocol.TokenService
