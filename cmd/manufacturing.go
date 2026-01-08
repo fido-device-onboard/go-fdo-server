@@ -24,6 +24,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
 	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/rvto2addr"
 	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/voucher"
 	"github.com/fido-device-onboard/go-fdo/custom"
@@ -254,7 +255,14 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 	rvto2addrServer := rvto2addr.NewServer(dbState)
 	rvto2addrHandler := rvto2addr.Handler(rvto2addrServer)
 	apiRouter.Handle("/rvinfo", rvto2addrHandler)
+
+	// Get the main handler with API routes mounted
 	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
+
+	// Add health endpoint directly to the main handler (not under /api/v1/)
+	healthServer := health.NewServer()
+	healthHandler := health.Handler(healthServer)
+	httpHandler.Handle("/health", healthHandler)
 
 	// Listen and serve
 	server := NewManufacturingServer(config.HTTP, httpHandler)

@@ -18,6 +18,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
 	transport "github.com/fido-device-onboard/go-fdo/http"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -150,6 +151,11 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 		}}
 
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
+
+	// Add health endpoint directly to the main handler (not under /api/v1/)
+	healthServer := health.NewServer()
+	healthHandlerFunc := health.Handler(healthServer)
+	httpHandler.Handle("/health", healthHandlerFunc)
 
 	// Listen and serve
 	server := NewRendezvousServer(config.HTTP, httpHandler)
