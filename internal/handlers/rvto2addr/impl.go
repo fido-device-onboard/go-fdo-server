@@ -11,13 +11,23 @@ import (
 
 // Server implements RVTO2Addr HTTP handlers
 type Server struct {
-	db *db.State
+	db          *db.State
+	isOwnerMode bool // true for owner redirect info, false for rendezvous info
 }
 
-// NewServer creates a new rvto2addr server instance
+// NewServer creates a new rvto2addr server instance for rendezvous info (manufacturing server)
 func NewServer(database *db.State) *Server {
 	return &Server{
-		db: database,
+		db:          database,
+		isOwnerMode: false, // Handle rvinfo
+	}
+}
+
+// NewOwnerServer creates a new rvto2addr server instance for owner redirect info (owner server)
+func NewOwnerServer(database *db.State) *Server {
+	return &Server{
+		db:          database,
+		isOwnerMode: true, // Handle owner redirect info
 	}
 }
 
@@ -26,62 +36,92 @@ func Handler(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// Manual HTTP handler registration following Miguel's pattern
-	mux.HandleFunc("GET /owner/redirect", s.handleGetOwnerRedirect)
-	mux.HandleFunc("PUT /owner/redirect", s.handleSetOwnerRedirect)
+	// Note: This will be mounted at /api/v1/rvinfo by the calling code
+	mux.HandleFunc("/", s.handleGetOwnerRedirect)      // Handle GET /api/v1/rvinfo
+	mux.HandleFunc("PUT /", s.handleSetOwnerRedirect)  // Handle PUT /api/v1/rvinfo
+	mux.HandleFunc("POST /", s.handleSetOwnerRedirect) // Handle POST /api/v1/rvinfo
 
 	return mux
 }
 
 func (s *Server) handleGetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
-	// Retrieve owner redirect info from database
-	ownerInfoBytes, err := s.db.FetchOwnerInfo()
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusNotFound, "Owner redirect information not found")
-		return
-	}
+	if s.isOwnerMode {
+		// Retrieve owner redirect info from database (RVTO2Addr)
+		ownerInfoBytes, err := s.db.FetchOwnerInfo()
+		if err != nil {
+			// Match original behavior: return 404 with plain text error
+			http.Error(w, "No ownerInfo found", http.StatusNotFound)
+			return
+		}
 
-	var response components.RVTO2Addr
-	if err := json.Unmarshal(ownerInfoBytes, &response); err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, "Failed to parse owner redirect information")
-		return
-	}
+		// Return the raw JSON data as stored in the database
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(ownerInfoBytes)
+	} else {
+		// Retrieve rendezvous info from database (rvinfo)
+		rvInfoBytes, err := s.db.FetchRvInfoJSON()
+		if err != nil {
+			// Match original behavior: return 404 with plain text error
+			http.Error(w, "No rvInfo found", http.StatusNotFound)
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+		// Return the raw JSON data as stored in the database
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(rvInfoBytes)
+	}
 }
 
 func (s *Server) handleSetOwnerRedirect(w http.ResponseWriter, r *http.Request) {
 	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Failed to read request body")
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
 
-	var request components.RVTO2Addr
-	if err := json.Unmarshal(body, &request); err != nil {
-		s.writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON in request body")
-		return
+	if s.isOwnerMode {
+		// Handle owner redirect info (RVTO2Addr)
+		// First check if owner info already exists
+		_, err = s.db.FetchOwnerInfo()
+		if err != nil {
+			// Record doesn't exist, try to insert it (POST behavior)
+			if err := s.db.SetOwnerInfo(body); err != nil {
+				http.Error(w, "Failed to create owner info", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Record exists, update it (PUT behavior)
+			if err := s.db.SetOwnerInfo(body); err != nil {
+				http.Error(w, "Failed to update owner info", http.StatusInternalServerError)
+				return
+			}
+		}
+	} else {
+		// Handle rendezvous info (rvinfo)
+		// First check if rvinfo already exists
+		_, err = s.db.FetchRvInfoJSON()
+		if err != nil {
+			// Record doesn't exist, try to insert it (POST behavior)
+			if err := s.db.InsertRvInfo(body); err != nil {
+				http.Error(w, "Failed to create RV info", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Record exists, update it (PUT behavior)
+			if err := s.db.UpdateRvInfo(body); err != nil {
+				http.Error(w, "Failed to update RV info", http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
-	// Marshal the request data to store in database
-	requestBytes, err := json.Marshal(request)
-	if err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, "Failed to process request data")
-		return
-	}
-
-	// Update owner redirect info in database
-	if err := s.db.SetOwnerInfo(requestBytes); err != nil {
-		s.writeErrorResponse(w, http.StatusInternalServerError, "Failed to update owner redirect information")
-		return
-	}
-
-	// Return updated info
+	// Return the data that was stored
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(request)
+	w.Write(body)
 }
 
 func (s *Server) writeErrorResponse(w http.ResponseWriter, statusCode int, message string) {

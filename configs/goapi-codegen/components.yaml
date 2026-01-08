@@ -1,5 +1,5 @@
 package: components
-output: internal/handlers/components/gen.go
+output: handlers/components/gen.go
 generate:
   strict-server: true
   models: true

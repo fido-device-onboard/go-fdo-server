@@ -33,7 +33,7 @@ type OwnerServer struct {
 func NewOwnerServer(ownerPKeys []crypto.PublicKey, to2Server *fdo.TO2Server, database *db.State) *OwnerServer {
 	// Create domain-specific handlers
 	healthServer := health.NewServer()
-	rvto2addrServer := rvto2addr.NewServer(database)
+	rvto2addrServer := rvto2addr.NewOwnerServer(database) // Use owner mode for RVTO2Addr
 	voucherServer := voucher.NewServer(database)
 	resellServer := resell.NewServer(database, to2Server)
 

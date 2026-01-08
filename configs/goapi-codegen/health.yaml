@@ -1,5 +1,5 @@
 package: health
-output: internal/handlers/health/gen.go
+output: handlers/health/gen.go
 generate:
   strict-server: true
   models: true

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,8 +18,10 @@ import (
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+	"gorm.io/gorm"
 )
 
 // Server implements voucher HTTP handlers
@@ -46,9 +50,10 @@ func Handler(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// Manual HTTP handler registration following Miguel's pattern
+	// Note: These will be mounted at /api/v1/vouchers/ with prefix stripping
 	mux.HandleFunc("POST /owner/vouchers", s.handleUploadOwnerVouchers)
-	mux.HandleFunc("GET /vouchers", s.handleGetVouchers)
-	mux.HandleFunc("GET /vouchers/{guid}", s.handleGetVoucherByGUID)
+	mux.HandleFunc("GET /", s.handleGetVouchers)            // Handle GET /api/v1/vouchers/
+	mux.HandleFunc("GET /{guid}", s.handleGetVoucherByGUID) // Handle GET /api/v1/vouchers/{guid}
 
 	return mux
 }
@@ -95,9 +100,12 @@ func (s *Server) handleUploadOwnerVouchers(w http.ResponseWriter, r *http.Reques
 				s.writeJSONResponse(w, response)
 				return
 			}
+		} else if strings.Contains(string(body), "-----BEGIN OWNERSHIP VOUCHER-----") {
+			// Handle raw PEM data sent as form-encoded (curl --data-binary compatibility)
+			pemData = body
 		} else {
-			// Reject non-JSON form data
-			s.writeErrorResponse(w, http.StatusBadRequest, "Invalid form data", "Form-encoded data must contain JSON voucher response from manufacturer")
+			// Reject invalid form data
+			s.writeErrorResponse(w, http.StatusBadRequest, "Invalid form data", "Form-encoded data must contain JSON voucher response or raw PEM data")
 			return
 		}
 	} else if contentType != "" && contentType != "application/x-pem-file" {
@@ -183,10 +191,45 @@ func (s *Server) handleGetVouchers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetVoucherByGUID(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement individual voucher retrieval logic
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":"Not implemented yet"}`))
+	// Extract GUID from URL path parameter
+	guidStr := r.PathValue("guid")
+	if guidStr == "" {
+		s.writeErrorResponse(w, http.StatusBadRequest, "Missing voucher GUID", "GUID not provided in URL")
+		return
+	}
+
+	// Validate and decode GUID
+	if !utils.IsValidGUID(guidStr) {
+		s.writeErrorResponse(w, http.StatusBadRequest, "Invalid GUID format", guidStr)
+		return
+	}
+
+	guidBytes, err := hex.DecodeString(guidStr)
+	if err != nil {
+		s.writeErrorResponse(w, http.StatusBadRequest, "Failed to decode GUID", err.Error())
+		return
+	}
+
+	// Fetch voucher from database
+	voucher, err := db.FetchVoucher(map[string]interface{}{"guid": guidBytes})
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.writeErrorResponse(w, http.StatusNotFound, "Voucher not found", guidStr)
+			return
+		}
+		s.writeErrorResponse(w, http.StatusInternalServerError, "Database error", err.Error())
+		return
+	}
+
+	// Return voucher as PEM-encoded data
+	pemBlock := &pem.Block{
+		Type:  "OWNERSHIP VOUCHER",
+		Bytes: voucher.CBOR,
+	}
+
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.WriteHeader(http.StatusOK)
+	pem.Encode(w, pemBlock)
 }
 
 // VerifyVoucherOwnership verifies the ownership voucher belongs to this owner.

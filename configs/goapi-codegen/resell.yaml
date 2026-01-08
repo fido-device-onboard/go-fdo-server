@@ -1,5 +1,5 @@
 package: resell
-output: internal/handlers/resell/gen.go
+output: handlers/resell/gen.go
 generate:
   strict-server: true
   models: true

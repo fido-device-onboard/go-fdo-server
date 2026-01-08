@@ -1,5 +1,5 @@
 package: voucher
-output: internal/handlers/voucher/gen.go
+output: handlers/voucher/gen.go
 generate:
   strict-server: true
   models: true
