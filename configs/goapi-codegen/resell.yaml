@@ -1,0 +1,9 @@
+package: resell
+output: handlers/resell/gen.go
+generate:
+  strict-server: true
+  models: true
+import-mapping:
+  './components.yaml': github.com/fido-device-onboard/go-fdo-server/internal/handlers/components
+output-options:
+  skip-prune: true

@@ -27,9 +27,10 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
+	voucherhandler "github.com/fido-device-onboard/go-fdo-server/internal/handlers/voucher" // Only for VerifyVoucher function
+	ownerserver "github.com/fido-device-onboard/go-fdo-server/internal/server"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/fsim"
@@ -311,7 +312,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
-			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
+			return voucherhandler.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
 		},
 	}
 
@@ -320,15 +321,22 @@ func serveOwner(config *OwnerServerConfig) error {
 		TO2Responder: to2Server,
 	}
 
-	// Handle messages
-	apiRouter := http.NewServeMux()
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
-	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
-	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
+	// Create the main HTTP handler with ServeMux for API endpoints
+	mainHandler := http.NewServeMux()
+
+	// Register FDO protocol endpoints
+	mainHandler.Handle("POST /fdo/101/msg/{msg}", handler)
+
+	// Register OpenAPI routes with prefix stripping for all other /api/v1/ requests
+	ownerServer := ownerserver.NewOwnerServer([]crypto.PublicKey{state.ownerKey.Public()}, to2Server, state.DB)
+	mainHandler.Handle("/api/v1/", http.StripPrefix("/api/v1", ownerServer))
+
+	// Register health endpoint following Miguel's pattern
+	healthServer := health.NewServer()
+	mainHandler.Handle("/health", health.Handler(healthServer))
 
 	// Listen and serve
-	server := NewOwnerServer(config.HTTP, httpHandler)
+	server := NewOwnerServer(config.HTTP, mainHandler)
 
 	// Background TO0 scheduler: after restarts, continue attempting TO0 for any
 	// devices without completed TO2 as recorded in the database.

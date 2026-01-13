@@ -1,0 +1,59 @@
+openapi: 3.0.3
+info:
+  title: FDO Server - RV TO2 Address API
+  version: 1.0.0
+  description: Rendezvous TO2 address management endpoints
+
+paths:
+  /owner/redirect:
+    get:
+      summary: Get owner redirect information
+      operationId: getOwnerRedirect
+      responses:
+        '200':
+          description: Owner redirect information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/RVTO2Addr'
+        '404':
+          description: Owner redirect information not found
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+
+    put:
+      summary: Set or update owner redirect information
+      operationId: setOwnerRedirect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/RVTO2Addr'
+      responses:
+        '200':
+          description: Owner redirect information updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/RVTO2Addr'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'

@@ -12,9 +12,26 @@ VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2
 # Default target
 all: build test
 
+#
+# OpenAPI Code Generation
+#
+API_SPECS := api/components.yaml api/health.yaml api/rvto2addr.yaml api/voucher.yaml api/resell.yaml
+GENERATED_DIRS := internal/handlers/components internal/handlers/health internal/handlers/rvto2addr internal/handlers/voucher internal/handlers/resell
+
+.PHONY: oapi-codegen
+oapi-codegen:
+	@echo "Installing oapi-codegen..."
+	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+
+.PHONY: generate
+generate: oapi-codegen
+	go generate ./...
+
+
+
 # Build the Go project
 .PHONY: build
-build: tidy fmt vet
+build: generate tidy fmt vet
 	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: tidy
