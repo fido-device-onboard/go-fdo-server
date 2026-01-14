@@ -25,6 +25,29 @@ func NewRendezvous(state *db.State) Rendezvous {
 	return Rendezvous{State: state}
 }
 
+func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow() {
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = struct {
+			io.Reader
+			io.Closer
+		}{
+			Reader: io.LimitReader(r.Body, limitBytes),
+			Closer: r.Body,
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
 func (s *Rendezvous) Handler() http.Handler {
 	rendezvousServeMux := http.NewServeMux()
 	// Wire FDO Handler
@@ -45,6 +68,21 @@ func (s *Rendezvous) Handler() http.Handler {
 	healthServer := health.NewServer(s.State)
 	healthStrictHandler := health.NewStrictHandler(&healthServer, nil)
 	health.HandlerFromMux(healthStrictHandler, rendezvousServeMux)
+
+	// Wire management APIs
+	mgmtAPIServeMux := http.NewServeMux()
+
+	deviceCAServer := deviceca.NewServer(s.State)
+	deviceCAStrictHandler := deviceca.NewStrictHandler(&deviceCAServer, nil)
+	deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtAPIServeMux)
+
+	mgmtAPIHandler := rateLimitMiddleware(
+		rate.NewLimiter(2, 10),
+		bodySizeMiddleware(1<<20, /* 1MB */
+			mgmtAPIServeMux,
+		),
+	)
+	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandler))
 
 	return rendezvousServeMux
 }
