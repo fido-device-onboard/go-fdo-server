@@ -222,3 +222,15 @@ type DeviceOnboarding struct {
 func (DeviceOnboarding) TableName() string {
 	return "device_onboarding"
 }
+
+// Device is a projection used by the owner API to expose
+// voucher metadata together with TO2 onboarding state for each device.
+type Device struct {
+	GUID           GUID       `json:"guid" gorm:"column:guid"`
+	OldGUID        GUID       `json:"old_guid" gorm:"column:old_guid"`
+	DeviceInfo     string     `json:"device_info" gorm:"column:device_info"`
+	CreatedAt      time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" gorm:"column:updated_at"`
+	TO2Completed   bool       `json:"to2_completed" gorm:"column:to2_completed"`
+	TO2CompletedAt *time.Time `json:"to2_completed_at,omitempty" gorm:"column:to2_completed_at"`
+}

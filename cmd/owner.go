@@ -325,6 +325,7 @@ func serveOwner(config *OwnerServerConfig) error {
 	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
+	apiRouter.Handle("GET /owner/devices", http.HandlerFunc(handlers.OwnerDevicesHandler))
 	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
 
 	// Listen and serve

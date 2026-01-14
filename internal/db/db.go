@@ -226,6 +226,32 @@ func FetchRvInfoJSON() ([]byte, error) {
 	return rvInfo.Value, nil
 }
 
+// ListDevices returns devices known to the owner service, combining voucher
+// metadata with TO2 onboarding state (if any) from device_onboarding.
+// Devices are ordered by most recently updated voucher first.
+func ListDevices(filters map[string]interface{}) ([]Device, error) {
+	var out []Device
+
+	query := db.Table("vouchers").
+		Select("vouchers.guid, device_onboarding.guid as old_guid, vouchers.device_info, vouchers.created_at, vouchers.updated_at, device_onboarding.to2_completed, device_onboarding.to2_completed_at").
+		Joins("LEFT JOIN device_onboarding ON device_onboarding.new_guid = vouchers.guid").
+		Order("vouchers.updated_at DESC")
+
+	// Apply filters
+	if v, ok := filters["old_guid"]; ok {
+		b, ok := v.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for old_guid filter; want []byte")
+		}
+		query = query.Where("device_onboarding.guid = ?", b)
+	}
+
+	if err := query.Scan(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FetchRvInfo reads the rvinfo JSON (stored as text) and converts it into
 // [][]protocol.RvInstruction, CBOR-encoding each value as required by go-fdo.
 func FetchRvInfo() ([][]protocol.RvInstruction, error) {
