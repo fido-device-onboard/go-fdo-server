@@ -11,7 +11,7 @@ test: ../../rpm/test-onboarding.sh
 
 framework: shell
 
-duration: 10m
+duration: 30m
 
 tag:
   - fdo

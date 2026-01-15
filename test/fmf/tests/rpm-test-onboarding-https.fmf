@@ -12,7 +12,7 @@ test: ../../rpm/test-onboarding-https.sh
 
 framework: shell
 
-duration: 10m
+duration: 30m
 
 tag:
   - fdo

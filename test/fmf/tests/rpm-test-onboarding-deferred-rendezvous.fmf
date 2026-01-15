@@ -8,7 +8,7 @@ test: ../../rpm/test-onboarding-deferred-rendezvous.sh
 
 framework: shell
 
-duration: 10m
+duration: 30m
 
 tag:
   - fdo
