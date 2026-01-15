@@ -69,5 +69,5 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 			return refresh, nil
 		}
 	}
-	return 0, fmt.Errorf("unable to register any 'RVTO2Addr' URL for guid='%s'", guid)
+	return 0, fmt.Errorf("unable to register any 'RVTO2Addr' URL for guid='%x'", guid)
 }

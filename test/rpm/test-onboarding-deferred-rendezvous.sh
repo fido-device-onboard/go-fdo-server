@@ -51,20 +51,32 @@ run_test() {
   log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  # TODO: once we have an infinite loop in the client, we should just confirm that the onboarding process is just stuck until the rendezvous is started
-  # This mimics the client reaching out to the rendezvous and getting a not found cause to0 is not done yet.
   log_info "Attempting device onboarding before rendezvous is started (expect 'ERROR: TO1 failed')"
-  ! run_fido_device_onboard "${guid}" --debug || log_error "Onboarding expected to fail"
+  onboard_log="$(get_device_onboard_log_file_path "${guid}")"
+  run_fido_device_onboard "${guid}" --debug &
+  onboard_pid=$!
 
-  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "ERROR: TO1 failed" || log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
+  log_info "Waiting for TO1 failure to appear in logs before starting rendezvous"
+  found_to1_failure=false
+  for _ in {1..30}; do
+    if find_in_log "${onboard_log}" "ERROR: TO1 failed"; then
+      found_to1_failure=true
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "${found_to1_failure}" != "true" ]; then
+    log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
+  fi
 
   log_info "Now starting rendezvous"
   start_service_rendezvous
   wait_for_service_ready rendezvous
 
-  log_info "Running FIDO Device Onboard with retries until rendezvous/TO0 become available"
-  run_fido_device_onboard "${guid}" --debug || log_error "Device onboarding did not complete successfully after rendezvous start"
-
+  if ! wait "${onboard_pid}"; then
+    log_error "Onboarding expected to succeed after rendezvous is started"
+  fi
   log_info "Unsetting the error trap handler"
   trap - ERR
   test_pass

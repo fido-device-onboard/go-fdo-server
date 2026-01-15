@@ -110,13 +110,12 @@ func IsTO2Completed(guid []byte) (bool, error) {
 }
 
 // ListPendingTO0Vouchers returns vouchers whose devices have not completed TO2 yet.
-// A voucher is considered pending if there is no corresponding device_onboarding row,
-// or if TO2Completed is false.
+// A voucher is considered pending if TO2Completed is false.
 func ListPendingTO0Vouchers(includeCBOR bool) ([]Voucher, error) {
 	query := db.Model(&Voucher{})
 	// Join with device_onboarding to filter by completion state
 	query = query.Joins("LEFT JOIN device_onboarding ON device_onboarding.guid = vouchers.guid").
-		Where("device_onboarding.to2_completed = ? OR device_onboarding.guid IS NULL", false)
+		Where("device_onboarding.to2_completed = ?", false)
 
 	if !includeCBOR {
 		query = query.Omit("cbor")

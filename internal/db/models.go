@@ -212,9 +212,9 @@ func (RvInfo) TableName() string {
 
 // DeviceOnboarding tracks TO2 completion per device GUID
 type DeviceOnboarding struct {
-	GUID           []byte `gorm:"primaryKey"`
-	NewGUID        []byte `gorm:"index"`
-	TO2Completed   bool   `gorm:"type:boolean;not null;default:false"`
+	GUID           GUID `gorm:"primaryKey"`
+	NewGUID        GUID `gorm:"index"`
+	TO2Completed   bool `gorm:"type:boolean;not null;default:false"`
 	TO2CompletedAt *time.Time
 }
 
