@@ -87,6 +87,12 @@ rendezvous_https_crt="${certs_dir}/rendezvous-http.crt"
 owner_https_key="${certs_dir}/owner-http.key"
 owner_https_crt="${certs_dir}/owner-http.crt"
 
+# go-fdo-client operation timeout.
+client_timeout="300s"
+
+# seconds to wait for TO0 to complete
+to0_wait_seconds=10
+
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
@@ -109,11 +115,15 @@ log_warn() {
   echo -e "${YELLOW}[WARN]${NC} 🚧" "$@"
 }
 
-log_success() {
+print_success() {
   echo -e "✔" "$@"
 }
 
-log_error(){
+print_error() {
+  echo -e "❌" "$@"
+}
+
+log_error() {
   echo -e "${RED}[ERROR]${NC} ❌" "$@"
   return 1
 }
@@ -126,7 +136,7 @@ test_fail() {
   log_error "Test FAILED!"
 }
 
-show_env(){
+show_env() {
   env -0 | sort -z | tr '\0' '\n'
 }
 
@@ -151,7 +161,7 @@ set_hostname() {
     sudo cp "${tmp_hosts}" /etc/hosts
     rm -f "${tmp_hosts}"
   else
-    echo "${ip} ${dns}" | sudo tee -a /etc/hosts > /dev/null
+    echo "${ip} ${dns}" | sudo tee -a /etc/hosts >/dev/null
   fi
 }
 
@@ -172,7 +182,7 @@ set_hostnames() {
     service_dns=${service}_dns
     log "  ⚙ ${!service_ip} ${!service_dns} "
     set_hostname "${!service_dns}" "${!service_ip}"
-    log_success
+    print_success
   done
 }
 
@@ -183,7 +193,7 @@ unset_hostnames() {
     local service_dns=${service}_dns
     log "  ⚙ ${!service_ip} ${!service_dns} "
     unset_hostname "${!service_dns}" "${!service_ip}"
-    log_success
+    print_success
   done
 }
 
@@ -192,7 +202,7 @@ configure_services() {
   for service in "${services[@]}"; do
     log "  ⚙ Configuring service ${service} "
     configure_service "${service}"
-    log_success
+    print_success
   done
 }
 
@@ -230,8 +240,12 @@ wait_for_service_ready() {
   local service_health_url="${service}_health_url"
   [[ -v "${service_health_url}" ]] || log_error "service ${service} has no health URL"
   log "  ⚙ Waiting for ${!service_health_url} to be healthy "
-  wait_for_url "${!service_health_url}" || log_error
-  log_success
+  wait_for_url "${!service_health_url}" || {
+    status="$?"
+    print_error
+    return "${status}"
+  }
+  print_success
 }
 
 wait_for_services_ready() {
@@ -245,7 +259,7 @@ wait_for_services_ready() {
 run_go_fdo_client() {
   mkdir -p "${credentials_dir}"
   cd "${credentials_dir}"
-  go-fdo-client "$@"
+  timeout ${client_timeout} go-fdo-client "$@" || log_warn "Command timed out ($?): 'go-fdo-client $*'"
   cd - >/dev/null
 }
 
@@ -281,31 +295,13 @@ get_device_onboard_log_file_path() {
 }
 
 run_fido_device_onboard() {
-  # This logic will be removed once the go-fdo-client supports polling for TO2 completion.
-  local attempts=15
-  local i=1
-  onboarded=1
-  while [ ${i} -le ${attempts} ]; do
-    log_info "Waiting for FIDO Device Onboard to complete (attempt: ${i})"
-    if run_fido_device_onboard_cmd "$@"; then
-      onboarded=0
-      break
-    fi
-    if [ ${i} -lt ${attempts} ]; then
-      sleep 5
-    fi
-    i=$((i+1))
-  done
-  return ${onboarded}
-}
-
-run_fido_device_onboard_cmd() {
   local guid=$1
+  local log_file
   shift
   [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
-  local log_file="$(get_device_onboard_log_file_path "${guid}")"
-  run_go_fdo_client --blob "$(get_device_credentials_file_path ${guid})" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
-  find_in_log "${log_file}" 'FIDO Device Onboard Complete'
+  log_file="$(get_device_onboard_log_file_path "${guid}")"
+  run_go_fdo_client --blob "$(get_device_credentials_file_path "${guid}")" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
+  find_in_log "${log_file}" 'FIDO Device Onboard Complete' || return $?
 }
 
 run_go_fdo_server() {
@@ -317,8 +313,8 @@ run_go_fdo_server() {
   shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &> "${log}" &
-  echo -n $! > "${pid_file}"
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &>"${log}" &
+  echo -n $! >"${pid_file}"
 }
 
 start_service_manufacturer() {
@@ -340,6 +336,7 @@ start_service_rendezvous() {
     extra_opts+=(--http-cert "${rendezvous_https_crt}" --http-key "${rendezvous_https_key}")
   fi
   run_go_fdo_server rendezvous ${rendezvous_service} rendezvous ${rendezvous_pid_file} ${rendezvous_log} \
+    --device-ca-cert="${device_ca_crt}" \
     "${extra_opts[@]}"
 }
 
@@ -371,7 +368,7 @@ start_services() {
   for service in "${services[@]}"; do
     log "  ⚙ Starting service ${service} "
     start_service ${service}
-    log_success
+    print_success
   done
 }
 
@@ -390,12 +387,12 @@ stop_services() {
   for service in "${services[@]}"; do
     log "  ⚙ Stopping service ${service} "
     stop_service "${service}"
-    log_success
+    print_success
   done
 }
 
 install_client() {
-  go install github.com/fido-device-onboard/go-fdo-client@latest
+  go install github.com/fido-device-onboard/go-fdo-client@main
 }
 
 uninstall_client() {
@@ -427,7 +424,7 @@ generate_service_certs() {
 }
 
 generate_https_certs() {
- for service in "${services[@]}"; do
+  for service in "${services[@]}"; do
     local service_protocol="${service}_protocol"
     [[ "${!service_protocol-}" = "https" ]] || continue
     local service_key="${service}_https_key"
@@ -469,6 +466,10 @@ send_manufacturer_ov_to_owner() {
   ov_file="${ov_dir}/${guid}.ov"
   get_ov_from_manufacturer "${manufacturer_url}" "${guid}" "${ov_file}"
   send_ov_to_owner "${owner_url}" "${ov_file}"
+  status=$?
+  log_info "Waiting '${to0_wait_seconds}' seconds for TO0 to be performed by the Owner"
+  sleep "${to0_wait_seconds}"
+  return ${status}
 }
 
 set_or_update_owner_redirect_info() {
@@ -517,7 +518,7 @@ verify_equal_files() {
   local file_2=$2
 
   for file in "${file_1}" "${file_2}"; do
-    [ -f "${file}" ] || log_error "File not found: ${file}";
+    [ -f "${file}" ] || log_error "File not found: ${file}"
   done
 
   [ "${file_1}" != "${file_2}" ] || return 0
