@@ -120,7 +120,7 @@ var ownerCmd = &cobra.Command{
 	},
 }
 
-// OwnerServer Server represents the HTTP server
+// OwnerServer represents the HTTP server
 type OwnerServer struct {
 	handler http.Handler
 	config  HTTPConfig
