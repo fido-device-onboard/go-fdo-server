@@ -32,14 +32,25 @@ type RendezvousConfig struct {
 // RendezvousServerConfig server configuration file structure
 type RendezvousServerConfig struct {
 	FDOServerConfig `mapstructure:",squash"`
+	DeviceCAConfig  DeviceCAConfig   `mapstructure:"device_ca"`
 	Rendezvous      RendezvousConfig `mapstructure:"rendezvous"`
 }
 
 // validate checks that required configuration is present
 func (rv *RendezvousServerConfig) validate() error {
+	slog.Debug("Validating HTTP configuration")
 	if err := rv.HTTP.validate(); err != nil {
+		slog.Error("HTTP configuration validation failed", "err", err)
 		return err
 	}
+	slog.Debug("HTTP configuration valid")
+
+	if rv.DeviceCAConfig.CertPath != "" {
+		slog.Debug("Device CA certificate path configured", "path", rv.DeviceCAConfig.CertPath)
+	} else {
+		slog.Warn("Device CA certificate path not configured - voucher verification may fail")
+	}
+
 	return nil
 }
 
@@ -48,10 +59,19 @@ var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// Bind the min-ttl flag
-		if err := viper.BindPFlag("rendezvous.min_ttl", cmd.Flags().Lookup("min-ttl")); err != nil {
+		slog.Debug("Binding rendezvous command flags")
+		// Rebind only those keys needed by the rendezvous command. This is
+		// necessary because Viper cannot bind the same key twice and
+		// the other sub commands use the same keys.
+		if err := viper.BindPFlag("device_ca.cert", cmd.Flags().Lookup("device-ca-cert")); err != nil {
+			slog.Error("Failed to bind device-ca-cert flag", "err", err)
 			return err
 		}
+		if err := viper.BindPFlag("rendezvous.min_ttl", cmd.Flags().Lookup("min-ttl")); err != nil {
+			slog.Error("Failed to bind min-ttl flag", "err", err)
+			return err
+		}
+		slog.Debug("Flags bound successfully")
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -134,10 +154,43 @@ func (s *RendezvousServer) Start() error {
 }
 
 func serveRendezvous(config *RendezvousServerConfig) error {
+	slog.Info("Initializing rendezvous server")
+
+	slog.Debug("Initializing database connection", "type", config.DB.Type, "dsn", config.DB.DSN)
 	dbState, err := config.DB.getState()
 	if err != nil {
-		return err
+		slog.Error("Failed to initialize database", "err", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
+	slog.Info("Database initialized successfully", "type", config.DB.Type)
+
+	// Add trusted device CA certificates to the database
+	slog.Debug("Loading device CA certificate", "path", config.DeviceCAConfig.CertPath)
+	deviceCACerts, err := config.DeviceCAConfig.getDeviceCACertsAsPEM()
+	if err != nil {
+		slog.Error("Failed to read device CA certificate", "path", config.DeviceCAConfig.CertPath, "err", err)
+		return fmt.Errorf("failed to get device CA cert as PEM: %w", err)
+	}
+	slog.Debug("Device CA certificate loaded successfully")
+
+	slog.Debug("Importing device CA certificate to database")
+	stats, err := dbState.ImportDeviceCACertificates(context.Background(), deviceCACerts)
+	if err != nil {
+		slog.Error("Failed to import device CA certificate", "err", err)
+		return fmt.Errorf("failed to import device CA certificate: %w", err)
+	}
+	slog.Info("Device CA certificate import completed",
+		"detected", stats.Detected,
+		"imported", stats.Imported,
+		"skipped", stats.Skipped,
+		"malformed", stats.Malformed)
+
+	slog.Debug("Loading trusted device CA certificates into memory")
+	if err = dbState.LoadTrustedDeviceCAs(context.Background()); err != nil {
+		slog.Error("Failed to load trusted device CAs", "err", err)
+		return fmt.Errorf("failed to load trusted device CAs: %w", err)
+	}
+	slog.Info("Trusted device CA certificates loaded successfully")
 
 	// Set default MinTTL if not configured
 	minTTL := config.Rendezvous.MinTTL

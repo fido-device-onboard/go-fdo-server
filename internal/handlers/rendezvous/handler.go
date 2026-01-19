@@ -49,6 +49,14 @@ func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
 }
 
 func (s *Rendezvous) acceptVoucher(ctx context.Context, ov fdo_lib.Voucher, requestedTTLSecs uint32) (ttlSecs uint32, err error) {
+	// Verify device certificate chain against trusted device CAs
+	s.State.Mutex.RLock()
+	certPool := s.State.TrustedDeviceCACertPool
+	s.State.Mutex.RUnlock()
+	if err := ov.VerifyDeviceCertChain(certPool); err != nil {
+		return 0, err
+	}
+
 	// Enforce minimum TTL if configured
 	if requestedTTLSecs < s.MinTTL {
 		return s.MinTTL, nil
