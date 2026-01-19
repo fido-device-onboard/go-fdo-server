@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -20,8 +21,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-// RendezvousConfig server configuration (TBD)
-type RendezvousConfig struct{}
+// RendezvousConfig server configuration
+type RendezvousConfig struct {
+	// MinTTL is the minimum time-to-live in seconds for rendezvous entries.
+	// If an owner server requests a TTL lower than this value, this minimum will be used instead.
+	// Default: 4294967295 (maximum uint32, effectively no minimum)
+	MinTTL uint32 `mapstructure:"min_ttl"`
+}
 
 // RendezvousServerConfig server configuration file structure
 type RendezvousServerConfig struct {
@@ -41,6 +47,13 @@ func (rv *RendezvousServerConfig) validate() error {
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		// Bind the min-ttl flag
+		if err := viper.BindPFlag("rendezvous.min_ttl", cmd.Flags().Lookup("min-ttl")); err != nil {
+			return err
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var rvConfig RendezvousServerConfig
 		if err := viper.Unmarshal(&rvConfig); err != nil {
@@ -126,7 +139,13 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 		return err
 	}
 
-	rendezvous := rendezvous.NewRendezvous(dbState)
+	// Set default MinTTL if not configured
+	minTTL := config.Rendezvous.MinTTL
+	if minTTL == 0 {
+		minTTL = math.MaxUint32
+	}
+
+	rendezvous := rendezvous.NewRendezvous(dbState, minTTL)
 	handler := rendezvous.Handler()
 
 	// Listen and serve
@@ -139,6 +158,8 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
+	rendezvousCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
+	rendezvousCmd.Flags().Uint32("min-ttl", math.MaxUint32, "Minimum TTL in seconds for rendezvous entries (default: no minimum)")
 }
 
 func init() {

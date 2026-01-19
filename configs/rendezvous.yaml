@@ -13,3 +13,11 @@ http:
   # server's certificate, any intermediates, and the CA's certificate.
   ##cert: /etc/pki/go-fdo-server/rendezvous-https-example.crt
   ##key: /etc/pki/go-fdo-server/rendezvous-https-example.key
+rendezvous:
+  # Minimum TTL (time-to-live) in seconds for rendezvous entries.
+  # If an owner server requests a TTL lower than this value during TO0,
+  # the rendezvous server will use this minimum value instead.
+  # This prevents owner servers from setting very short TTLs that could
+  # cause devices to miss their rendezvous window.
+  # If not specified, defaults to maximum uint32 (no minimum enforcement).
+  ##min_ttl: 4294967295

@@ -21,8 +21,8 @@ type Rendezvous struct {
 }
 
 // NewRendezvous creates a new Rendezvous
-func NewRendezvous(state *db.State) Rendezvous {
-	return Rendezvous{State: state}
+func NewRendezvous(state *db.State, minTTL uint32) Rendezvous {
+	return Rendezvous{State: state, MinTTL: minTTL}
 }
 
 func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
@@ -48,6 +48,14 @@ func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
 	}
 }
 
+func (s *Rendezvous) acceptVoucher(ctx context.Context, ov fdo_lib.Voucher, requestedTTLSecs uint32) (ttlSecs uint32, err error) {
+	// Enforce minimum TTL if configured
+	if requestedTTLSecs < s.MinTTL {
+		return s.MinTTL, nil
+	}
+	return requestedTTLSecs, nil
+}
+
 func (s *Rendezvous) Handler() http.Handler {
 	rendezvousServeMux := http.NewServeMux()
 	// Wire FDO Handler
@@ -56,6 +64,7 @@ func (s *Rendezvous) Handler() http.Handler {
 		TO0Responder: &fdo_lib.TO0Server{
 			Session:       s.State,
 			RVBlobs:       s.State,
+			AcceptVoucher: s.acceptVoucher,
 		},
 		TO1Responder: &fdo_lib.TO1Server{
 			Session: s.State,
