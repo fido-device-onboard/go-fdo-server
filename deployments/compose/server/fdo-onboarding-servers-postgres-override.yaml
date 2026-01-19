@@ -43,6 +43,7 @@ services:
     command:
       - --db-type=postgres
       - --db-dsn=host=rendezvous-db user=rendezvous password=Passw0rd dbname=rendezvous port=5432 sslmode=disable TimeZone=Europe/Madrid
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
       - --log-level=debug
       - rendezvous
       - rendezvous:8041

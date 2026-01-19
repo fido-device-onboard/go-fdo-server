@@ -44,6 +44,7 @@ services:
     command:
       - --db-type=sqlite
       - --db-dsn=file:${container_working_dir:-/workdir}/rendezvous.db
+      - --device-ca-cert=${container_working_dir:-/workdir}/certs/device_ca.crt
       - --log-level=debug
       - rendezvous
       - rendezvous:8041
