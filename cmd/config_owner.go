@@ -47,11 +47,6 @@ func (o *OwnerServerConfig) validate() error {
 		return errors.New("an owner private key file is required")
 	}
 
-	slog.Debug("Checking owner certificate", "path", o.OwnerConfig.OwnerCertificate)
-	if o.OwnerConfig.OwnerCertificate == "" {
-		slog.Warn("Owner certificate file not provided - certificate chain will not be included in owner key")
-	}
-
 	slog.Debug("Validating device CA certificate", "path", o.DeviceCAConfig.CertPath)
 	if o.DeviceCAConfig.CertPath == "" {
 		slog.Error("Device CA certificate file is required but not provided")
@@ -104,15 +99,6 @@ func (o *OwnerServerConfig) getPrivateKeyType() (protocol.KeyType, error) {
 	}
 	slog.Debug("Owner key type determined", "keyType", ownerKeyType)
 	return ownerKeyType, nil
-}
-
-func (o *OwnerServerConfig) getOwnerCertChain() ([]*x509.Certificate, error) {
-	slog.Debug("Loading owner certificate chain", "path", o.OwnerConfig.OwnerCertificate)
-	certs, err := loadCertificateFromFile(o.OwnerConfig.OwnerCertificate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load owner certificate chain: %w", err)
-	}
-	return certs, nil
 }
 
 func (o *OwnerServerConfig) getDeviceCACerts() ([]*x509.Certificate, error) {
