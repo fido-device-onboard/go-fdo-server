@@ -27,6 +27,8 @@ Install the client binary:
 go install github.com/fido-device-onboard/go-fdo-client@latest
 ```
 
+**Note**: Add `export PATH=$HOME/go/bin:$PATH` to your shell configuration file to run Go binaries without the `./` prefix.
+
 Generate test keys/certs (under `/tmp/fdo/keys`):
 
 ```bash
