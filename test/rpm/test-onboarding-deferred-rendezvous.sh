@@ -39,7 +39,7 @@ run_test() {
   wait_for_service_ready owner
 
   log_info "Setting or updating Rendezvous Info (RendezvousInfo) on manufacturer"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
   log_info "Run Device Initialization"
   guid=$(run_device_initialization)

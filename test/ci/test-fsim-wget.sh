@@ -84,7 +84,7 @@ run_test() {
   prepare_payload "${wget_source_file}"
 
   log_info "Setting or updating Rendezvous Info (RendezvousInfo)"
-  set_or_update_rendezvous_info "${manufacturer_url}" "${rendezvous_service_name}" "${rendezvous_dns}" "${rendezvous_port}" "${rendezvous_protocol}"
+  set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
   log_info "Run Device Initialization for Device 1"
   guid=$(run_device_initialization)
