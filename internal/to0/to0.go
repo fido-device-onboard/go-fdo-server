@@ -52,7 +52,18 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 		return 0, fmt.Errorf("no RV info found that is usable for the owner")
 	}
 
+	// TODO: This bypass handling should be moved to protocol.ParseOwnerRvInfo() in go-fdo library.
+	// Per FIDO 1.1 spec Table 3.6, RVBypass applies to Device only and shouldn't be returned
+	// as a directive to the Owner server. See: https://github.com/fido-device-onboard/go-fdo-server/issues/166
+	// Track if all directives are bypass
+	allBypass := true
 	for _, rv := range ownerRvInfo {
+		// Skip RV bypass directives - device connects directly to Owner, no TO0 needed
+		if rv.Bypass {
+			slog.Debug("skipping TO0 registration for RV bypass directive")
+			continue
+		}
+		allBypass = false
 		if len(rv.URLs) == 0 {
 			slog.Error("no usable rendezvous URLs were found for RV directive", "rv", rv)
 			continue
@@ -69,5 +80,13 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 			return refresh, nil
 		}
 	}
-	return 0, fmt.Errorf("unable to register any 'RVTO2Addr' URL for guid='%x'", guid)
+
+	// If all directives were bypass, that's success (no registration needed)
+	if allBypass {
+		slog.Debug("all RV directives are bypass - no TO0 registration needed")
+		return 0, nil
+	}
+
+	// Had non-bypass directives but all failed
+	return 0, fmt.Errorf("unable to register any 'RVTO2Addr' URL for guid='%s'", guid)
 }
