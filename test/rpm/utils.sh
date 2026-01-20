@@ -209,7 +209,7 @@ install_from_copr() {
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
   # testing-farm-tag-repository is causing problems with builds see:
   # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
-  sudo dnf install -y "$@"
+  sudo dnf install --disablerepo=* --enablerepo=copr:copr.fedorainfracloud.org:group_fedora-iot:fedora-iot -y "$@"
   sudo dnf copr disable -y @fedora-iot/fedora-iot
 }
 
@@ -217,7 +217,8 @@ install_client() {
   # If PACKIT_COPR_RPMS is not defined it means we are running the test
   # locally so we will install the client from the copr repo
   [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
-  echo "  - Installed Client RPM:  $(rpm -q go-fdo-client)"
+  log_info "Installed Client RPM:"
+  echo "    ⚙ $(rpm -q go-fdo-client)"
 }
 
 uninstall_client() {
@@ -231,7 +232,7 @@ uninstall_client() {
 
 install_server() {
   # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will build and install the RPMs
+  # locally so we will build and install the RPMs from the *committed* code
   if [ ! -v "PACKIT_COPR_RPMS" ]; then
     commit="$(git rev-parse --short HEAD)"
     rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
@@ -239,11 +240,17 @@ install_server() {
       sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
   else
-    echo "  - Expected Server RPMs:  ${PACKIT_COPR_RPMS}"
+    log_info "Expected Server RPMs:"
+    for i in ${PACKIT_COPR_RPMS}; do
+      echo "    ⚙ $i"
+    done | sort
   fi
   # Make sure the RPMS are installed
   installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " go-fdo-server{,-{manufacturer,owner,rendezvous}})
-  echo "  - Installed Server RPMs: ${installed_rpms}"
+  log_info "Installed Server RPMs:"
+  for i in ${installed_rpms}; do
+    echo "    ⚙ $i"
+  done | sort
 }
 
 uninstall_server() {
