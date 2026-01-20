@@ -10,6 +10,10 @@ ssh_key_pub=$(cat "${ssh_key}.pub")
 manufacturer_ip="192.168.100.1"
 rendezvous_ip="192.168.100.1"
 owner_ip="192.168.100.1"
+
+# Rebuild rv_info with bootc-specific IP addresses
+rv_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+
 bib_url="quay.io/centos-bootc/bootc-image-builder:latest"
 services+=("firewalld" "libvirtd")
 

@@ -17,6 +17,9 @@ owner_url="${owner_protocol}://${owner_service}"
 owner_health_url="${owner_url}/health"
 owner_to0_insecure_tls="true"
 
+# Rebuild rv_info with the updated rendezvous_protocol
+rv_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+
 # Allow running directly
 [[ "${BASH_SOURCE[0]}" != "$0" ]] || {
   run_test
