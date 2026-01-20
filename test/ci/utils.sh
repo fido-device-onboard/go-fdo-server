@@ -54,6 +54,9 @@ rendezvous_url="${rendezvous_protocol}://${rendezvous_service}"
 # needed for 'wait_for_services_ready' do not remove
 rendezvous_health_url="${rendezvous_url}/health"
 
+# Default RV info JSON for standard tests (can be overridden per test)
+rv_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+
 owner_service_name="owner"
 owner_dns=owner
 #shellcheck disable=SC2034
@@ -436,20 +439,15 @@ generate_https_certs() {
 
 set_or_update_rendezvous_info() {
   local manufacturer_url=$1
-  local rendezvous_service_name=$2
-  local rendezvous_dns=$3
-  local rendezvous_port=$4
-  local rendezvous_protocol=${5:-http}
+  local rendezvous_info_json=$2
 
-  local real_rendezvous_ip
-  real_rendezvous_ip="$(get_real_ip "${rendezvous_service_name}")"
   log_info "Checking if 'RendezvousInfo' is configured on manufacturer side (${manufacturer_url})"
   if [ -z "$(get_rendezvous_info "${manufacturer_url}")" ]; then
     log_warn "'RendezvousInfo' not found, creating it"
-    set_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
+    set_rendezvous_info "${manufacturer_url}" "${rendezvous_info_json}"
   else
     log_info "'RendezvousInfo' found, updating it"
-    update_rendezvous_info "${manufacturer_url}" "${rendezvous_dns}" "${real_rendezvous_ip}" "${rendezvous_port}" "${rendezvous_protocol}"
+    update_rendezvous_info "${manufacturer_url}" "${rendezvous_info_json}"
   fi
   echo
 }

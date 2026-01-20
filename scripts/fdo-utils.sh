@@ -10,30 +10,22 @@ get_rendezvous_info() {
 
 set_rendezvous_info() {
   local manufacturer_url=$1
-  local rendezvous_dns=$2
-  local rendezvous_ip=$3
-  local rendezvous_port=$4
-  local rendezvous_protocol=$5
-  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+  local rendezvous_info_json=$2
   curl --fail --verbose --silent --insecure \
-    --request POST \
-    --header 'Content-Type: text/plain' \
-    --data-raw "${rendezvous_info}" \
-    "${manufacturer_url}/api/v1/rvinfo"
+       --request POST \
+       --header 'Content-Type: application/json' \
+       --data-raw "${rendezvous_info_json}" \
+       "${manufacturer_url}/api/v1/rvinfo"
 }
 
 update_rendezvous_info() {
   local manufacturer_url=$1
-  local rendezvous_dns=$2
-  local rendezvous_ip=$3
-  local rendezvous_port=$4
-  local rendezvous_protocol=$5
-  local rendezvous_info="[{\"dns\": \"${rendezvous_dns}\", \"device_port\": \"${rendezvous_port}\", \"protocol\": \"${rendezvous_protocol}\", \"ip\": \"${rendezvous_ip}\", \"owner_port\": \"${rendezvous_port}\"}]"
+  local rendezvous_info_json=$2
   curl --fail --verbose --silent --insecure \
-    --request PUT \
-    --header 'Content-Type: text/plain' \
-    --data-raw "${rendezvous_info}" \
-    "${manufacturer_url}/api/v1/rvinfo"
+       --request PUT \
+       --header 'Content-Type: application/json' \
+       --data-raw "${rendezvous_info_json}" \
+       "${manufacturer_url}/api/v1/rvinfo"
 }
 
 get_owner_redirect_info() {
