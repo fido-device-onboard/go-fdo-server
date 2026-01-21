@@ -39,8 +39,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../ci/ut
 configs_dir="${base_dir}/configs"
 directories+=("${configs_dir}")
 
-rpm_certs_dir="/etc/pki/go-fdo-server"    # RPMs generate the default certs/keys
-rpm_server_group="go-fdo-server"  # server Group ID created by RPM install
+rpm_certs_dir="/etc/pki/go-fdo-server" # RPMs generate the default certs/keys
+rpm_server_group="go-fdo-server"       # server Group ID created by RPM install
 
 rpm_manufacturer_user="go-fdo-server-manufacturer"
 rpm_manufacturer_home_dir="/run/go-fdo-server-manufacturer"
@@ -114,8 +114,8 @@ EOF
 # all necessary certs/keys
 configure_service_manufacturer() {
   sudo rm -rf "${rpm_manufacturer_home_dir:?}"
-  sudo mkdir -p "${rpm_manufacturer_config_dir}"  # creates home dir
-  generate_manufacturer_config > "${manufacturer_config_file}"
+  sudo mkdir -p "${rpm_manufacturer_config_dir}" # creates home dir
+  generate_manufacturer_config >"${manufacturer_config_file}"
   sudo cp "${manufacturer_config_file}" "${rpm_manufacturer_config_file}"
   sudo cp "${manufacturer_key}" "${rpm_manufacturer_home_dir}"
   sudo cp "${owner_crt}" "${rpm_manufacturer_home_dir}"
@@ -151,8 +151,8 @@ EOF
 # all necessary certs/keys
 configure_service_rendezvous() {
   sudo rm -rf "${rpm_rendezvous_home_dir:?}"
-  sudo mkdir -p "${rpm_rendezvous_config_dir}"  # creates home dir
-  generate_rendezvous_config > "${rendezvous_config_file}"
+  sudo mkdir -p "${rpm_rendezvous_config_dir}" # creates home dir
+  generate_rendezvous_config >"${rendezvous_config_file}"
   sudo cp "${rendezvous_config_file}" "${rpm_rendezvous_config_file}"
   if [ "${rendezvous_protocol}" = "https" ]; then
     sudo cp "${rendezvous_https_key}" "${rendezvous_https_crt}" "${rpm_rendezvous_home_dir}"
@@ -191,8 +191,8 @@ EOF
 # all necessary certs/keys
 configure_service_owner() {
   sudo rm -rf "${rpm_owner_home_dir:?}"
-  sudo mkdir -p "${rpm_owner_config_dir}"  # creates home dir
-  generate_owner_config > "${owner_config_file}"
+  sudo mkdir -p "${rpm_owner_config_dir}" # creates home dir
+  generate_owner_config >"${owner_config_file}"
   sudo cp "${owner_config_file}" "${rpm_owner_config_file}"
   sudo cp "${device_ca_crt}" "${rpm_owner_home_dir}"
   sudo cp "${owner_crt}" "${owner_key}" "${rpm_owner_home_dir}"
@@ -203,7 +203,7 @@ configure_service_owner() {
 }
 
 install_from_copr() {
-  rpm -q --whatprovides 'dnf-command(copr)' &> /dev/null || sudo dnf install -y 'dnf-command(copr)'
+  rpm -q --whatprovides 'dnf-command(copr)' &>/dev/null || sudo dnf install -y 'dnf-command(copr)'
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
   # testing-farm-tag-repository is causing problems with builds see:
   # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
@@ -214,26 +214,26 @@ install_from_copr() {
 install_client() {
   # If PACKIT_COPR_RPMS is not defined it means we are running the test
   # locally so we will install the client from the copr repo
-  [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &> /dev/null || install_from_copr go-fdo-client
+  [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
 }
 
 uninstall_client() {
   # When running a test locally we remove the client package
   # after a successful execution.
   [ -v "PACKIT_COPR_RPMS" ] || {
-    sudo dnf remove -y go-fdo-client;
-    sudo dnf copr remove -y @fedora-iot/fedora-iot;
+    sudo dnf remove -y go-fdo-client
+    sudo dnf copr remove -y @fedora-iot/fedora-iot
   }
 }
 
 install_server() {
   # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will build and install the RPMs
+  # locally so we will build and install the RPMs from the *committed* code
   if [ ! -v "PACKIT_COPR_RPMS" ]; then
     commit="$(git rev-parse --short HEAD)"
-    rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || { \
-      make rpm;
-      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm;
+    rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
+      make rpm
+      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
   else
     echo "  - Expected RPMs:  ${PACKIT_COPR_RPMS}"
@@ -309,7 +309,7 @@ get_service_logs() {
 save_go_fdo_server_logs() {
   local role=$1
   local log_file=$2
-  get_go_fdo_server_logs "${role}" > "${log_file}"
+  get_go_fdo_server_logs "${role}" >"${log_file}"
 }
 
 save_service_logs_manufacturer() {

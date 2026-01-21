@@ -5,7 +5,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../rpm/u
 
 ssh_options=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
 ssh_key="id_rsa"
-sudo ssh-keygen -f id_rsa -N "" -q -t rsa-sha2-256 -b 2048 <<< y
+sudo ssh-keygen -f id_rsa -N "" -q -t rsa-sha2-256 -b 2048 <<<y
 ssh_key_pub=$(cat "${ssh_key}.pub")
 manufacturer_ip="192.168.100.1"
 rendezvous_ip="192.168.100.1"
@@ -16,25 +16,25 @@ services+=("firewalld" "libvirtd")
 source /etc/os-release
 log_info "Detected OS: ${ID} ${VERSION_ID}"
 case "${ID}-${VERSION_ID}" in
-    "fedora-43" | "fedora-44")
-        # We can safely use rawhide OS variant for Fedora >= 43
-        os_variant="fedora-rawhide"
-        base_image_url="quay.io/fedora/fedora-bootc:${VERSION_ID}"
-        boot_args="uefi"
-        ;;
-    "centos-9" | "centos-10")
-        os_variant="centos-stream${VERSION_ID}"
-        base_image_url="quay.io/centos-bootc/centos-bootc:stream${VERSION_ID}"
-        boot_args="uefi,firmware.feature0.name=secure-boot,firmware.feature0.enabled=no"
-        ;;
-    *)
-        log_error "Unsupported distro: ${ID}-${VERSION_ID}"
-        exit 1
-        ;;
+  "fedora-43" | "fedora-44")
+    # We can safely use rawhide OS variant for Fedora >= 43
+    os_variant="fedora-rawhide"
+    base_image_url="quay.io/fedora/fedora-bootc:${VERSION_ID}"
+    boot_args="uefi"
+    ;;
+  "centos-9" | "centos-10")
+    os_variant="centos-stream${VERSION_ID}"
+    base_image_url="quay.io/centos-bootc/centos-bootc:stream${VERSION_ID}"
+    boot_args="uefi,firmware.feature0.name=secure-boot,firmware.feature0.enabled=no"
+    ;;
+  *)
+    log_error "Unsupported distro: ${ID}-${VERSION_ID}"
+    exit 1
+    ;;
 esac
 
 build_bootc_container() {
-  tee Containerfile > /dev/null << EOF
+  tee Containerfile >/dev/null <<EOF
 FROM ${base_image_url}
 RUN dnf=\$(readlink \$(command -v dnf)); [ "\${dnf}" = "dnf5" ] || dnf=dnf ; \
     rpm -q --whatprovides \${dnf}'-command(copr)' &> /dev/null || \${dnf} install -y \${dnf}'-command(copr)'; \
@@ -49,58 +49,58 @@ generate_iso_from_bootc() {
   rm -fr output
   mkdir -pv output
   sudo podman run \
-      --rm \
-      -it \
-      --privileged \
-      --pull=newer \
-      --security-opt label=type:unconfined_t \
-      -v "$(pwd)/output:/output" \
-      -v "/var/lib/containers/storage:/var/lib/containers/storage" \
-      "${bib_url}" \
-      --type anaconda-iso \
-      --rootfs xfs \
-      --use-librepo=true \
-      "localhost/fdo-bootc:latest"
+    --rm \
+    -it \
+    --privileged \
+    --pull=newer \
+    --security-opt label=type:unconfined_t \
+    -v "$(pwd)/output:/output" \
+    -v "/var/lib/containers/storage:/var/lib/containers/storage" \
+    "${bib_url}" \
+    --type anaconda-iso \
+    --rootfs xfs \
+    --use-librepo=true \
+    "localhost/fdo-bootc:latest"
 }
 
 generate_kickstart_iso() {
-    if [[ ! -v "PACKIT_COPR_RPMS" ]]; then
-      sudo dnf install -y lorax
-    fi
-    rm -fr /var/lib/libvirt/images/install.iso
-    isomount=$(mktemp -d)
-    sudo mount -v -o "ro" "output/bootiso/install.iso" "$isomount"
-    new_ks_file="bib.ks"
-    cat > "${new_ks_file}" << EOFKS
+  if [[ ! -v "PACKIT_COPR_RPMS" ]]; then
+    sudo dnf install -y lorax
+  fi
+  rm -fr /var/lib/libvirt/images/install.iso
+  isomount=$(mktemp -d)
+  sudo mount -v -o "ro" "output/bootiso/install.iso" "$isomount"
+  new_ks_file="bib.ks"
+  cat >"${new_ks_file}" <<EOFKS
 text
 $(cat "${isomount}/osbuild-base.ks")
 $(cat "${isomount}/osbuild.ks")
 EOFKS
-    sed -i '/%include/d' "${new_ks_file}"
-    sed -i '/%post --erroronfail/i\
+  sed -i '/%include/d' "${new_ks_file}"
+  sed -i '/%post --erroronfail/i\
 user --name=admin --groups=wheel --homedir=/home/admin --iscrypted --password=\$6\$GRmb7S0p8vsYmXzH\$o0E020S.9JQGaHkszoog4ha4AQVs3sk8q0DvLjSMxoxHBKnB2FBXGQ/OkwZQfW/76ktHd0NX5nls2LPxPuUdl.' "${new_ks_file}"
-    sed -i "/%post --erroronfail/i\
+  sed -i "/%post --erroronfail/i\
 sshkey --username admin \"${ssh_key_pub}\"" "${new_ks_file}"
-    sed -i "/bootc switch/a\
+  sed -i "/bootc switch/a\
 go-fdo-client --blob /boot/device_credential --debug device-init ${manufacturer_protocol}://${manufacturer_ip}:${manufacturer_port} --device-info=iot-device --key ec256" "${new_ks_file}"
-    sed -i '/bootc switch/a\
+  sed -i '/bootc switch/a\
 echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/admin' "${new_ks_file}"
-    log_info "==== New kickstart file ===="
-    cat "${new_ks_file}"
-    log_info "============================"
-    log_info "Writing new ISO"
-    sudo mkksiso -c "console=ttyS0,115200" --ks "$new_ks_file" "output/bootiso/install.iso" "/var/lib/libvirt/images/install.iso"
-    sudo umount -v "$isomount"
-    rm -rf "$isomount"
+  log_info "==== New kickstart file ===="
+  cat "${new_ks_file}"
+  log_info "============================"
+  log_info "Writing new ISO"
+  sudo mkksiso -c "console=ttyS0,115200" --ks "$new_ks_file" "output/bootiso/install.iso" "/var/lib/libvirt/images/install.iso"
+  sudo umount -v "$isomount"
+  rm -rf "$isomount"
 }
 
 install_server() {
   if [ ! -v "PACKIT_COPR_RPMS" ]; then
     sudo dnf install -y golang make
     commit="$(git rev-parse --short HEAD)"
-    rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || { \
-      make rpm;
-      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm;
+    rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
+      make rpm
+      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
   else
     echo "  - Expected RPMs:  ${PACKIT_COPR_RPMS}"
@@ -149,7 +149,7 @@ configure_service_libvirtd() {
   fi
 
   log_info "Configuring libvirt permissions"
-  sudo tee /etc/polkit-1/rules.d/50-libvirt.rules > /dev/null << 'EOF'
+  sudo tee /etc/polkit-1/rules.d/50-libvirt.rules >/dev/null <<'EOF'
 polkit.addRule(function(action, subject) {
     if (action.id == "org.libvirt.unix.manage" &&
         subject.isInGroup("adm")) {
@@ -160,15 +160,15 @@ EOF
 
   log_info "Starting libvirt daemon"
   sudo systemctl start libvirtd
-  if ! sudo virsh list --all > /dev/null; then
-      echo "Failed to connect to libvirt" >&2
-      exit 1
+  if ! sudo virsh list --all >/dev/null; then
+    echo "Failed to connect to libvirt" >&2
+    exit 1
   fi
 
   # Setup libvirt network
   log_info "Setting up libvirt network"
   local network_xml="/tmp/integration.xml"
-  sudo tee "${network_xml}" > /dev/null << 'EOF'
+  sudo tee "${network_xml}" >/dev/null <<'EOF'
 <network xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'>
 <name>integration</name>
 <uuid>1c8fe98c-b53a-4ca4-bbdb-deb0f26b3579</uuid>
@@ -196,13 +196,13 @@ EOF
 EOF
 
   # Define network if it doesn't exist
-  if ! sudo virsh net-info integration > /dev/null 2>&1; then
-      sudo virsh net-define "${network_xml}"
+  if ! sudo virsh net-info integration >/dev/null 2>&1; then
+    sudo virsh net-define "${network_xml}"
   fi
 
   # Start network if not active
   if [[ $(sudo virsh net-info integration | awk '/Active/ {print $2}') == "no" ]]; then
-      sudo virsh net-start integration
+    sudo virsh net-start integration
   fi
 }
 
@@ -214,25 +214,25 @@ run_device_initialization() {
   sudo qemu-img create -f qcow2 "/var/lib/libvirt/images/disk.qcow2" 10G
   sudo restorecon -Rv /var/lib/libvirt/images/
   sudo virt-install --name="fdo-bootc" \
-      --disk "path=/var/lib/libvirt/images/disk.qcow2,format=qcow2" \
-      --ram 3072 \
-      --vcpus 2 \
-      --network "network=integration,mac=34:49:22:B0:83:30" \
-      --os-type linux \
-      --os-variant "${os_variant}" \
-      --cdrom "/var/lib/libvirt/images/install.iso" \
-      --boot "${boot_args}" \
-      --nographics \
-      --noautoconsole \
-      --wait=-1 \
-      --noreboot
+    --disk "path=/var/lib/libvirt/images/disk.qcow2,format=qcow2" \
+    --ram 3072 \
+    --vcpus 2 \
+    --network "network=integration,mac=34:49:22:B0:83:30" \
+    --os-type linux \
+    --os-variant "${os_variant}" \
+    --cdrom "/var/lib/libvirt/images/install.iso" \
+    --boot "${boot_args}" \
+    --nographics \
+    --noautoconsole \
+    --wait=-1 \
+    --noreboot
 
   log_info "Starting VM..."
   sudo virsh start "fdo-bootc"
 
   # Wait for SSH
   if ! wait_for_ssh $guest_ip; then
-      return 1
+    return 1
   fi
 
 }
@@ -249,7 +249,7 @@ run_fido_device_onboard() {
   sudo ssh "${ssh_options[@]}" -i "${ssh_key}" "admin@${guest_ip}" \
     'set -o pipefail; sudo go-fdo-client --blob /boot/device_credential onboard --key ec256 --kex ECDH256 --debug | tee /tmp/onboarding.log'
   if sudo ssh "${ssh_options[@]}" -i "${ssh_key}" "admin@${guest_ip}" 'grep -q "FIDO Device Onboard Complete" /tmp/onboarding.log'; then
-      onboarded=0
+    onboarded=0
   fi
   return ${onboarded}
 }
@@ -287,12 +287,12 @@ wait_for_ssh() {
 
   log_info "Waiting for SSH on ${ip_address}..."
   while [[ ${attempt} -lt ${max_attempts} ]]; do
-      if ssh "${ssh_options[@]}" -i "${ssh_key}" "admin@${ip_address}" 'echo -n "READY"' 2>/dev/null | grep -q "READY"; then
-          log_success "SSH is ready"
-          return 0
-      fi
-      attempt=$((attempt + 1))
-      sleep 10
+    if ssh "${ssh_options[@]}" -i "${ssh_key}" "admin@${ip_address}" 'echo -n "READY"' 2>/dev/null | grep -q "READY"; then
+      log_success "SSH is ready"
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 10
   done
 
   log_error "SSH connection timed out after $((max_attempts * 10)) seconds"

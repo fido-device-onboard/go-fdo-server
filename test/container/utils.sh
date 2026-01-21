@@ -106,7 +106,7 @@ get_logs() {
 save_service_logs() {
   local service=$1
   local log_file="${logs_dir}/${service}.log"
-  get_service_logs "${service}" > "${log_file}"
+  get_service_logs "${service}" >"${log_file}"
 }
 
 save_logs() {

@@ -41,7 +41,7 @@ start_service_new_owner() {
   run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
     --owner-key="${new_owner_key}" \
     --device-ca-cert="${device_ca_crt}"
-    "${extra_opts[@]}"
+  "${extra_opts[@]}"
 }
 
 run_test() {
@@ -103,4 +103,7 @@ run_test() {
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || {
+  run_test
+  cleanup
+}

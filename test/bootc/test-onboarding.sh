@@ -19,7 +19,7 @@ run_test() {
   generate_service_certs
 
   log_info "Adding host entries for FDO services in host machine"
-  echo -e "${manufacturer_ip} manufacturer\n${rendezvous_ip} rendezvous\n${owner_ip} owner" | sudo tee -a /etc/hosts > /dev/null
+  echo -e "${manufacturer_ip} manufacturer\n${rendezvous_ip} rendezvous\n${owner_ip} owner" | sudo tee -a /etc/hosts >/dev/null
 
   log_info "Build and install 'go-fdo-server' binary"
   install_server
@@ -63,4 +63,7 @@ run_test() {
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || {
+  run_test
+  cleanup
+}

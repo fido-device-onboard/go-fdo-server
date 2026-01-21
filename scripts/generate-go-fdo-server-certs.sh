@@ -4,7 +4,7 @@
 # certificates and keys required for running the Go FDO servers. It is
 # provided for testing/documentation purposes only.
 
-source "$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/cert-utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/cert-utils.sh"
 
 cert_dir="/etc/pki/go-fdo-server"
 

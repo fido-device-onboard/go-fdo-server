@@ -13,7 +13,7 @@ jobs:
     container: fedora:latest
     steps:
       - name: Install dependencies
-        run: dnf install -y git make gcc
+        run: dnf install -y git make gcc shfmt
 
       - name: Install golang
         uses: actions/setup-go@v5
@@ -28,7 +28,7 @@ jobs:
           CGO_ENABLED: 1
         run: |
           git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
-          make all
+          make all shfmt
 
       - name: Fail if the source code has changes after go fmt
         uses: NathanielHill/fail-if-changes@master

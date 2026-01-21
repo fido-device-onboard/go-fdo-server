@@ -113,7 +113,7 @@ log_success() {
   echo -e "✔" "$@"
 }
 
-log_error(){
+log_error() {
   echo -e "${RED}[ERROR]${NC} ❌" "$@"
   return 1
 }
@@ -126,7 +126,7 @@ test_fail() {
   log_error "Test FAILED!"
 }
 
-show_env(){
+show_env() {
   env -0 | sort -z | tr '\0' '\n'
 }
 
@@ -151,7 +151,7 @@ set_hostname() {
     sudo cp "${tmp_hosts}" /etc/hosts
     rm -f "${tmp_hosts}"
   else
-    echo "${ip} ${dns}" | sudo tee -a /etc/hosts > /dev/null
+    echo "${ip} ${dns}" | sudo tee -a /etc/hosts >/dev/null
   fi
 }
 
@@ -317,8 +317,8 @@ run_go_fdo_server() {
   shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &> "${log}" &
-  echo -n $! > "${pid_file}"
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &>"${log}" &
+  echo -n $! >"${pid_file}"
 }
 
 start_service_manufacturer() {
@@ -427,7 +427,7 @@ generate_service_certs() {
 }
 
 generate_https_certs() {
- for service in "${services[@]}"; do
+  for service in "${services[@]}"; do
     local service_protocol="${service}_protocol"
     [[ "${!service_protocol-}" = "https" ]] || continue
     local service_key="${service}_https_key"
@@ -517,7 +517,7 @@ verify_equal_files() {
   local file_2=$2
 
   for file in "${file_1}" "${file_2}"; do
-    [ -f "${file}" ] || log_error "File not found: ${file}";
+    [ -f "${file}" ] || log_error "File not found: ${file}"
   done
 
   [ "${file_1}" != "${file_2}" ] || return 0

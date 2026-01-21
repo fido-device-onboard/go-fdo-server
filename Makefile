@@ -37,6 +37,10 @@ vet:
 test:
 	go test -v ./...
 
+.PHONY: shfmt
+shfmt:
+	shfmt -i 2 -ci -w .
+
 #
 # Generating sources and vendor tar files
 #
