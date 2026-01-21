@@ -7,7 +7,6 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-fsi
 # FSIM fdo.upload specific configuration
 fsim_upload_dir=${base_dir}/fsim/upload
 owner_uploads_dir="${fsim_upload_dir}/owner"
-owner_uploads_subdir="${owner_uploads_dir}/subdir"
 device_uploads_dir="${fsim_upload_dir}/device"
 device_uploads_subdir="${device_uploads_dir}/subdir"
 
@@ -15,9 +14,9 @@ device_uploads_subdir="${device_uploads_dir}/subdir"
 # These are the source files:
 device_files=("source-file1" "subdir/source-file2" "source-file3")
 
-# Destination files on the owner. These are all relative to the $owner_uploads_dir.
+# Destination files on the owner. These are all relative to the $owner_uploads_dir/{GUID}.
 # The last filename is taken from the source (see lack of dst: in configuration below)
-owner_files=("dest-file1" "subdir/dest-file2" "source-file3")
+owner_files=("dest-file1" "dest-file2" "source-file3")
 
 configure_service_owner() {
   cat > "${owner_config_file}" <<EOF
@@ -58,8 +57,12 @@ generate_upload_files() {
 }
 
 verify_uploads() {
+  # Currently there is no way to get the replacement GUID for the device,
+  # which is what the upload uses for the destination directory name. For now
+  # read the directory and assume the result is correct
+  local guid=$(ls "${owner_uploads_dir}" | grep -e "^[a-f0-9]\{32\}$")
   for (( i=0; i<${#device_files[@]}; i+=1 )); do
-    dst="${owner_uploads_dir}/${owner_files[$i]}"
+    dst="${owner_uploads_dir}/${guid}/${owner_files[$i]}"
     src="${device_files[$i]}"
     if [ "${src:0:1}" != "/" ]; then
       # source is relative and was created in the go-fdo-client working dir
@@ -80,7 +83,7 @@ run_test() {
 
   log_info "Creating directories"
   # Add uploads directories to be created
-  directories+=("${device_uploads_subdir}" "${owner_uploads_subdir}")
+  directories+=("${device_uploads_subdir}" "${owner_uploads_dir}")
   create_directories
 
   log_info "Generating service certificates"

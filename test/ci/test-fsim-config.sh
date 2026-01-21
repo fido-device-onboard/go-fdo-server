@@ -149,7 +149,11 @@ run_test() {
   run_fido_device_onboard "${guid}" --debug
 
   log_info "Verifying the results of the onboarding FSIM operations"
-  expected_file="${owner_upload_dir}/${device_output_filename}"
+  # Currently there is no way to get the replacement GUID for the device,
+  # which is what the upload uses for the destination directory name. For now
+  # read the directory and assume the result is correct
+  local guid=$(ls "${owner_upload_dir}" | grep -e "^[a-f0-9]\{32\}$")
+  expected_file="${owner_upload_dir}/${guid}/${device_output_filename}"
   if [ ! -e "${expected_file}" ]; then
     log_error "Expected file ${expected_file} not present"
   fi

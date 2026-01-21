@@ -420,7 +420,8 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 
 					f, err := os.Open(srcPath)
 					if err != nil {
-						log.Fatalf("error opening %q for download FSIM: %v", srcPath, err)
+						slog.Error("error opening file for download FSIM", "path", srcPath, "err", err)
+						continue
 					}
 					defer func() { _ = f.Close() }()
 
@@ -486,7 +487,8 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 				for _, file := range op.WgetParams.Files {
 					parsedURL, err := url.Parse(file.URL)
 					if err != nil {
-						log.Fatalf("error parsing wget URL %q: %v", file.URL, err)
+						slog.Error("error parsing wget URL", "url", file.URL, "err", err)
+						continue
 					}
 
 					wgetName := file.Dst
@@ -506,7 +508,8 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 					if file.Checksum != "" {
 						checksum, err := hex.DecodeString(file.Checksum)
 						if err != nil {
-							log.Fatalf("error decoding checksum %q: %v", file.Checksum, err)
+							slog.Error("error decoding checksum", "checksum", file.Checksum, "err", err)
+							continue
 						}
 						wgetCmd.Checksum = checksum
 					}

@@ -132,7 +132,24 @@ run_test() {
   log_info "Sending Device Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
-  log_info "Running FIDO Device Onboard for Device with FSIM fdo.wget"
+  log_info "Stop HTTP Server to Simulate Loss of WGET Service"
+  stop_service "${wget_httpd_service_name}"
+
+  log_info "Attempt WGET with missing HTTP server, verify FSIM error occurs"
+  ! run_fido_device_onboard "${guid}" --debug ||
+    log_error "Expected Device onboard to fail!"
+
+  log_info "Verifying the error was logged"
+  # verify that the wget FSIM error is logged
+  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "error handling device service info .*fdo\.wget:error" ||
+    log_error "The corresponding error was not logged"
+
+  # Verify that Device can successfully onboard once the HTTP server is available
+  log_info "Restarting HTTP Server"
+  start_service "${wget_httpd_service_name}"
+  wait_for_service_ready "${wget_httpd_service_name}"
+
+  log_info "Re-running FIDO Device Onboard with FSIM fdo.wget"
   run_fido_device_onboard "${guid}" --debug
 
   # Note: go-fdo-client onboard executes in the ${credentials_dir} directory, expect
