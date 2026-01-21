@@ -239,6 +239,7 @@ Instruct the device to download content from an HTTP server.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
+| `dir` | string | Absolute path to a directory on device where files will be downloaded. Defaults to device working directory. Can be overridden with `files.dst` (see below). | No |
 | `files` | array of objects | List of URLs that the device will retrieve content from and the file paths where the content will be stored. | Yes |
 
 Each file object in the `files` array has:
@@ -246,7 +247,7 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `url` | string | URL to download from (must be http or https) | Yes |
-| `dst` | string | Destination path on the device for the retrieved content. Can be absolute or relative (to device working directory). If not specified, uses basename of URL path. | No |
+| `dst` | string | Destination filename on the device for the retrieved content. Can be an absolute path or relative (to the device working directory). If not specified, file will be downloaded to the directory device working directory (unless overridden by `dir` above). The file name is taken from basename of URL path. | No |
 | `length` | integer | For validation: expected size of downloaded content in bytes | No |
 | `checksum` | string | For validation: Expected SHA-384 checksum of the file (96 hexadecimal characters) | No |
 
@@ -255,14 +256,18 @@ Each file object in the `files` array has:
 ```yaml
 fsim: "fdo.wget"
 params:
+  dir: "/root/downloads"
   files:
     - url: "https://example.com/packages/app-v1.2.3.rpm"
       dst: "/tmp/app.rpm"
       length: 2048576
       checksum: "a1b2c3d4e5f..."
     - url: "https://cdn.example.com/updates/firmware.bin"
-      dst: "/tmp/firmware.bin"
+    - url: "https://cdn.example.com/updates/license.txt"
+      dst: "license.txt"
 ```
+
+For the example above the first download will be saved to `/tmp/app.rpm`, the second to `/root/downloads/firmware.bin` and the last to `license.txt` in the device working directory.
 
 ## Rendezvous Server Configuration
 
