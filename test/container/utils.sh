@@ -56,7 +56,7 @@ run_go_fdo_client() {
     # Replace base_dir with container_working_dir in paths
     args+=("${arg//$base_dir/$container_working_dir}")
   done
-  docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}"
+  timeout "${client_timeout}" docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}" || log_warn "Command timed out ($?): 'go-fdo-client $*'"
 }
 
 install_server() {
@@ -106,7 +106,7 @@ get_logs() {
 save_service_logs() {
   local service=$1
   local log_file="${logs_dir}/${service}.log"
-  get_service_logs "${service}" > "${log_file}"
+  get_service_logs "${service}" >"${log_file}"
 }
 
 save_logs() {
@@ -114,7 +114,7 @@ save_logs() {
   for service in $(docker compose --file ${servers_compose_file} config --services); do
     log "\t⚙ Saving '${service}' logs "
     save_service_logs ${service}
-    log_success
+    print_success
   done
 }
 

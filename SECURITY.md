@@ -13,6 +13,7 @@ Information about different FIDO Device Onboard (FDO) release versions can be fo
 - Rendezvous information management
 - Ownership voucher management
 - Device redirect configuration
+- Trusted device CA certificate management
 - TO0 protocol triggers
 
 ### Recommended Security Measures

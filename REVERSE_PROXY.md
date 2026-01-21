@@ -32,8 +32,8 @@ The FDO server exposes management APIs on `/api/v1/` endpoints without built-in 
 
 The FDO server exposes management APIs under the `/api/v1/` path prefix that require protection:
 
-- **Manufacturing Service** (typically port 8038): Management APIs for rendezvous info and vouchers
-- **Owner Service** (typically port 8043): Management APIs for device ownership and onboarding
+- **Manufacturing/Rendezvous Service** (typically port 8038): Management APIs for rendezvous info, vouchers, and trusted device CA certificates
+- **Owner Service** (typically port 8043): Management APIs for device ownership, onboarding, and trusted device CA certificates
 
 The reverse proxy should:
 - **Require authentication** for all `/api/v1/*` requests  

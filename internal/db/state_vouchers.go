@@ -9,6 +9,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
@@ -197,6 +198,35 @@ func (s *State) Voucher(ctx context.Context, guid protocol.GUID) (*fdo.Voucher, 
 
 // OwnerKey returns the private key matching a given key type and optionally its certificate chain
 func (s *State) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
+	// First, try to find the key in the in-memory cache
+	s.Mutex.RLock()
+	for _, entry := range s.ownerKeyEntries {
+		if entry.Type != int(keyType) {
+			continue
+		}
+
+		// Check rsaBits for RSA key types
+		switch keyType {
+		case protocol.Rsa2048RestrKeyType:
+			if entry.RsaBits != 2048 {
+				continue
+			}
+		case protocol.RsaPkcsKeyType, protocol.RsaPssKeyType:
+			if entry.RsaBits != rsaBits {
+				continue
+			}
+		}
+
+		// Found matching key
+		signer := entry.Signer
+		certChain := entry.CertChain
+		s.Mutex.RUnlock()
+		return signer, certChain, nil
+	}
+	s.Mutex.RUnlock()
+
+	// Fallback: query the database if not found in cache
+	// This handles the case where keys were added after LoadOwnerKeys was called
 	var ownerKey OwnerKey
 
 	query := s.DB.Where("type = ?", int(keyType))
@@ -207,7 +237,8 @@ func (s *State) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits 
 	case protocol.RsaPkcsKeyType, protocol.RsaPssKeyType:
 		query = query.Where("rsa_bits = ?", rsaBits)
 	default:
-		rsaBits = 0
+		// For non-RSA keys (ECDSA, etc.), rsa_bits is 0
+		query = query.Where("rsa_bits = 0")
 	}
 
 	if err := query.First(&ownerKey).Error; err != nil {
@@ -238,16 +269,20 @@ func (s *State) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits 
 
 // AddOwnerKey adds an owner key to the database
 func (s *State) AddOwnerKey(keyType protocol.KeyType, key crypto.PrivateKey, chain []*x509.Certificate) error {
+	slog.Debug("Adding owner key to database", "keyType", keyType)
 	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
+		slog.Error("Failed to marshal owner private key", "keyType", keyType, "err", err)
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
+	slog.Debug("Owner private key marshaled successfully", "size", len(pkcs8))
 
 	// Marshal the certificate chain
 	var chainBytes []byte
 	for _, cert := range chain {
 		chainBytes = append(chainBytes, cert.Raw...)
 	}
+	slog.Debug("Owner certificate chain marshaled", "chainLength", len(chain), "chainBytes", len(chainBytes))
 
 	ownerKey := OwnerKey{
 		Type:      int(keyType),
@@ -266,23 +301,110 @@ func (s *State) AddOwnerKey(keyType protocol.KeyType, key crypto.PrivateKey, cha
 		}
 		rsaBits := rsaKey.Size() * 8
 		ownerKey.RsaBits = &rsaBits
+	default:
+		// For non-RSA keys (ECDSA, etc.), set RsaBits to 0
+		// This is required because RsaBits is part of the composite primary key
+		rsaBits := 0
+		ownerKey.RsaBits = &rsaBits
 	}
 
-	return s.DB.Save(&ownerKey).Error
+	// Save the key to the database
+	slog.Debug("Saving owner key to database", "keyType", keyType, "rsaBits", ownerKey.RsaBits)
+	if err := s.DB.Save(&ownerKey).Error; err != nil {
+		slog.Error("Failed to save owner key to database", "keyType", keyType, "rsaBits", ownerKey.RsaBits, "err", err)
+		return fmt.Errorf("failed to save owner key to database: %w", err)
+	}
+	slog.Debug("Owner key saved to database successfully")
+
+	// Reload owner keys to refresh the in-memory cache
+	slog.Debug("Reloading owner keys cache")
+	if err := s.LoadOwnerKeys(context.Background()); err != nil {
+		slog.Error("Failed to reload owner keys cache", "err", err)
+		return fmt.Errorf("failed to reload owner keys after adding: %w", err)
+	}
+
+	slog.Info("Owner key added and cache reloaded successfully", "keyType", keyType, "rsaBits", ownerKey.RsaBits)
+	return nil
+}
+
+// LoadOwnerKeys loads all owner keys from the database into memory.
+// This should be called on server startup to avoid repeated database queries during runtime.
+func (s *State) LoadOwnerKeys(ctx context.Context) error {
+	// Retrieve all owner keys from the database
+	var dbKeys []OwnerKey
+	if err := s.DB.Find(&dbKeys).Error; err != nil {
+		return fmt.Errorf("failed to load owner keys from database: %w", err)
+	}
+
+	// Parse and store each owner key
+	ownerKeyEntries := make([]OwnerKeyEntry, 0, len(dbKeys))
+	ownerPublicKeys := make([]crypto.PublicKey, 0, len(dbKeys))
+
+	for _, dbKey := range dbKeys {
+		// Parse the private key
+		key, err := x509.ParsePKCS8PrivateKey(dbKey.PKCS8)
+		if err != nil {
+			return fmt.Errorf("failed to parse owner private key (type=%d, rsaBits=%v): %w", dbKey.Type, dbKey.RsaBits, err)
+		}
+
+		signer, ok := key.(crypto.Signer)
+		if !ok {
+			return fmt.Errorf("owner key (type=%d, rsaBits=%v) is not a signer", dbKey.Type, dbKey.RsaBits)
+		}
+
+		// Parse certificate chain if present
+		var certChain []*x509.Certificate
+		if len(dbKey.X509Chain) > 0 {
+			certChain, err = x509.ParseCertificates(dbKey.X509Chain)
+			if err != nil {
+				return fmt.Errorf("failed to parse certificate chain for owner key (type=%d, rsaBits=%v): %w", dbKey.Type, dbKey.RsaBits, err)
+			}
+		}
+
+		// Determine rsaBits value
+		rsaBits := 0
+		if dbKey.RsaBits != nil {
+			rsaBits = *dbKey.RsaBits
+		}
+
+		// Store full key entry
+		ownerKeyEntries = append(ownerKeyEntries, OwnerKeyEntry{
+			Type:      dbKey.Type,
+			RsaBits:   rsaBits,
+			Signer:    signer,
+			CertChain: certChain,
+		})
+
+		// Store public key for voucher verification
+		ownerPublicKeys = append(ownerPublicKeys, signer.Public())
+	}
+
+	// Update the state with the loaded keys
+	s.Mutex.Lock()
+	s.ownerKeyEntries = ownerKeyEntries
+	s.OwnerKeys = ownerPublicKeys
+	s.Mutex.Unlock()
+
+	slog.Info("Loaded owner keys into memory", "count", len(ownerKeyEntries))
+	return nil
 }
 
 // AddManufacturerKey adds a manufacturer key to the database
 func (s *State) AddManufacturerKey(keyType protocol.KeyType, key crypto.PrivateKey, chain []*x509.Certificate) error {
+	slog.Debug("Adding manufacturer key to database", "keyType", keyType)
 	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
+		slog.Error("Failed to marshal manufacturer private key", "keyType", keyType, "err", err)
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
+	slog.Debug("Manufacturer private key marshaled successfully", "size", len(pkcs8))
 
 	// Marshal the certificate chain
 	var chainBytes []byte
 	for _, cert := range chain {
 		chainBytes = append(chainBytes, cert.Raw...)
 	}
+	slog.Debug("Manufacturer certificate chain marshaled", "chainLength", len(chain), "chainBytes", len(chainBytes))
 
 	mfgKey := MfgKey{
 		Type:      int(keyType),
@@ -301,9 +423,20 @@ func (s *State) AddManufacturerKey(keyType protocol.KeyType, key crypto.PrivateK
 		}
 		rsaBits := rsaKey.Size() * 8
 		mfgKey.RsaBits = &rsaBits
+	default:
+		// For non-RSA keys (ECDSA, etc.), set RsaBits to 0
+		// This is required because RsaBits is part of the composite primary key
+		rsaBits := 0
+		mfgKey.RsaBits = &rsaBits
 	}
 
-	return s.DB.Save(&mfgKey).Error
+	slog.Debug("Saving manufacturer key to database", "keyType", keyType, "rsaBits", mfgKey.RsaBits)
+	if err := s.DB.Save(&mfgKey).Error; err != nil {
+		slog.Error("Failed to save manufacturer key to database", "keyType", keyType, "rsaBits", mfgKey.RsaBits, "err", err)
+		return fmt.Errorf("failed to save manufacturer key to database: %w", err)
+	}
+	slog.Info("Manufacturer key saved to database successfully", "keyType", keyType, "rsaBits", mfgKey.RsaBits)
+	return nil
 }
 
 // ManufacturerKey returns the private key matching a given key type and optionally its certificate chain
@@ -318,7 +451,8 @@ func (s *State) ManufacturerKey(ctx context.Context, keyType protocol.KeyType, r
 	case protocol.RsaPkcsKeyType, protocol.RsaPssKeyType:
 		query = query.Where("rsa_bits = ?", rsaBits)
 	default:
-		rsaBits = 0
+		// For non-RSA keys (ECDSA, etc.), rsa_bits is 0
+		query = query.Where("rsa_bits = 0")
 	}
 
 	if err := query.First(&mfgKey).Error; err != nil {

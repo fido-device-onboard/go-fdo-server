@@ -5,74 +5,26 @@ package cmd
 
 import (
 	"context"
-	"crypto"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
-	"errors"
 	"fmt"
-	"iter"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
-	"path/filepath"
-	"slices"
 	"syscall"
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/to0"
 	"github.com/fido-device-onboard/go-fdo/cbor"
-	"github.com/fido-device-onboard/go-fdo/fsim"
-	transport "github.com/fido-device-onboard/go-fdo/http"
-	"github.com/fido-device-onboard/go-fdo/protocol"
-	"github.com/fido-device-onboard/go-fdo/serviceinfo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-// The owner server configuration
-type OwnerConfig struct {
-	OwnerCertificate string `mapstructure:"cert"`
-	OwnerPrivateKey  string `mapstructure:"key"`
-	ReuseCred        bool   `mapstructure:"reuse_credentials"`
-	TO0InsecureTLS   bool   `mapstructure:"to0_insecure_tls"`
-}
-
-// Owner server configuration file structure
-type OwnerServerConfig struct {
-	FDOServerConfig `mapstructure:",squash"`
-	DeviceCA        DeviceCAConfig `mapstructure:"device_ca"`
-	Owner           OwnerConfig    `mapstructure:"owner"`
-}
-
-// validate checks that required configuration is present
-func (o *OwnerServerConfig) validate() error {
-	if err := o.HTTP.validate(); err != nil {
-		return err
-	}
-	if o.Owner.OwnerPrivateKey == "" {
-		return errors.New("an owner private key file is required")
-	}
-	if o.DeviceCA.CertPath == "" {
-		return errors.New("a device CA certificate file is required")
-	}
-
-	// Validate FSIM parameters
-	if err := validateFSIMParameters(); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 var (
 	// FSIM command line flags
@@ -114,21 +66,136 @@ var ownerCmd = &cobra.Command{
 			return fmt.Errorf("failed to unmarshal owner config: %w", err)
 		}
 		if err := ownerConfig.validate(); err != nil {
-			return err
+			return fmt.Errorf("failed to validate config: %w", err)
 		}
+		slog.Info("Parsed Config:", "ownerConfig", fmt.Sprintf("%+v", ownerConfig))
 		return serveOwner(&ownerConfig)
 	},
 }
 
-// Server represents the HTTP server
+// OwnerServer represents the HTTP server
 type OwnerServer struct {
 	handler http.Handler
 	config  HTTPConfig
 }
 
-// NewServer creates a new Server
+// NewOwnerServer creates a new Server
 func NewOwnerServer(config HTTPConfig, handler http.Handler) *OwnerServer {
 	return &OwnerServer{handler: handler, config: config}
+}
+
+func serveOwner(config *OwnerServerConfig) error {
+	state, err := config.getState()
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	ownerKey, err := config.getOwnerSigner()
+	if err != nil {
+		return fmt.Errorf("failed to get owner signer: %w", err)
+	}
+	ownerKeyType, err := config.getPrivateKeyType()
+	if err != nil {
+		return fmt.Errorf("failed to get owner key type: %w", err)
+	}
+	// Add owner keys to the database
+	if err = state.AddOwnerKey(ownerKeyType, ownerKey, nil); err != nil {
+		return fmt.Errorf("failed to add owner key to database: %w", err)
+	}
+	slog.Debug("Loading device CA certificate from configuration")
+	deviceCACerts, err := config.DeviceCAConfig.getDeviceCACertsAsPEM()
+	if err != nil {
+		slog.Error("Failed to get device CA cert as PEM", "err", err)
+		return fmt.Errorf("failed to get device CA cert as PEM: %w", err)
+	}
+
+	slog.Debug("Importing device CA certificate to database")
+	stats, err := state.ImportDeviceCACertificates(context.Background(), deviceCACerts)
+	if err != nil {
+		slog.Error("Failed to import device CA certificate", "err", err)
+		return fmt.Errorf("failed to import device CA certificate: %w", err)
+	}
+	slog.Info("Device CA certificate import completed",
+		"detected", stats.Detected,
+		"imported", stats.Imported,
+		"skipped", stats.Skipped,
+		"malformed", stats.Malformed)
+
+	mux := owner.NewOwner(
+		state,
+		config.OwnerConfig.ReuseCred,
+		config.OwnerConfig.TO0InsecureTLS,
+		date,
+		wgets,
+		wgetURLs,
+		uploads,
+		uploadDir,
+		downloads,
+		downloadPaths,
+		defaultTo0TTL,
+	)
+	handler := mux.Handler()
+	server := NewOwnerServer(config.HTTP, handler)
+
+	slog.Info("Starting TO0 background task")
+	// Background TO0 scheduler: after restarts, continue attempting TO0 for any
+	// devices without completed TO2 as recorded in the database.
+	go TO0(config, state)
+
+	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
+	return server.Start()
+}
+
+func TO0(config *OwnerServerConfig, state *db.State) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	// nextTry holds per-GUID backoff based on TO0 refresh or fallback
+	nextTry := make(map[string]time.Time)
+	for {
+		// Fetch vouchers that still need TO2
+		vouchers, err := db.ListPendingTO0Vouchers(true)
+		if err != nil {
+			slog.Warn("to0 scheduler: list pending vouchers failed", "err", err)
+			<-ticker.C
+			continue
+		}
+		now := time.Now()
+		for _, v := range vouchers {
+			// Parse voucher to get GUID and RVInfo
+			var ov fdo.Voucher
+			if err := cbor.Unmarshal(v.CBOR, &ov); err != nil {
+				slog.Warn("to0 scheduler: unmarshal voucher failed", "err", err)
+				continue
+			}
+			guidHex := hex.EncodeToString(ov.Header.Val.GUID[:])
+			// Skip if already completed
+			completed, err := db.IsTO2Completed(ov.Header.Val.GUID[:])
+			if err != nil {
+				slog.Warn("to0 scheduler: to2 completion check failed", "guid", guidHex, "err", err)
+				continue
+			}
+			if completed {
+				delete(nextTry, guidHex)
+				continue
+			} // Respect backoff schedule
+			if t, ok := nextTry[guidHex]; ok && now.Before(t) {
+				continue
+			}
+			// Attempt TO0 once for this GUID
+			refresh, err := to0.RegisterRvBlob(ov.Header.Val.RvInfo, guidHex, state, state, config.OwnerConfig.TO0InsecureTLS, defaultTo0TTL)
+			if err != nil {
+				// On failure, retry after 60s
+				nextTry[guidHex] = now.Add(10 * time.Second)
+				slog.Warn("to0 scheduler: register 'RV2TO0Addr' failed", "guid", guidHex, "err", err)
+				continue
+			}
+			if refresh == 0 {
+				refresh = defaultTo0TTL
+			}
+			slog.Debug("to0 scheduler: register 'RV2TO0Addr' completed", "guid", guidHex, "refresh", refresh)
+			nextTry[guidHex] = now.Add(time.Duration(refresh) * time.Second)
+		}
+		<-ticker.C
+	}
 }
 
 // Start starts the HTTP server
@@ -174,7 +241,7 @@ func (s *OwnerServer) Start() error {
 			MinVersion:   tls.VersionTLS12,
 			CipherSuites: preferredCipherSuites,
 		}
-		err := srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
+		err = srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
 		if err != nil && err != http.ErrServerClosed {
 			return err
 		}
@@ -185,351 +252,6 @@ func (s *OwnerServer) Start() error {
 		return err
 	}
 	return nil
-}
-
-type OwnerServerState struct {
-	DB           *db.State
-	ownerKey     crypto.Signer
-	ownerKeyType protocol.KeyType
-	chain        []*x509.Certificate
-}
-
-func getOwnerServerState(config *OwnerServerConfig) (*OwnerServerState, error) {
-	dbState, err := config.DB.getState()
-	if err != nil {
-		return nil, err
-	}
-	ownerKey, err := parsePrivateKey(config.Owner.OwnerPrivateKey)
-	if err != nil {
-		return nil, err
-	}
-	ownerKeyType, err := getPrivateKeyType(ownerKey)
-	if err != nil {
-		return nil, err
-	}
-	deviceCA, err := os.ReadFile(config.DeviceCA.CertPath)
-	if err != nil {
-		return nil, err
-	}
-	blk, _ := pem.Decode(deviceCA)
-	if blk == nil {
-		return nil, fmt.Errorf("unable to decode device CA")
-	}
-	parsedDeviceCACert, err := x509.ParseCertificate(blk.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return &OwnerServerState{
-		DB:           dbState,
-		chain:        []*x509.Certificate{parsedDeviceCACert},
-		ownerKey:     ownerKey,
-		ownerKeyType: ownerKeyType,
-	}, nil
-}
-
-func validateFSIMParameters() error {
-	// Only validate if FSIM parameters are actually being used
-	if !hasFSIMParameters() {
-		return nil // No FSIM parameters to validate
-	}
-
-	// Parse and validate wget URLs
-	wgetURLs = make([]*url.URL, 0, len(wgets))
-	for _, urlString := range wgets {
-		parsedURL, err := url.Parse(urlString)
-		if err != nil {
-			return fmt.Errorf("invalid wget URL %q: %w", urlString, err)
-		}
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return fmt.Errorf("wget URL %q must use http or https scheme, got %q", urlString, parsedURL.Scheme)
-		}
-		if parsedURL.Host == "" {
-			return fmt.Errorf("wget URL %q missing host", urlString)
-		}
-		wgetURLs = append(wgetURLs, parsedURL)
-	}
-
-	// Validate and store cleaned download file paths
-	downloadPaths = make([]string, 0, len(downloads))
-	for _, filePath := range downloads {
-		cleanPath := filepath.Clean(filePath)
-		if _, err := os.Stat(cleanPath); err != nil {
-			return fmt.Errorf("cannot access download file %q: %w", filePath, err)
-		}
-		downloadPaths = append(downloadPaths, cleanPath)
-	}
-
-	if len(uploads) > 0 && uploadDir == "" {
-		return fmt.Errorf("upload directory must be specified when using --command-upload")
-	}
-
-	if uploadDir != "" {
-		info, err := os.Stat(uploadDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("upload directory %q does not exist", uploadDir)
-			}
-			return fmt.Errorf("cannot access upload directory %q: %w", uploadDir, err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("upload path %q is not a directory", uploadDir)
-		}
-
-		testFile, err := os.CreateTemp(uploadDir, ".fdo-write-test-*")
-		if err != nil {
-			return fmt.Errorf("upload directory %q is not writable: %w", uploadDir, err)
-		}
-
-		// Best effort cleanup after validation
-		testFile.Close()
-		os.Remove(testFile.Name())
-	}
-
-	return nil
-}
-
-func hasFSIMParameters() bool {
-	return len(wgets) > 0 || len(downloads) > 0 || len(uploads) > 0 || uploadDir != "" || date
-}
-
-func serveOwner(config *OwnerServerConfig) error {
-	state, err := getOwnerServerState(config)
-	if err != nil {
-		return err
-	}
-
-	to2Server := &fdo.TO2Server{
-		Session:              state.DB,
-		Vouchers:             state.DB,
-		VouchersForExtension: state.DB,
-		OwnerKeys:            state,
-		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
-			return voucher.Header.Val.RvInfo, nil
-		},
-		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
-		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
-		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
-			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
-		},
-	}
-
-	handler := &transport.Handler{
-		Tokens:       state.DB,
-		TO2Responder: to2Server,
-	}
-
-	// Handle messages
-	apiRouter := http.NewServeMux()
-	apiRouter.Handle("POST /owner/vouchers", handlers.InsertVoucherHandler([]crypto.PublicKey{state.ownerKey.Public()}))
-	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
-	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
-	apiRouter.Handle("GET /owner/devices", http.HandlerFunc(handlers.OwnerDevicesHandler))
-	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(apiRouter)
-
-	// Listen and serve
-	server := NewOwnerServer(config.HTTP, httpHandler)
-
-	// Background TO0 scheduler: after restarts, continue attempting TO0 for any
-	// devices without completed TO2 as recorded in the database.
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		// nextTry holds per-GUID backoff based on TO0 refresh or fallback
-		nextTry := make(map[string]time.Time)
-		for {
-			// Fetch vouchers that still need TO2
-			vouchers, err := db.ListPendingTO0Vouchers(true)
-			if err != nil {
-				slog.Warn("to0 scheduler: list pending vouchers failed", "err", err)
-				<-ticker.C
-				continue
-			}
-			now := time.Now()
-			for _, v := range vouchers {
-				// Parse voucher to get GUID and RVInfo
-				var ov fdo.Voucher
-				if err := cbor.Unmarshal(v.CBOR, &ov); err != nil {
-					slog.Warn("to0 scheduler: unmarshal voucher failed", "err", err)
-					continue
-				}
-				guidHex := hex.EncodeToString(ov.Header.Val.GUID[:])
-				// Skip if already completed
-				completed, err := db.IsTO2Completed(ov.Header.Val.GUID[:])
-				if err != nil {
-					slog.Warn("to0 scheduler: to2 completion check failed", "guid", guidHex, "err", err)
-					continue
-				}
-				if completed {
-					delete(nextTry, guidHex)
-					continue
-				} // Respect backoff schedule
-				if t, ok := nextTry[guidHex]; ok && now.Before(t) {
-					continue
-				}
-				// Attempt TO0 once for this GUID
-				refresh, err := to0.RegisterRvBlob(ov.Header.Val.RvInfo, guidHex, state.DB, state, config.Owner.TO0InsecureTLS, defaultTo0TTL)
-				if err != nil {
-					// On failure, retry after 60s
-					nextTry[guidHex] = now.Add(10 * time.Second)
-					slog.Warn("to0 scheduler: register 'RV2TO0Addr' failed", "guid", guidHex, "err", err)
-					continue
-				}
-				if refresh == 0 {
-					refresh = defaultTo0TTL
-				}
-				slog.Debug("to0 scheduler: register 'RV2TO0Addr' completed", "guid", guidHex, "refresh", refresh)
-				nextTry[guidHex] = now.Add(time.Duration(refresh) * time.Second)
-			}
-			<-ticker.C
-		}
-	}()
-
-	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
-	return server.Start()
-}
-
-func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.KeyType, rsaBits int) (crypto.Signer, []*x509.Certificate, error) {
-	return state.ownerKey, state.chain, nil
-}
-
-type moduleStateMachines struct {
-	DB *db.State
-	// current module state machine state for all sessions (indexed by token)
-	states map[string]*moduleStateMachineState
-}
-
-type moduleStateMachineState struct {
-	Name string
-	Impl serviceinfo.OwnerModule
-	Next func() (string, serviceinfo.OwnerModule, bool)
-	Stop func()
-}
-
-func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
-	token, ok := s.DB.TokenFromContext(ctx)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid context: no token")
-	}
-	module, ok := s.states[token]
-	if !ok {
-		return "", nil, fmt.Errorf("NextModule not called")
-	}
-	return module.Name, module.Impl, nil
-}
-
-func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
-	token, ok := s.DB.TokenFromContext(ctx)
-	if !ok {
-		return false, fmt.Errorf("invalid context: no token")
-	}
-	module, ok := s.states[token]
-	if !ok {
-		// Create a new module state machine
-		_, modules, _, err := s.DB.Devmod(ctx)
-		if err != nil {
-			return false, fmt.Errorf("error getting devmod: %w", err)
-		}
-		next, stop := iter.Pull2(ownerModules(ctx, modules, s.DB))
-		module = &moduleStateMachineState{
-			Next: next,
-			Stop: stop,
-		}
-		s.states[token] = module
-	}
-
-	var valid bool
-	module.Name, module.Impl, valid = module.Next()
-	return valid, nil
-}
-
-func (s moduleStateMachines) CleanupModules(ctx context.Context) {
-	token, ok := s.DB.TokenFromContext(ctx)
-	if !ok {
-		return
-	}
-	module, ok := s.states[token]
-	if !ok {
-		return
-	}
-	module.Stop()
-	delete(s.states, token)
-}
-
-func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
-	replacementGUID, err := dbState.GetReplacementGUID(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get replacement GUID: %w", err)
-	}
-	deviceUploadDir := filepath.Join(baseDir, hex.EncodeToString(replacementGUID[:]))
-	if err := os.MkdirAll(deviceUploadDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create device upload directory %q: %w", deviceUploadDir, err)
-	}
-	return deviceUploadDir, nil
-}
-
-func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
-	return func(yield func(string, serviceinfo.OwnerModule) bool) {
-		if slices.Contains(modules, "fdo.download") {
-			for i, cleanPath := range downloadPaths {
-				f, err := os.Open(cleanPath)
-				if err != nil {
-					slog.Error("error opening %q for download FSIM: %v", cleanPath, err)
-					continue
-				}
-				defer func() { _ = f.Close() }()
-
-				if !yield("fdo.download", &fsim.DownloadContents[*os.File]{
-					Name:         downloads[i], // Use original name for display
-					Contents:     f,
-					MustDownload: true,
-				}) {
-					return
-				}
-			}
-		}
-
-		if slices.Contains(modules, "fdo.upload") {
-			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
-			if err != nil {
-				slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
-				return
-			}
-			for _, name := range uploads {
-				if !yield("fdo.upload", &fsim.UploadRequest{
-					Dir:  deviceUploadDir,
-					Name: name,
-					CreateTemp: func() (*os.File, error) {
-						return os.CreateTemp(deviceUploadDir, ".fdo-upload_*")
-					},
-				}) {
-					return
-				}
-			}
-		}
-
-		if slices.Contains(modules, "fdo.wget") {
-			for _, url := range wgetURLs {
-				if !yield("fdo.wget", &fsim.WgetCommand{
-					Name: path.Base(url.Path),
-					URL:  url,
-				}) {
-					return
-				}
-			}
-		}
-
-		if date && slices.Contains(modules, "fdo.command") {
-			if !yield("fdo.command", &fsim.RunCommand{
-				Command: "date",
-				Args:    []string{"--utc"},
-				Stdout:  os.Stdout,
-				Stderr:  os.Stderr,
-			}) {
-				return
-			}
-		}
-	}
 }
 
 // Set up the owner command line. Used by the unit tests to reset state between tests.
