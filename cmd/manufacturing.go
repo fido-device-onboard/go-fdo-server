@@ -11,7 +11,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -45,22 +44,44 @@ type ManufacturingServerConfig struct {
 	Owner           OwnerConfig         `mapstructure:"owner"`
 }
 
+// validateCertFile checks that a certificate file exists and returns a helpful error if not
+func validateCertFile(path, name, contextLine string) error {
+	if path == "" || func() bool { _, err := os.Stat(path); return err != nil }() {
+		detail := ""
+		if path != "" {
+			detail = fmt.Sprintf(" (configured: %s)", path)
+		}
+		context := ""
+		if contextLine != "" {
+			context = contextLine + "\n"
+		}
+		return fmt.Errorf("%s is required%s\n%s"+
+			"run 'generate-go-fdo-server-certs.sh' for single-host setup\n"+
+			"see CERTIFICATE_SETUP.md for multi-host deployment", name, detail, context)
+	}
+	return nil
+}
+
 // validate checks that required configuration is present
 func (m *ManufacturingServerConfig) validate() error {
 	if err := m.HTTP.validate(); err != nil {
 		return err
 	}
-	if m.Manufacturer.ManufacturerKeyPath == "" {
-		return errors.New("a manufacturing key file is required")
+	// Validate manufacturing key exists
+	if err := validateCertFile(m.Manufacturer.ManufacturerKeyPath, "manufacturing key", ""); err != nil {
+		return err
 	}
-	if m.DeviceCA.KeyPath == "" {
-		return errors.New("a device CA key file is required")
+	// Validate device CA key exists
+	if err := validateCertFile(m.DeviceCA.KeyPath, "device CA key", "this key must be shared between manufacturer and owner servers"); err != nil {
+		return err
 	}
-	if m.DeviceCA.CertPath == "" {
-		return errors.New("a device CA certificate file is required")
+	// Validate device CA certificate exists
+	if err := validateCertFile(m.DeviceCA.CertPath, "device CA certificate", "this certificate must be shared between manufacturer and owner servers"); err != nil {
+		return err
 	}
-	if m.Owner.OwnerCertificate == "" {
-		return errors.New("an owner certificate file is required")
+	// Validate owner certificate exists
+	if err := validateCertFile(m.Owner.OwnerCertificate, "owner certificate", "this certificate must come from the owner server deployment"); err != nil {
+		return err
 	}
 	return nil
 }
