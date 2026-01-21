@@ -12,8 +12,6 @@
 
 [Unit]
 Description=Go FDO rendezvous server
-Requires=go-fdo-server-init.service
-After=go-fdo-server-init.service
 After=network.target
 
 [Service]

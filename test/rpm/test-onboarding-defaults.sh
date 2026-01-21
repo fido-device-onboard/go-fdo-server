@@ -5,11 +5,11 @@ set -euo pipefail
 # Source the common CI test first
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/test-onboarding.sh"
 
-# Test the default configuration and certificate generation provided by the RPMs.
-# Force this by setting the certificate and configuration functions to no-ops.
+# Test the default configuration provided by the RPMs.
+# Generate certificates using the helper script, then use default configurations.
 
 generate_service_certs() {
-  return 0
+  sudo /usr/libexec/go-fdo-server/generate-go-fdo-server-certs.sh
 }
 
 configure_service_manufacturer() {
