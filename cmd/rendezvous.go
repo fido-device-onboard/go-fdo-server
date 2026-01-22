@@ -15,19 +15,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	transport "github.com/fido-device-onboard/go-fdo/http"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/rendezvous"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// Rendezvous server configuration (TBD)
-type RendezvousConfig struct {
-}
+// RendezvousConfig server configuration (TBD)
+type RendezvousConfig struct{}
 
-// Rendezvous server configuration file structure
+// RendezvousServerConfig server configuration file structure
 type RendezvousServerConfig struct {
 	FDOServerConfig `mapstructure:",squash"`
 	Rendezvous      RendezvousConfig `mapstructure:"rendezvous"`
@@ -57,13 +53,13 @@ var rendezvousCmd = &cobra.Command{
 	},
 }
 
-// Server represents the HTTP server
+// RendezvousServer represents the HTTP server
 type RendezvousServer struct {
 	handler http.Handler
 	config  HTTPConfig
 }
 
-// NewServer creates a new Server
+// NewRendezvousServer creates a new Server
 func NewRendezvousServer(config HTTPConfig, handler http.Handler) *RendezvousServer {
 	return &RendezvousServer{handler: handler, config: config}
 }
@@ -111,7 +107,7 @@ func (s *RendezvousServer) Start() error {
 			MinVersion:   tls.VersionTLS12,
 			CipherSuites: preferredCipherSuites,
 		}
-		err := srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
+		err = srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
 		if err != nil && err != http.ErrServerClosed {
 			return err
 		}
@@ -124,35 +120,17 @@ func (s *RendezvousServer) Start() error {
 	return nil
 }
 
-type RendezvousServerState struct {
-	DB *db.State
-}
-
 func serveRendezvous(config *RendezvousServerConfig) error {
 	dbState, err := config.DB.getState()
 	if err != nil {
 		return err
 	}
 
-	state := &RendezvousServerState{
-		DB: dbState,
-	}
-	// Create FDO responder
-	handler := &transport.Handler{
-		Tokens: state.DB,
-		TO0Responder: &fdo.TO0Server{
-			Session: state.DB,
-			RVBlobs: state.DB,
-		},
-		TO1Responder: &fdo.TO1Server{
-			Session: state.DB,
-			RVBlobs: state.DB,
-		}}
-
-	httpHandler := api.NewHTTPHandler(handler, state.DB.DB).RegisterRoutes(nil)
+	rendezvous := rendezvous.NewRendezvous(dbState)
+	handler := rendezvous.Handler()
 
 	// Listen and serve
-	server := NewRendezvousServer(config.HTTP, httpHandler)
+	server := NewRendezvousServer(config.HTTP, handler)
 
 	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()
@@ -161,7 +139,6 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
-
 }
 
 func init() {
