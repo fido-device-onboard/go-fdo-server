@@ -395,7 +395,7 @@ stop_services() {
 }
 
 install_client() {
-  go install github.com/fido-device-onboard/go-fdo-client@latest
+  go install github.com/fido-device-onboard/go-fdo-client@main
 }
 
 uninstall_client() {

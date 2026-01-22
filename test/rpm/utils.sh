@@ -207,7 +207,7 @@ install_from_copr() {
   dnf copr list | grep 'fedora-iot/fedora-iot' || sudo dnf copr enable -y @fedora-iot/fedora-iot
   # testing-farm-tag-repository is causing problems with builds see:
   # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
-  sudo dnf install -y "$@"
+  sudo dnf install --disablerepo=* --enablerepo=copr:copr.fedorainfracloud.org:group_fedora-iot:fedora-iot -y "$@"
   sudo dnf copr disable -y @fedora-iot/fedora-iot
 }
 
