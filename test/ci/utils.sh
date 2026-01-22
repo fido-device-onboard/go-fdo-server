@@ -230,7 +230,11 @@ wait_for_service_ready() {
   local service_health_url="${service}_health_url"
   [[ -v "${service_health_url}" ]] || log_error "service ${service} has no health URL"
   log "  ⚙ Waiting for ${!service_health_url} to be healthy "
-  wait_for_url "${!service_health_url}" || log_error
+  wait_for_url "${!service_health_url}" || {
+    status="$?"
+    echo "❌"
+    return "${status}"
+  }
   log_success
 }
 

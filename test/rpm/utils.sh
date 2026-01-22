@@ -215,6 +215,8 @@ install_client() {
   # If PACKIT_COPR_RPMS is not defined it means we are running the test
   # locally so we will install the client from the copr repo
   [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
+  log_info "Installed Client RPM:"
+  echo "    ⚙ $(rpm -q go-fdo-client)"
 }
 
 uninstall_client() {
@@ -236,11 +238,17 @@ install_server() {
       sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
   else
-    echo "  - Expected RPMs:  ${PACKIT_COPR_RPMS}"
+    log_info "Expected Server RPMs:"
+    for i in ${PACKIT_COPR_RPMS}; do
+      echo "    ⚙ $i"
+    done | sort
   fi
   # Make sure the RPMS are installed
   installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " go-fdo-server{,-{manufacturer,owner,rendezvous}})
-  echo "  - Installed RPMs: ${installed_rpms}"
+  log_info "Installed Server RPMs:"
+  for i in ${installed_rpms}; do
+    echo "    ⚙ $i"
+  done | sort
 }
 
 uninstall_server() {
