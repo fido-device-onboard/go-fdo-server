@@ -247,7 +247,7 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
 	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
 	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
-	httpHandler := api.NewHTTPHandler(handler, dbState.DB).RegisterRoutes(apiRouter)
+	httpHandler := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
 
 	// Listen and serve
 	server := NewManufacturingServer(config.HTTP, httpHandler)
