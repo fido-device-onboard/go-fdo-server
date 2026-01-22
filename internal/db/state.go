@@ -89,6 +89,15 @@ func InitDb(dbType, dsn string) (*State, error) {
 	return state, nil
 }
 
+func (s *State) Ping() error {
+	// Send a ping to make sure the database connection is alive.
+	sqlDB, err := s.DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Ping()
+}
+
 // Close closes the database connection
 func (s *State) Close() error {
 	sqlDB, err := s.DB.DB()
