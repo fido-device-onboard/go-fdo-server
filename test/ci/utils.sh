@@ -87,6 +87,9 @@ rendezvous_https_crt="${certs_dir}/rendezvous-http.crt"
 owner_https_key="${certs_dir}/owner-http.key"
 owner_https_crt="${certs_dir}/owner-http.crt"
 
+# seconds to wait for TO0 to complete
+to0_wait_seconds=10
+
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
 declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
 
@@ -473,6 +476,10 @@ send_manufacturer_ov_to_owner() {
   ov_file="${ov_dir}/${guid}.ov"
   get_ov_from_manufacturer "${manufacturer_url}" "${guid}" "${ov_file}"
   send_ov_to_owner "${owner_url}" "${ov_file}"
+  status=$?
+  log_info "Waiting '${to0_wait_seconds}' seconds for TO0 to be performed by the Owner"
+  sleep "${to0_wait_seconds}"
+  return ${status}
 }
 
 set_or_update_owner_redirect_info() {
