@@ -1,0 +1,67 @@
+openapi: 3.0.0
+info:
+  title: Health API
+  version: 0.0.1
+  description: An API to check server's health
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: http://localhost/api/v1
+    description: Go FDO server
+tags:
+  - name: Health API
+    description: Operations related to server's health
+paths:
+  /health:
+    get:
+      summary: Get server health status
+      description: Returns the server version and health status
+      operationId: getHealth
+      tags:
+        - Health API
+      responses:
+        '200':
+          $ref: "#/components/responses/HealthStatus"
+        '500':
+          $ref: "#/components/responses/HealthStatus"
+components:
+  schemas:
+    Health:
+      type: object
+      required:
+        - version
+        - status
+        - message
+      properties:
+        version:
+          type: string
+          description: The server version
+          example: "0.0.1"
+        status:
+          type: string
+          description: The server health status
+          example: "OK"
+        message:
+          type: string
+          example: "the service is up and running"
+  responses:
+    HealthStatus:
+      description: Server health status
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'
+          examples:
+            healthy:
+              summary: Example of a healthy server
+              value:
+                version: "0.0.1"
+                status: "OK"
+                message: "the service is up and running"
+            error:
+              summary: Example of an unhealthy server
+              value:
+                version: "0.0.1"
+                status: "ERROR"
+                message: "database error: driver: bad connection"
