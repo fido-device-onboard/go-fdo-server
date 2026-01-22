@@ -115,31 +115,21 @@ run_test() {
   stop_service "${wget_httpd_service_name}"
 
   log_info "Attempt WGET with missing HTTP server, verify FSIM error occurs"
-  onboard_log="$(get_device_onboard_log_file_path "${guid}")"
-  run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device2_download_dir}" &
-  onboard_pid=$!
+  ! run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device2_download_dir}" ||
+    log_error "Expected Device 2 onboard to fail!"
 
-  log_info "Waiting for wget FSIM error to appear in logs"
-  found_wget_error=false
-  for _ in {1..30}; do
-    if find_in_log "${onboard_log}" "error handling device service info .*fdo\.wget:error"; then
-      found_wget_error=true
-      break
-    fi
-    sleep 1
-  done
-  if [ "${found_wget_error}" != "true" ]; then
+  log_info "Verifying the error was logged"
+  # verify that the wget FSIM error is logged
+  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "error handling device service info .*fdo\.wget:error" ||
     log_error "The corresponding error was not logged"
-  fi
 
   # Verify that Device 2 can successfully onboard once the HTTP server is available
   log_info "Restarting HTTP Server"
   start_service "${wget_httpd_service_name}"
   wait_for_service_ready "${wget_httpd_service_name}"
 
-  if ! wait "${onboard_pid}"; then
-    log_error "Device 2 onboard did not complete successfully after HTTP server restart"
-  fi
+  log_info "Re-running FIDO Device Onboard with FSIM fdo.wget"
+  run_fido_device_onboard "${guid}" --debug --wget-dir "${wget_device2_download_dir}"
 
   log_info "Verify downloaded file ${wget_device2_download_file}"
   verify_equal_files "${wget_source_file}" "${wget_device2_download_file}"

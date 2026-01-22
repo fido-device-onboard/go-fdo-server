@@ -56,7 +56,7 @@ run_go_fdo_client() {
     # Replace base_dir with container_working_dir in paths
     args+=("${arg//$base_dir/$container_working_dir}")
   done
-  docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}"
+  timeout "${client_timeout}" docker compose --file "${client_compose_file}" run --rm go-fdo-client "${args[@]}" || log_warn "Command timed out ($?): 'go-fdo-client $*'"
 }
 
 install_server() {

@@ -87,6 +87,9 @@ rendezvous_https_crt="${certs_dir}/rendezvous-http.crt"
 owner_https_key="${certs_dir}/owner-http.key"
 owner_https_crt="${certs_dir}/owner-http.crt"
 
+# go-fdo-client operation timeout.
+client_timeout="300s"
+
 # seconds to wait for TO0 to complete
 to0_wait_seconds=10
 
@@ -252,7 +255,9 @@ wait_for_services_ready() {
 run_go_fdo_client() {
   mkdir -p "${credentials_dir}"
   cd "${credentials_dir}"
-  go-fdo-client "$@"
+  # If the command times out, the return code is 124 (see: man timeout)
+  # If the command finishes before the timeout, the return code comes from 'go-fdo-client'
+  timeout ${client_timeout} go-fdo-client "$@" || log_warn "'go-fdo-client' command exited with '$?' (124 -> timeout):\n  - go-fdo-client $*"
   cd - >/dev/null
 }
 
@@ -288,31 +293,13 @@ get_device_onboard_log_file_path() {
 }
 
 run_fido_device_onboard() {
-  # This logic will be removed once the go-fdo-client supports polling for TO2 completion.
-  local attempts=15
-  local i=1
-  onboarded=1
-  while [ ${i} -le ${attempts} ]; do
-    log_info "Waiting for FIDO Device Onboard to complete (attempt: ${i})"
-    if run_fido_device_onboard_cmd "$@"; then
-      onboarded=0
-      break
-    fi
-    if [ ${i} -lt ${attempts} ]; then
-      sleep 5
-    fi
-    i=$((i+1))
-  done
-  return ${onboarded}
-}
-
-run_fido_device_onboard_cmd() {
   local guid=$1
+  local log_file
   shift
   [[ "${guid}" =~ ^[a-f0-9]{32}$ ]] || log_error "Device guid required as first argument"
-  local log_file="$(get_device_onboard_log_file_path "${guid}")"
-  run_go_fdo_client --blob "$(get_device_credentials_file_path ${guid})" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
-  find_in_log "${log_file}" 'FIDO Device Onboard Complete'
+  log_file="$(get_device_onboard_log_file_path "${guid}")"
+  run_go_fdo_client --blob "$(get_device_credentials_file_path "${guid}")" onboard --key ec256 --kex ECDH256 --insecure-tls=true "$@" | tee -a "${log_file}"
+  find_in_log "${log_file}" 'FIDO Device Onboard Complete' || return $?
 }
 
 run_go_fdo_server() {

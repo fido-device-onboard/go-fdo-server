@@ -52,31 +52,17 @@ run_test() {
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
   log_info "Attempting device onboarding before rendezvous is started (expect 'ERROR: TO1 failed')"
-  onboard_log="$(get_device_onboard_log_file_path "${guid}")"
-  run_fido_device_onboard "${guid}" --debug &
-  onboard_pid=$!
+  ! run_fido_device_onboard "${guid}" --debug || log_error "Onboarding expected to fail"
 
-  log_info "Waiting for TO1 failure to appear in logs before starting rendezvous"
-  found_to1_failure=false
-  for _ in {1..30}; do
-    if find_in_log "${onboard_log}" "ERROR: TO1 failed"; then
-      found_to1_failure=true
-      break
-    fi
-    sleep 1
-  done
-
-  if [ "${found_to1_failure}" != "true" ]; then
-    log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
-  fi
+  find_in_log "$(get_device_onboard_log_file_path "${guid}")" "ERROR: TO1 failed" || log_error "Expected 'ERROR: TO1 failed' before rendezvous is started"
 
   log_info "Now starting rendezvous"
   start_service_rendezvous
   wait_for_service_ready rendezvous
 
-  if ! wait "${onboard_pid}"; then
-    log_error "Onboarding expected to succeed after rendezvous is started"
-  fi
+  log_info "Running FIDO Device Onboard with retries until rendezvous/TO0 become available"
+  run_fido_device_onboard "${guid}" --debug || log_error "Device onboarding did not complete successfully after rendezvous start"
+
   log_info "Unsetting the error trap handler"
   trap - ERR
   test_pass
