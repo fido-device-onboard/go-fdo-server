@@ -12,20 +12,20 @@ set_rendezvous_info() {
   local manufacturer_url=$1
   local rendezvous_info_json=$2
   curl --fail --verbose --silent --insecure \
-       --request POST \
-       --header 'Content-Type: application/json' \
-       --data-raw "${rendezvous_info_json}" \
-       "${manufacturer_url}/api/v1/rvinfo"
+    --request POST \
+    --header 'Content-Type: application/json' \
+    --data-raw "${rendezvous_info_json}" \
+    "${manufacturer_url}/api/v1/rvinfo"
 }
 
 update_rendezvous_info() {
   local manufacturer_url=$1
   local rendezvous_info_json=$2
   curl --fail --verbose --silent --insecure \
-       --request PUT \
-       --header 'Content-Type: application/json' \
-       --data-raw "${rendezvous_info_json}" \
-       "${manufacturer_url}/api/v1/rvinfo"
+    --request PUT \
+    --header 'Content-Type: application/json' \
+    --data-raw "${rendezvous_info_json}" \
+    "${manufacturer_url}/api/v1/rvinfo"
 }
 
 get_owner_redirect_info() {
