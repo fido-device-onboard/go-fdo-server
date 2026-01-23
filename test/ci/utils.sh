@@ -257,8 +257,13 @@ run_go_fdo_client() {
   cd "${credentials_dir}"
   # If the command times out, the return code is 124 (see: man timeout)
   # If the command finishes before the timeout, the return code comes from 'go-fdo-client'
-  timeout ${client_timeout} go-fdo-client "$@" || log_warn "'go-fdo-client' command exited with '$?' (124 -> timeout):\n  - go-fdo-client $*"
+  local exit_code=0
+  timeout "${client_timeout}" go-fdo-client "$@" || exit_code=$?
+  if [[ ${exit_code} -ne 0 ]]; then
+    log_warn "'go-fdo-client' exited with '${exit_code}' (124 -> timeout):\n  - go-fdo-client $*"
+  fi
   cd - >/dev/null
+  return ${exit_code}
 }
 
 run_device_initialization() {
