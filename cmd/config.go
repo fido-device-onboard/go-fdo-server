@@ -148,9 +148,10 @@ type ServiceInfoOperation struct {
 	WgetParams     *FSIMWgetParams
 }
 
-// ServiceInfoConfig holds the ordered list of FSIM operations
-// The service_info configuration is a list of FSIM operations
-type ServiceInfoConfig []ServiceInfoOperation
+// ServiceInfoConfig holds the service_info configuration
+type ServiceInfoConfig struct {
+	Fsims []ServiceInfoOperation `mapstructure:"fsims"`
+}
 
 // UnmarshalParams converts RawParams to the appropriate typed parameter field
 // based on the FSIM value. This must be called after Viper unmarshaling.
@@ -198,14 +199,18 @@ func (s *ServiceInfoOperation) UnmarshalParams() error {
 }
 
 // validate checks that the ServiceInfoConfig is valid
-func (s ServiceInfoConfig) validate() error {
-	for i := range s {
+func (s *ServiceInfoConfig) validate() error {
+	if s == nil {
+		return nil
+	}
+
+	for i := range s.Fsims {
 		// First, unmarshal the raw params into typed fields
-		if err := s[i].UnmarshalParams(); err != nil {
+		if err := s.Fsims[i].UnmarshalParams(); err != nil {
 			return fmt.Errorf("service_info operation %d: %w", i, err)
 		}
 
-		op := &s[i]
+		op := &s.Fsims[i]
 		if op.FSIM == "" {
 			return fmt.Errorf("service_info operation %d: fsim type is required", i)
 		}

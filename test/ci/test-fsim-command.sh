@@ -28,24 +28,25 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
   service_info:
-    - fsim: "fdo.command"
-      params:
-        may_fail: false
-        return_stdout: true
-        cmd: "touch"
-        args: ["firstCommand.txt"]
-    - fsim: "fdo.command"
-      params:
-        may_fail: false
-        return_stdout: false
-        cmd: "bash"
-        args:
-          - "-c"
-          - |
-            set -xeuo pipefail
-            if [ -a firstCommand.txt ]; then
-                mv firstCommand.txt commandSuccess.txt
-            fi
+    fsims:
+      - fsim: "fdo.command"
+        params:
+          may_fail: false
+          return_stdout: true
+          cmd: "touch"
+          args: ["firstCommand.txt"]
+      - fsim: "fdo.command"
+        params:
+          may_fail: false
+          return_stdout: false
+          cmd: "bash"
+          args:
+            - "-c"
+            - |
+              set -xeuo pipefail
+              if [ -a firstCommand.txt ]; then
+                  mv firstCommand.txt commandSuccess.txt
+              fi
 EOF
 }
 

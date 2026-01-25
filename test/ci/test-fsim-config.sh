@@ -70,31 +70,32 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
   service_info:
-    - fsim: "fdo.download"
-      params:
-        dir: "${owner_download_dir}"
-        files:
-          - src: "${test_script_name}"
-            dst: "device-script.sh"
-    - fsim: "fdo.command"
-      params:
-        cmd: "chmod"
-        args:
-          - "+rx"
-          - "device-script.sh"
-    - fsim: "fdo.command"
-      params:
-        return_stdout: true
-        return_stderr: true
-        cmd: "./device-script.sh"
-        args:
-          - "${device_output_subdir}"
-          - "${device_output_filename}"
-    - fsim: "fdo.upload"
-      params:
-        dir: "${owner_upload_dir}"
-        files:
-          - src: "${device_output_subdir}/${device_output_filename}"
+    fsims:
+      - fsim: "fdo.download"
+        params:
+          dir: "${owner_download_dir}"
+          files:
+            - src: "${test_script_name}"
+              dst: "device-script.sh"
+      - fsim: "fdo.command"
+        params:
+          cmd: "chmod"
+          args:
+            - "+rx"
+            - "device-script.sh"
+      - fsim: "fdo.command"
+        params:
+          return_stdout: true
+          return_stderr: true
+          cmd: "./device-script.sh"
+          args:
+            - "${device_output_subdir}"
+            - "${device_output_filename}"
+      - fsim: "fdo.upload"
+        params:
+          dir: "${owner_upload_dir}"
+          files:
+            - src: "${device_output_subdir}/${device_output_filename}"
 EOF
 }
 

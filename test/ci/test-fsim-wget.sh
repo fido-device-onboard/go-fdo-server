@@ -63,14 +63,15 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
   service_info:
-    - fsim: "fdo.wget"
-      params:
-        files:
-          - url: "${wget_source_url1}"
-            dst: "${wget_device_download_relative_file}"
-          - url: "${wget_source_url2}"
-            dst: "${wget_device_download_absolute_file}"
-          - url: "${wget_source_url3}"
+    fsims:
+      - fsim: "fdo.wget"
+        params:
+          files:
+            - url: "${wget_source_url1}"
+              dst: "${wget_device_download_relative_file}"
+            - url: "${wget_source_url2}"
+              dst: "${wget_device_download_absolute_file}"
+            - url: "${wget_source_url3}"
 EOF
 }
 
