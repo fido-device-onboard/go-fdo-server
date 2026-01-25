@@ -928,47 +928,48 @@ cert = "/path/to/device.ca"
 [owner]
 key = "/path/to/owner.key"
 
-[[owner.service_info]]
+[owner.service_info]
+[[owner.service_info.fsims]]
 fsim = "fdo.command"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 cmd = "/usr/bin/echo"
 args = ["hello", "world"]
 may_fail = true
 return_stdout = true
 return_stderr = false
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.upload"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 dir = "/upload/base"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "/local/file1.txt"
 dst = "subdir/newfile1.txt"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "/local/file2.txt"
 dst = "/absolute/path/file2.txt"
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.download"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 dir = "%s"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "files/data.bin"
 dst = "/local/data.bin"
 may_fail = false
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "%s"
 dst = "/local/optional.log"
 may_fail = true
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.wget"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 url = "https://example.com/file1.tar.gz"
 dst = "/tmp/file1.tar.gz"
 length = 12345
 checksum = "%s"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 url = "http://example.org/file2.zip"
 dst = "/tmp/file2.zip"
 length = 67890
@@ -986,17 +987,17 @@ checksum = "%s"
 	}
 
 	// Verify service_info has 4 operations
-	if len(capturedConfig.Owner.ServiceInfo) != 4 {
-		t.Fatalf("ServiceInfo length=%d, want 4", len(capturedConfig.Owner.ServiceInfo))
+	if len(capturedConfig.Owner.ServiceInfo.Fsims) != 4 {
+		t.Fatalf("ServiceInfo.Fsims length=%d, want 4", len(capturedConfig.Owner.ServiceInfo.Fsims))
 	}
 
 	// Verify fdo.command operation
-	cmdOp := capturedConfig.Owner.ServiceInfo[0]
+	cmdOp := capturedConfig.Owner.ServiceInfo.Fsims[0]
 	if cmdOp.FSIM != "fdo.command" {
-		t.Fatalf("ServiceInfo[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
+		t.Fatalf("ServiceInfo.Fsims[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
 	}
 	if cmdOp.CommandParams == nil {
-		t.Fatal("ServiceInfo[0].CommandParams is nil")
+		t.Fatal("ServiceInfo.Fsims[0].CommandParams is nil")
 	}
 	if cmdOp.CommandParams.Command != "/usr/bin/echo" {
 		t.Fatalf("CommandParams.Command=%q, want %q", cmdOp.CommandParams.Command, "/usr/bin/echo")
@@ -1015,12 +1016,12 @@ checksum = "%s"
 	}
 
 	// Verify fdo.upload operation
-	uploadOp := capturedConfig.Owner.ServiceInfo[1]
+	uploadOp := capturedConfig.Owner.ServiceInfo.Fsims[1]
 	if uploadOp.FSIM != "fdo.upload" {
-		t.Fatalf("ServiceInfo[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
+		t.Fatalf("ServiceInfo.Fsims[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
 	}
 	if uploadOp.UploadParams == nil {
-		t.Fatal("ServiceInfo[1].UploadParams is nil")
+		t.Fatal("ServiceInfo.Fsims[1].UploadParams is nil")
 	}
 	if uploadOp.UploadParams.Dir != "/upload/base" {
 		t.Fatalf("UploadParams.Dir=%q, want %q", uploadOp.UploadParams.Dir, "/upload/base")
@@ -1042,12 +1043,12 @@ checksum = "%s"
 	}
 
 	// Verify fdo.download operation
-	downloadOp := capturedConfig.Owner.ServiceInfo[2]
+	downloadOp := capturedConfig.Owner.ServiceInfo.Fsims[2]
 	if downloadOp.FSIM != "fdo.download" {
-		t.Fatalf("ServiceInfo[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
+		t.Fatalf("ServiceInfo.Fsims[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
 	}
 	if downloadOp.DownloadParams == nil {
-		t.Fatal("ServiceInfo[2].DownloadParams is nil")
+		t.Fatal("ServiceInfo.Fsims[2].DownloadParams is nil")
 	}
 	if downloadOp.DownloadParams.Dir != dir {
 		t.Fatalf("DownloadParams.Dir=%q, want %q", downloadOp.DownloadParams.Dir, dir)
@@ -1075,12 +1076,12 @@ checksum = "%s"
 	}
 
 	// Verify fdo.wget operation
-	wgetOp := capturedConfig.Owner.ServiceInfo[3]
+	wgetOp := capturedConfig.Owner.ServiceInfo.Fsims[3]
 	if wgetOp.FSIM != "fdo.wget" {
-		t.Fatalf("ServiceInfo[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
+		t.Fatalf("ServiceInfo.Fsims[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
 	}
 	if wgetOp.WgetParams == nil {
-		t.Fatal("ServiceInfo[3].WgetParams is nil")
+		t.Fatal("ServiceInfo.Fsims[3].WgetParams is nil")
 	}
 	if len(wgetOp.WgetParams.Files) != 2 {
 		t.Fatalf("WgetParams.Files length=%d, want 2", len(wgetOp.WgetParams.Files))
@@ -1152,51 +1153,52 @@ device_ca:
 owner:
   key: "/path/to/owner.key"
   service_info:
-    - fsim: "fdo.command"
-      params:
-        may_fail: false
-        return_stdout: false
-        return_stderr: true
-        cmd: "/bin/bash"
-        args:
-          - "-c"
-          - |
-            #! /bin/bash
-            set -xeuo pipefail
-            echo "Current Date:"
-            date
-            dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
-    - fsim: "fdo.upload"
-      params:
-        dir: "/var/upload"
-        files:
-          - src: "/source/config.yaml"
-            dst: "configs/app-config.yaml"
-          - src: "/source/data.json"
-            dst: "/absolute/dest/app-data.json"
+    fsims:
+      - fsim: "fdo.command"
+        params:
+          may_fail: false
+          return_stdout: false
+          return_stderr: true
+          cmd: "/bin/bash"
+          args:
+            - "-c"
+            - |
+              #! /bin/bash
+              set -xeuo pipefail
+              echo "Current Date:"
+              date
+              dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
+      - fsim: "fdo.upload"
+        params:
+          dir: "/var/upload"
+          files:
+            - src: "/source/config.yaml"
+              dst: "configs/app-config.yaml"
+            - src: "/source/data.json"
+              dst: "/absolute/dest/app-data.json"
 
-    - fsim: "fdo.download"
-      params:
-        dir: "%s"
-        files:
-          - src: "data/critical.dat"
-            dst: "/client/critical.dat"
-            may_fail: false
-          - src: "%s"
-            dst: "/client/extra.txt"
-            may_fail: true
+      - fsim: "fdo.download"
+        params:
+          dir: "%s"
+          files:
+            - src: "data/critical.dat"
+              dst: "/client/critical.dat"
+              may_fail: false
+            - src: "%s"
+              dst: "/client/extra.txt"
+              may_fail: true
 
-    - fsim: "fdo.wget"
-      params:
-        files:
-          - url: "https://cdn.example.com/package.rpm"
-            dst: "/tmp/package.rpm"
-            length: 98765
-            checksum: "%s"
-          - url: "http://repo.example.net/archive.tar.gz"
-            dst: "/tmp/archive.tar.gz"
-            length: 54321
-            checksum: "%s"
+      - fsim: "fdo.wget"
+        params:
+          files:
+            - url: "https://cdn.example.com/package.rpm"
+              dst: "/tmp/package.rpm"
+              length: 98765
+              checksum: "%s"
+            - url: "http://repo.example.net/archive.tar.gz"
+              dst: "/tmp/archive.tar.gz"
+              length: 54321
+              checksum: "%s"
 `, dir, file2, checksum1, checksum2)
 	path := writeYAMLConfig(t, cfg)
 	rootCmd.SetArgs([]string{"owner", "--config", path})
@@ -1210,17 +1212,17 @@ owner:
 	}
 
 	// Verify service_info has 4 operations
-	if len(capturedConfig.Owner.ServiceInfo) != 4 {
-		t.Fatalf("ServiceInfo length=%d, want 4", len(capturedConfig.Owner.ServiceInfo))
+	if len(capturedConfig.Owner.ServiceInfo.Fsims) != 4 {
+		t.Fatalf("ServiceInfo.Fsims length=%d, want 4", len(capturedConfig.Owner.ServiceInfo.Fsims))
 	}
 
 	// Verify fdo.command operation
-	cmdOp := capturedConfig.Owner.ServiceInfo[0]
+	cmdOp := capturedConfig.Owner.ServiceInfo.Fsims[0]
 	if cmdOp.FSIM != "fdo.command" {
-		t.Fatalf("ServiceInfo[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
+		t.Fatalf("ServiceInfo.Fsims[0].FSIM=%q, want %q", cmdOp.FSIM, "fdo.command")
 	}
 	if cmdOp.CommandParams == nil {
-		t.Fatal("ServiceInfo[0].CommandParams is nil")
+		t.Fatal("ServiceInfo.Fsims[0].CommandParams is nil")
 	}
 	if cmdOp.CommandParams.Command != "/bin/bash" {
 		t.Fatalf("CommandParams.Command=%q, want %q", cmdOp.CommandParams.Command, "/bin/bash")
@@ -1248,12 +1250,12 @@ dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 	}
 
 	// Verify fdo.upload operation
-	uploadOp := capturedConfig.Owner.ServiceInfo[1]
+	uploadOp := capturedConfig.Owner.ServiceInfo.Fsims[1]
 	if uploadOp.FSIM != "fdo.upload" {
-		t.Fatalf("ServiceInfo[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
+		t.Fatalf("ServiceInfo.Fsims[1].FSIM=%q, want %q", uploadOp.FSIM, "fdo.upload")
 	}
 	if uploadOp.UploadParams == nil {
-		t.Fatal("ServiceInfo[1].UploadParams is nil")
+		t.Fatal("ServiceInfo.Fsims[1].UploadParams is nil")
 	}
 	if uploadOp.UploadParams.Dir != "/var/upload" {
 		t.Fatalf("UploadParams.Dir=%q, want %q", uploadOp.UploadParams.Dir, "/var/upload")
@@ -1275,12 +1277,12 @@ dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 	}
 
 	// Verify fdo.download operation
-	downloadOp := capturedConfig.Owner.ServiceInfo[2]
+	downloadOp := capturedConfig.Owner.ServiceInfo.Fsims[2]
 	if downloadOp.FSIM != "fdo.download" {
-		t.Fatalf("ServiceInfo[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
+		t.Fatalf("ServiceInfo.Fsims[2].FSIM=%q, want %q", downloadOp.FSIM, "fdo.download")
 	}
 	if downloadOp.DownloadParams == nil {
-		t.Fatal("ServiceInfo[2].DownloadParams is nil")
+		t.Fatal("ServiceInfo.Fsims[2].DownloadParams is nil")
 	}
 	if downloadOp.DownloadParams.Dir != dir {
 		t.Fatalf("DownloadParams.Dir=%q, want %q", downloadOp.DownloadParams.Dir, dir)
@@ -1308,12 +1310,12 @@ dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 	}
 
 	// Verify fdo.wget operation
-	wgetOp := capturedConfig.Owner.ServiceInfo[3]
+	wgetOp := capturedConfig.Owner.ServiceInfo.Fsims[3]
 	if wgetOp.FSIM != "fdo.wget" {
-		t.Fatalf("ServiceInfo[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
+		t.Fatalf("ServiceInfo.Fsims[3].FSIM=%q, want %q", wgetOp.FSIM, "fdo.wget")
 	}
 	if wgetOp.WgetParams == nil {
-		t.Fatal("ServiceInfo[3].WgetParams is nil")
+		t.Fatal("ServiceInfo.Fsims[3].WgetParams is nil")
 	}
 	if len(wgetOp.WgetParams.Files) != 2 {
 		t.Fatalf("WgetParams.Files length=%d, want 2", len(wgetOp.WgetParams.Files))

@@ -34,15 +34,16 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
   service_info:
-    - fsim: "fdo.upload"
-      params:
-        dir: "${owner_uploads_dir}"
-        files:
-          - src: "${device_files[0]}"
-            dst: "${owner_files[0]}"
-          - src: "${device_files[1]}"
-            dst: "${owner_files[1]}"
-          - src: "${device_files[2]}"
+    fsims:
+      - fsim: "fdo.upload"
+        params:
+          dir: "${owner_uploads_dir}"
+          files:
+            - src: "${device_files[0]}"
+              dst: "${owner_files[0]}"
+            - src: "${device_files[1]}"
+              dst: "${owner_files[1]}"
+            - src: "${device_files[2]}"
 EOF
 }
 

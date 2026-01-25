@@ -399,8 +399,12 @@ func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.Stat
 
 func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
+		if config == nil || len(config.Fsims) == 0 {
+			return
+		}
+
 		// Process operations in order as defined in configuration
-		for _, op := range *config {
+		for _, op := range config.Fsims {
 			// Check if the device supports this FSIM module
 			if !slices.Contains(modules, op.FSIM) {
 				slog.Debug("Device does not support FSIM module, skipping", "module", op.FSIM)

@@ -31,16 +31,17 @@ owner:
   key: "${owner_key}"
   to0_insecure_tls: true
   service_info:
-    - fsim: "fdo.download"
-      params:
-        dir: "${owner_download_dir}"
-        files:
-          - src: "${owner_files[0]}"
-            dst: "${device_files[0]}"
-          - src: "${owner_files[1]}"
-            dst: "${device_files[1]}"
-          - src: "${owner_files[2]}"
-            dst: "${device_files[2]}"
+    fsims:
+      - fsim: "fdo.download"
+        params:
+          dir: "${owner_download_dir}"
+          files:
+            - src: "${owner_files[0]}"
+              dst: "${device_files[0]}"
+            - src: "${owner_files[1]}"
+              dst: "${device_files[1]}"
+            - src: "${owner_files[2]}"
+              dst: "${device_files[2]}"
 EOF
 }
 
