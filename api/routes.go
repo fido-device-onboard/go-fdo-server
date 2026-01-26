@@ -8,17 +8,17 @@ import (
 	"net/http"
 
 	"golang.org/x/time/rate"
-	"gorm.io/gorm"
 
 	transport "github.com/fido-device-onboard/go-fdo/http"
 
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
 )
 
 // HTTPHandler handles HTTP requests
 type HTTPHandler struct {
 	handler *transport.Handler
-	state   *gorm.DB
+	state   *db.State
 }
 
 func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
@@ -45,7 +45,7 @@ func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
 }
 
 // NewHTTPHandler creates a new HTTPHandler
-func NewHTTPHandler(handler *transport.Handler, state *gorm.DB) *HTTPHandler {
+func NewHTTPHandler(handler *transport.Handler, state *db.State) *HTTPHandler {
 	return &HTTPHandler{handler: handler, state: state}
 }
 
@@ -60,8 +60,10 @@ func (h *HTTPHandler) RegisterRoutes(apiRouter *http.ServeMux) *http.ServeMux {
 			),
 		)
 		handler.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
-
 	}
-	handler.HandleFunc("/health", handlers.HealthHandler)
+	healthServer := health.NewServer(h.state)
+	healthStrictHandler := health.NewStrictHandler(&healthServer, nil)
+	health.HandlerFromMux(healthStrictHandler, handler)
+
 	return handler
 }
