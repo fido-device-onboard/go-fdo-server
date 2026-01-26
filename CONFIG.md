@@ -110,7 +110,7 @@ The owner server configuration is under the `[owner]` section:
 | `key` | string | Owner private key file path | Yes (for owner server) |
 | `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
-| `service_info` | list | List of ServiceInfo Modules to execute on device onboarding (See below) | No |
+| `service_info` | map | ServiceInfo Modules to execute on device onboarding (See below) | No |
 
 The owner server also requires:
 - `[device_ca]` section with `cert` field (see Device CA Configuration above)
@@ -119,7 +119,7 @@ The owner server also requires:
 
 ### Service Info Configuration (FSIM Operations)
 
-The owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. FSIM operations are defined as an ordered list under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
+The owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. FSIM operations are defined as an ordered list `fsims` under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
 
 ### Supported FSIM Modules
 
@@ -132,12 +132,57 @@ The following FSIM modules are supported:
 
 ### Service Info Operation Structure
 
-Each operation in the `service_info` list has the following structure:
+Each operation in the `service_info.fsims` list has the following structure:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `fsim` | string | The FSIM module type (one of: "fdo.command", "fdo.download", "fdo.upload", "fdo.wget") | Yes |
 | `params` | object | Parameters for the FSIM module (structure depends on the fsim type) | Yes |
+
+### Service Info Defaults
+
+The `service_info` configuration supports an optional `defaults` field that allows you to specify default directory values for FSIM operations. This reduces repetition when multiple operations use the same directories.
+
+The `defaults` field is a list of default entries with the following structure:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `fsim` | string | The FSIM module type (one of: "fdo.download", "fdo.upload", "fdo.wget") | Yes |
+| `dir` | string | Default directory path (must be absolute) | Yes |
+
+**Important notes:**
+- Each `fsim` value can appear only once in the defaults list (maximum of 3 entries)
+- The `dir` path must be absolute
+- For `fdo.download` and `fdo.upload`, the directory must exist on the owner server at startup
+- For `fdo.wget`, the directory is on the device (existence is not checked at startup)
+- Defaults can be overridden by specifying `params.dir` in individual FSIM operations
+- If neither a default nor `params.dir` is specified, the current working directory is used
+
+#### Defaults Example
+
+```yaml
+service_info:
+  defaults:
+    - fsim: "fdo.download"
+      dir: "/var/lib/go-fdo-server-owner/downloads"
+    - fsim: "fdo.upload"
+      dir: "/var/lib/go-fdo-server-owner/uploads"
+    - fsim: "fdo.wget"
+      dir: "/var/lib/device/wget/files"
+  fsims:
+    - fsim: "fdo.download"
+      params:
+        # dir not specified - uses default from above
+        files:
+          - src: "app.tar.gz"
+            dst: "/tmp/app.tar.gz"
+    - fsim: "fdo.upload"
+      params:
+        dir: "/custom/upload/path"  # Override default
+        files:
+          - src: "/var/log/syslog"
+            dst: "device-syslog.log"
+```
 
 ### fdo.command Parameters
 
@@ -175,7 +220,7 @@ Download files from the owner server to the device.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Base directory path on the owner server where source files are located (used when `files.src` is relative) | Yes |
+| `dir` | string | Base directory path on the owner server where source files are located (used when `files.src` is relative). If not specified, uses the default from `service_info.defaults` or the owner server's current working directory. | No |
 | `files` | array of objects | List of files to download | Yes |
 
 Each file object in the `files` array has:
@@ -206,7 +251,7 @@ Upload files from the device to the owner server.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Base directory path on the owner server where uploaded files will be stored (used when `files.dst` is relative or omitted) | Yes |
+| `dir` | string | Base directory path on the owner server where uploaded files will be stored (used when `files.dst` is relative or omitted). If not specified, uses the default from `service_info.defaults` or the owner server's current working directory. | No |
 | `files` | array of objects | List of files to request from the device | Yes |
 
 Each file object in the `files` array has:
@@ -214,7 +259,7 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `src` | string | Path to the file on the device to upload. Can be absolute or relative (to device working directory). | Yes |
-| `dst` | string | Destination path on the owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). If omitted, saved to `params.dir` with the basename of `src`. | No |
+| `dst` | string | Destination path on the owner server. Must be a relative path (appended to `params.dir`). If omitted, saved to `params.dir` with the basename of `src`. | No |
 
 ### fdo.upload Example
 
@@ -228,7 +273,7 @@ params:
     - src: "/var/log/device.log"
       dst: "logs/device-12345.log"  # saved to /var/lib/fdo/uploads/logs/device-12345.log
     - src: "/sys/class/dmi/id/product_uuid"
-      dst: "/var/system-info/uuid"  # absolute path, saved to /var/system-info/uuid
+      dst: "system-info/uuid"  # saved to /var/lib/fdo/uploads/system-info/uuid
     - src: "/etc/machine-id"
       # dst omitted - saved to /var/lib/fdo/uploads/machine-id
 ```
@@ -239,7 +284,7 @@ Instruct the device to download content from an HTTP server.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Absolute path to a directory on device where files will be downloaded. Defaults to device working directory. Can be overridden with `files.dst` (see below). | No |
+| `dir` | string | Absolute path to a directory on device where files will be downloaded. If not specified, uses the default from `service_info.defaults` or the device's current working directory. Used as base directory for relative `files.dst` paths. | No |
 | `files` | array of objects | List of URLs that the device will retrieve content from and the file paths where the content will be stored. | Yes |
 
 Each file object in the `files` array has:
@@ -247,7 +292,7 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `url` | string | URL to download from (must be http or https) | Yes |
-| `dst` | string | Destination filename on the device for the retrieved content. Can be an absolute path or relative (to the device working directory). If not specified, file will be downloaded to the directory device working directory (unless overridden by `dir` above). The file name is taken from basename of URL path. | No |
+| `dst` | string | Destination filename on the device for the retrieved content. Can be an absolute path or relative (joined with `dir` if specified). If not specified, file name is taken from basename of URL path and joined with `dir` (if specified). | No |
 | `length` | integer | For validation: expected size of downloaded content in bytes | No |
 | `checksum` | string | For validation: Expected SHA-384 checksum of the file (96 hexadecimal characters) | No |
 
@@ -329,33 +374,34 @@ reuse_credentials = true
 to0_insecure_tls = false
 
 # Example FSIM operations configuration
-[[owner.service_info]]
+[owner.service_info]
+[[owner.service_info.fsims]]
 fsim = "fdo.command"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 cmd = "sh"
 args = ["-c", "echo Current date: ; date"]
 return_stdout = true
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.download"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 dir = "/var/lib/fdo/downloads"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "/path/to/file1.txt"
 dst = "config.txt"
 may_fail = false
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.upload"
-[owner.service_info.params]
+[owner.service_info.fsims.params]
 dir = "/var/lib/fdo/uploads"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 src = "/etc/device-info.txt"
-dst = "device-info.txt"
+dst = "info/device-info.txt"
 
-[[owner.service_info]]
+[[owner.service_info.fsims]]
 fsim = "fdo.wget"
-[[owner.service_info.params.files]]
+[[owner.service_info.fsims.params.files]]
 url = "https://example.com/package.tar.gz"
 dst = "package.tar.gz"
 checksum = "abc123..."
@@ -428,34 +474,35 @@ owner:
   key: "/path/to/owner.key"
   reuse_credentials: true
   service_info:
-    - fsim: "fdo.command"
-      params:
-        cmd: "sh"
-        args: ["-c", "echo Current date: ; date"]
-        return_stdout: true
+    fsims:
+      - fsim: "fdo.command"
+        params:
+          cmd: "sh"
+          args: ["-c", "echo Current date: ; date"]
+          return_stdout: true
 
-    - fsim: "fdo.download"
-      params:
-        dir: "/var/lib/fdo/downloads"
-        files:
-          - src: "/path/to/file1.txt"
-            dst: "config.txt"
-            may_fail: false
-          - src: "/path/to/file2.txt"
-            dst: "data.txt"
+      - fsim: "fdo.download"
+        params:
+          dir: "/var/lib/fdo/downloads"
+          files:
+            - src: "/path/to/file1.txt"
+              dst: "config.txt"
+              may_fail: false
+            - src: "/path/to/file2.txt"
+              dst: "data.txt"
 
-    - fsim: "fdo.upload"
-      params:
-        dir: "/var/lib/fdo/uploads"
-        files:
-          - src: "/etc/device-info.txt"
-            dst: "device-info.txt"
+      - fsim: "fdo.upload"
+        params:
+          dir: "/var/lib/fdo/uploads"
+          files:
+            - src: "/etc/device-info.txt"
+              dst: "info/device-info.txt"
 
-    - fsim: "fdo.wget"
-      params:
-        files:
-          - url: "https://example.com/package.tar.gz"
-            dst: "package.tar.gz"
+      - fsim: "fdo.wget"
+        params:
+          files:
+            - url: "https://example.com/package.tar.gz"
+              dst: "package.tar.gz"
 ```
 
 ## Notes

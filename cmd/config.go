@@ -132,7 +132,14 @@ type FSIMWgetFileSpec struct {
 
 // FSIMWgetParams holds the parameters for fdo.wget FSIM module
 type FSIMWgetParams struct {
+	Dir   string             `mapstructure:"dir"`
 	Files []FSIMWgetFileSpec `mapstructure:"files"`
+}
+
+// DefaultEntry defines a default directory for an FSIM operation
+type DefaultEntry struct {
+	FSIM string `mapstructure:"fsim"`
+	Dir  string `mapstructure:"dir"`
 }
 
 // ServiceInfoOperation represents a single FSIM operation in the service_info list
@@ -150,7 +157,8 @@ type ServiceInfoOperation struct {
 
 // ServiceInfoConfig holds the service_info configuration
 type ServiceInfoConfig struct {
-	Fsims []ServiceInfoOperation `mapstructure:"fsims"`
+	Defaults []DefaultEntry         `mapstructure:"defaults"`
+	Fsims    []ServiceInfoOperation `mapstructure:"fsims"`
 }
 
 // UnmarshalParams converts RawParams to the appropriate typed parameter field
@@ -198,10 +206,59 @@ func (s *ServiceInfoOperation) UnmarshalParams() error {
 	return nil
 }
 
+// getDefaultDir returns the default directory for the given FSIM, or empty string if not found
+func (s *ServiceInfoConfig) getDefaultDir(fsimName string) string {
+	for _, def := range s.Defaults {
+		if def.FSIM == fsimName {
+			return def.Dir
+		}
+	}
+	return ""
+}
+
 // validate checks that the ServiceInfoConfig is valid
 func (s *ServiceInfoConfig) validate() error {
 	if s == nil {
 		return nil
+	}
+
+	// Validate defaults
+	seenFsims := make(map[string]bool)
+	for i, def := range s.Defaults {
+		// Both fields are required
+		if def.FSIM == "" {
+			return fmt.Errorf("defaults entry %d: fsim field is required", i)
+		}
+		if def.Dir == "" {
+			return fmt.Errorf("defaults entry %d: dir field is required", i)
+		}
+
+		// Validate fsim is one of the allowed values
+		if def.FSIM != "fdo.download" && def.FSIM != "fdo.upload" && def.FSIM != "fdo.wget" {
+			return fmt.Errorf("defaults entry %d: fsim must be one of: fdo.download, fdo.upload, fdo.wget", i)
+		}
+
+		// Check for duplicates
+		if seenFsims[def.FSIM] {
+			return fmt.Errorf("defaults entry %d: duplicate fsim value %q", i, def.FSIM)
+		}
+		seenFsims[def.FSIM] = true
+
+		// Validate dir is an absolute path
+		if !filepath.IsAbs(def.Dir) {
+			return fmt.Errorf("defaults entry %d: dir must be an absolute path, got %q", i, def.Dir)
+		}
+
+		// For server-side operations, verify directory exists
+		if def.FSIM == "fdo.download" || def.FSIM == "fdo.upload" {
+			info, err := os.Stat(def.Dir)
+			if err != nil {
+				return fmt.Errorf("defaults entry %d: cannot access directory %q: %w", i, def.Dir, err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("defaults entry %d: path %q is not a directory", i, def.Dir)
+			}
+		}
 	}
 
 	for i := range s.Fsims {
@@ -213,6 +270,22 @@ func (s *ServiceInfoConfig) validate() error {
 		op := &s.Fsims[i]
 		if op.FSIM == "" {
 			return fmt.Errorf("service_info operation %d: fsim type is required", i)
+		}
+
+		// Apply defaults if dir is not specified
+		switch op.FSIM {
+		case "fdo.download":
+			if op.DownloadParams != nil && op.DownloadParams.Dir == "" {
+				op.DownloadParams.Dir = s.getDefaultDir("fdo.download")
+			}
+		case "fdo.upload":
+			if op.UploadParams != nil && op.UploadParams.Dir == "" {
+				op.UploadParams.Dir = s.getDefaultDir("fdo.upload")
+			}
+		case "fdo.wget":
+			if op.WgetParams != nil && op.WgetParams.Dir == "" {
+				op.WgetParams.Dir = s.getDefaultDir("fdo.wget")
+			}
 		}
 
 		// Validate based on FSIM type
@@ -236,14 +309,15 @@ func (s *ServiceInfoConfig) validate() error {
 				if file.Src == "" {
 					return fmt.Errorf("service_info operation %d, file %d: src is required", i, j)
 				}
+				// Validate that dst (if provided) is not an absolute path
+				if file.Dst != "" && filepath.IsAbs(file.Dst) {
+					return fmt.Errorf("service_info operation %d, file %d: dst must be a relative path, got %q", i, j, file.Dst)
+				}
 			}
 
 		case "fdo.download":
 			if op.DownloadParams == nil {
 				return fmt.Errorf("service_info operation %d: download parameters are required for fdo.download", i)
-			}
-			if op.DownloadParams.Dir == "" {
-				return fmt.Errorf("service_info operation %d: dir is required for fdo.download", i)
 			}
 			if len(op.DownloadParams.Files) == 0 {
 				return fmt.Errorf("service_info operation %d: at least one file must be specified for download", i)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -947,7 +948,7 @@ src = "/local/file1.txt"
 dst = "subdir/newfile1.txt"
 [[owner.service_info.fsims.params.files]]
 src = "/local/file2.txt"
-dst = "/absolute/path/file2.txt"
+dst = "another/file2.txt"
 
 [[owner.service_info.fsims]]
 fsim = "fdo.download"
@@ -1038,8 +1039,8 @@ checksum = "%s"
 	if uploadOp.UploadParams.Files[1].Src != "/local/file2.txt" {
 		t.Fatalf("UploadParams.Files[1].Src=%q, want %q", uploadOp.UploadParams.Files[1].Src, "/local/file2.txt")
 	}
-	if uploadOp.UploadParams.Files[1].Dst != "/absolute/path/file2.txt" {
-		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "/absolute/path/file2.txt")
+	if uploadOp.UploadParams.Files[1].Dst != "another/file2.txt" {
+		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "another/file2.txt")
 	}
 
 	// Verify fdo.download operation
@@ -1175,7 +1176,7 @@ owner:
             - src: "/source/config.yaml"
               dst: "configs/app-config.yaml"
             - src: "/source/data.json"
-              dst: "/absolute/dest/app-data.json"
+              dst: "data/app-data.json"
 
       - fsim: "fdo.download"
         params:
@@ -1272,8 +1273,8 @@ dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 	if uploadOp.UploadParams.Files[1].Src != "/source/data.json" {
 		t.Fatalf("UploadParams.Files[1].Src=%q, want %q", uploadOp.UploadParams.Files[1].Src, "/source/data.json")
 	}
-	if uploadOp.UploadParams.Files[1].Dst != "/absolute/dest/app-data.json" {
-		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "/absolute/dest/app-data.json")
+	if uploadOp.UploadParams.Files[1].Dst != "data/app-data.json" {
+		t.Fatalf("UploadParams.Files[1].Dst=%q, want %q", uploadOp.UploadParams.Files[1].Dst, "data/app-data.json")
 	}
 
 	// Verify fdo.download operation
@@ -1343,5 +1344,363 @@ dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 	}
 	if wgetOp.WgetParams.Files[1].Checksum != checksum2 {
 		t.Fatalf("WgetParams.Files[1].Checksum=%q, want %q", wgetOp.WgetParams.Files[1].Checksum, checksum2)
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_Valid(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	// Create temporary directories for download and upload defaults
+	downloadDir := t.TempDir()
+	uploadDir := t.TempDir()
+
+	// Create a test file in download directory
+	testFile := filepath.Join(downloadDir, "test.bin")
+	if err := os.WriteFile(testFile, []byte("test data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := fmt.Sprintf(`
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.download"
+        dir: "%s"
+      - fsim: "fdo.upload"
+        dir: "%s"
+      - fsim: "fdo.wget"
+        dir: "/device/downloads"
+    fsims:
+      - fsim: "fdo.download"
+        params:
+          # No dir specified - should use default
+          files:
+            - src: "test.bin"
+              dst: "/tmp/test.bin"
+      - fsim: "fdo.upload"
+        params:
+          # Override default with custom dir
+          dir: "/custom/upload"
+          files:
+            - src: "/device/file.txt"
+              dst: "uploaded.txt"
+      - fsim: "fdo.wget"
+        params:
+          # No dir specified - should use default
+          files:
+            - url: "https://example.com/file.tar.gz"
+              dst: "file.tar.gz"
+`, downloadDir, uploadDir)
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+
+	if capturedConfig == nil {
+		t.Fatalf("owner config not captured")
+	}
+
+	// Verify defaults are set
+	if len(capturedConfig.Owner.ServiceInfo.Defaults) != 3 {
+		t.Fatalf("ServiceInfo.Defaults length=%d, want 3", len(capturedConfig.Owner.ServiceInfo.Defaults))
+	}
+
+	// Check fdo.download default
+	if capturedConfig.Owner.ServiceInfo.Defaults[0].FSIM != "fdo.download" {
+		t.Fatalf("Defaults[0].FSIM=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[0].FSIM, "fdo.download")
+	}
+	if capturedConfig.Owner.ServiceInfo.Defaults[0].Dir != downloadDir {
+		t.Fatalf("Defaults[0].Dir=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[0].Dir, downloadDir)
+	}
+
+	// Check fdo.upload default
+	if capturedConfig.Owner.ServiceInfo.Defaults[1].FSIM != "fdo.upload" {
+		t.Fatalf("Defaults[1].FSIM=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[1].FSIM, "fdo.upload")
+	}
+	if capturedConfig.Owner.ServiceInfo.Defaults[1].Dir != uploadDir {
+		t.Fatalf("Defaults[1].Dir=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[1].Dir, uploadDir)
+	}
+
+	// Check fdo.wget default
+	if capturedConfig.Owner.ServiceInfo.Defaults[2].FSIM != "fdo.wget" {
+		t.Fatalf("Defaults[2].FSIM=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[2].FSIM, "fdo.wget")
+	}
+	if capturedConfig.Owner.ServiceInfo.Defaults[2].Dir != "/device/downloads" {
+		t.Fatalf("Defaults[2].Dir=%q, want %q", capturedConfig.Owner.ServiceInfo.Defaults[2].Dir, "/device/downloads")
+	}
+
+	// Verify fdo.download operation uses default
+	downloadOp := capturedConfig.Owner.ServiceInfo.Fsims[0]
+	if downloadOp.DownloadParams.Dir != downloadDir {
+		t.Fatalf("DownloadParams.Dir=%q, want default %q", downloadOp.DownloadParams.Dir, downloadDir)
+	}
+
+	// Verify fdo.upload operation overrides default
+	uploadOp := capturedConfig.Owner.ServiceInfo.Fsims[1]
+	if uploadOp.UploadParams.Dir != "/custom/upload" {
+		t.Fatalf("UploadParams.Dir=%q, want override %q", uploadOp.UploadParams.Dir, "/custom/upload")
+	}
+
+	// Verify fdo.wget operation uses default
+	wgetOp := capturedConfig.Owner.ServiceInfo.Fsims[2]
+	if wgetOp.WgetParams.Dir != "/device/downloads" {
+		t.Fatalf("WgetParams.Dir=%q, want default %q", wgetOp.WgetParams.Dir, "/device/downloads")
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_DuplicateFsim(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	dir := t.TempDir()
+
+	cfg := fmt.Sprintf(`
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.download"
+        dir: "%s"
+      - fsim: "fdo.download"
+        dir: "%s"
+    fsims: []
+`, dir, dir)
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for duplicate fsim in defaults, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate fsim value") {
+		t.Fatalf("expected error about duplicate fsim, got: %v", err)
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_MissingFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+		errMsg string
+	}{
+		{
+			name: "missing fsim field",
+			config: `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - dir: "/some/dir"
+    fsims: []
+`,
+			errMsg: "fsim field is required",
+		},
+		{
+			name: "missing dir field",
+			config: `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.download"
+    fsims: []
+`,
+			errMsg: "dir field is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetState(t)
+			stubRunE(t, ownerCmd)
+
+			path := writeYAMLConfig(t, tt.config)
+			rootCmd.SetArgs([]string{"owner", "--config", path})
+
+			err := rootCmd.Execute()
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.errMsg) {
+				t.Fatalf("expected error containing %q, got: %v", tt.errMsg, err)
+			}
+		})
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_InvalidFsimType(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.invalid"
+        dir: "/some/dir"
+    fsims: []
+`
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid fsim type, got nil")
+	}
+	if !strings.Contains(err.Error(), "fsim must be one of") {
+		t.Fatalf("expected error about invalid fsim type, got: %v", err)
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_RelativePath(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.download"
+        dir: "relative/path"
+    fsims: []
+`
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for relative path in defaults, got nil")
+	}
+	if !strings.Contains(err.Error(), "must be an absolute path") {
+		t.Fatalf("expected error about absolute path requirement, got: %v", err)
+	}
+}
+
+func TestOwner_ServiceInfoDefaults_NonExistentDirectory(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    defaults:
+      - fsim: "fdo.download"
+        dir: "/this/directory/does/not/exist"
+    fsims: []
+`
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-existent directory, got nil")
+	}
+	if !strings.Contains(err.Error(), "cannot access directory") {
+		t.Fatalf("expected error about directory access, got: %v", err)
+	}
+}
+
+func TestOwner_UploadParams_AbsoluteDstRejected(t *testing.T) {
+	resetState(t)
+	stubRunE(t, ownerCmd)
+
+	cfg := `
+http:
+  ip: "127.0.0.1"
+  port: "8082"
+db:
+  type: "sqlite"
+  dsn: "file:/tmp/owner.db"
+device_ca:
+  cert: "/path/to/device.ca"
+owner:
+  key: "/path/to/owner.key"
+  service_info:
+    fsims:
+      - fsim: "fdo.upload"
+        params:
+          dir: "/var/upload"
+          files:
+            - src: "/device/file.txt"
+              dst: "/absolute/path/file.txt"
+`
+
+	path := writeYAMLConfig(t, cfg)
+	rootCmd.SetArgs([]string{"owner", "--config", path})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for absolute path in upload dst, got nil")
+	}
+	if !strings.Contains(err.Error(), "dst must be a relative path") {
+		t.Fatalf("expected error about relative path requirement, got: %v", err)
 	}
 }

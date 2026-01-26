@@ -443,22 +443,16 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 					var uploadDir, rename string
 
 					if file.Dst != "" {
-						// dst is provided - can be absolute or relative
-						var absolutePath string
-						if filepath.IsAbs(file.Dst) {
-							// Absolute path - ignore params.dir
-							absolutePath = file.Dst
-						} else {
-							// Relative path - append to params.dir
-							baseDir := op.UploadParams.Dir
-							if baseDir == "" {
-								baseDir = "."
-							}
-							absolutePath = filepath.Join(baseDir, file.Dst)
+						// dst is provided - must be relative (validation enforces this)
+						// Append to params.dir
+						baseDir := op.UploadParams.Dir
+						if baseDir == "" {
+							baseDir = "."
 						}
+						relativePath := filepath.Join(baseDir, file.Dst)
 						// Split into directory and filename components
-						uploadDir = filepath.Dir(absolutePath)
-						rename = filepath.Base(absolutePath)
+						uploadDir = filepath.Dir(relativePath)
+						rename = filepath.Base(relativePath)
 					} else {
 						// dst not provided - use params.dir and leave rename empty
 						uploadDir = op.UploadParams.Dir
@@ -495,9 +489,29 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 						continue
 					}
 
-					wgetName := file.Dst
-					if wgetName == "" {
-						wgetName = path.Base(parsedURL.Path)
+					// Determine the destination path on the device
+					var wgetName string
+					if file.Dst != "" {
+						// Dst is provided - can be absolute or relative
+						if filepath.IsAbs(file.Dst) {
+							// Absolute path - use as-is
+							wgetName = file.Dst
+						} else {
+							// Relative path - join with dir if available
+							if op.WgetParams.Dir != "" {
+								wgetName = filepath.Join(op.WgetParams.Dir, file.Dst)
+							} else {
+								wgetName = file.Dst
+							}
+						}
+					} else {
+						// Dst not provided - use basename of URL, potentially with dir
+						basename := path.Base(parsedURL.Path)
+						if op.WgetParams.Dir != "" {
+							wgetName = filepath.Join(op.WgetParams.Dir, basename)
+						} else {
+							wgetName = basename
+						}
 					}
 
 					wgetCmd := &fsim.WgetCommand{
