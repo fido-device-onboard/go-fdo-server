@@ -1119,7 +1119,7 @@ func TestOwner_FSIMConfigFromYAML(t *testing.T) {
 
 	// Test checksums (SHA-384, 96 hex characters)
 	checksum1 := "ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEF01"
-	checksum2 := "0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef012345"
+	checksum2 := "0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef0123456789ABCDEFabcdef01234542"
 
 	// Create temporary files for download test.
 	// These files must exist because the ServiceInfo validation code (triggered by

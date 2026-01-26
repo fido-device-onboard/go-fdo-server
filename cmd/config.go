@@ -366,9 +366,13 @@ func (s *ServiceInfoConfig) validate() error {
 				}
 				// Validate checksum if present.
 				if file.Checksum != "" {
-					_, err := hex.DecodeString(file.Checksum)
+					decoded, err := hex.DecodeString(file.Checksum)
 					if err != nil {
 						return fmt.Errorf("service_info operation %d, file %d: error decoding checksum %q: %v", i, j, file.Checksum, err)
+					}
+					const expectedChecksumLength = 48 // SHA-384
+					if len(decoded) != expectedChecksumLength {
+						return fmt.Errorf("service_info operation %d, file %d: checksum has invalid length, must be a 96-character hex-encoded SHA-384 hash", i, j)
 					}
 				}
 			}

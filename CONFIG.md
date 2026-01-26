@@ -141,7 +141,7 @@ Each operation in the `service_info.fsims` list has the following structure:
 
 ### Service Info Defaults
 
-The `service_info` configuration supports an optional `defaults` field that allows you to specify default directory values for FSIM operations. This reduces repetition when multiple operations use the same directories.
+The `service_info` configuration supports an optional `defaults` section that allows you to specify default directory values for FSIM operations. This reduces repetition when multiple operations use the same directories.
 
 The `defaults` field is a list of default entries with the following structure:
 
@@ -247,11 +247,11 @@ params:
 
 ### fdo.upload Parameters
 
-Upload files from the device to the owner server.
+Upload files from the device to the owner server. Files are uploaded to a per-device directory on the owner server. The name of the directory is the device's replacement GUID (the GUID that is set after onboarding completes). This prevents files with the same name from being overwritten as devices are onboarded.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Base directory path on the owner server where uploaded files will be stored (used when `files.dst` is relative or omitted). If not specified, uses the default from `service_info.defaults` or the owner server's current working directory. | No |
+| `dir` | string | Absolute path to a directory on the owner server where uploaded files will be stored. A per-device subdirectory is created in this directory for each device that uploads files during onboarding. If not set the directory from the `fdo.upload` entry in `service_info.defaults` is used. | No |
 | `files` | array of objects | List of files to request from the device | Yes |
 
 Each file object in the `files` array has:
@@ -259,7 +259,7 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `src` | string | Path to the file on the device to upload. Can be absolute or relative (to device working directory). | Yes |
-| `dst` | string | Destination path on the owner server. Must be a relative path (appended to `params.dir`). If omitted, saved to `params.dir` with the basename of `src`. | No |
+| `dst` | string | Destination path on the owner server. If omitted the basename of `src` will be used. Must be a relative path (appended to `params.dir`/$GUID/). | No |
 
 ### fdo.upload Example
 
@@ -269,13 +269,13 @@ params:
   dir: "/var/lib/fdo/uploads"
   files:
     - src: "/etc/hostname"
-      dst: "device-hostname.txt"  # saved to /var/lib/fdo/uploads/device-hostname.txt
+      dst: "device-hostname.txt"  # saved to /var/lib/fdo/uploads/$GUID/device-hostname.txt
     - src: "/var/log/device.log"
-      dst: "logs/device-12345.log"  # saved to /var/lib/fdo/uploads/logs/device-12345.log
+      dst: "logs/device-12345.log"  # saved to /var/lib/fdo/uploads/$GUID/logs/device-12345.log
     - src: "/sys/class/dmi/id/product_uuid"
-      dst: "system-info/uuid"  # saved to /var/lib/fdo/uploads/system-info/uuid
+      dst: "system-info/uuid"  # saved to /var/lib/fdo/uploads/$GUID/system-info/uuid
     - src: "/etc/machine-id"
-      # dst omitted - saved to /var/lib/fdo/uploads/machine-id
+      # dst omitted - saved to /var/lib/fdo/uploads/$GUID/machine-id
 ```
 
 ### fdo.wget Parameters
@@ -284,15 +284,15 @@ Instruct the device to download content from an HTTP server.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Absolute path to a directory on device where files will be downloaded. If not specified, uses the default from `service_info.defaults` or the device's current working directory. Used as base directory for relative `files.dst` paths. | No |
+| `dir` | string | Absolute path to a directory on the device where files will be downloaded. If not specified, uses the default from `service_info.defaults` or the device's current working directory. Used as base directory for relative `files.dst` paths. | No |
 | `files` | array of objects | List of URLs that the device will retrieve content from and the file paths where the content will be stored. | Yes |
 
 Each file object in the `files` array has:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `url` | string | URL to download from (must be http or https) | Yes |
-| `dst` | string | Destination filename on the device for the retrieved content. Can be an absolute path or relative (joined with `dir` if specified). If not specified, file name is taken from basename of URL path and joined with `dir` (if specified). | No |
+| `url` | string | URL to download from (scheme must be `http` or `https`) | Yes |
+| `dst` | string | Destination filename on the device for the retrieved content. If omitted the basename of the URL path is used. Can be an absolute path or relative (joined with `dir` if specified).  | No |
 | `length` | integer | For validation: expected size of downloaded content in bytes | No |
 | `checksum` | string | For validation: Expected SHA-384 checksum of the file (96 hexadecimal characters) | No |
 
@@ -312,7 +312,7 @@ params:
       dst: "license.txt"
 ```
 
-For the example above the first download will be saved to `/tmp/app.rpm`, the second to `/root/downloads/firmware.bin` and the last to `license.txt` in the device working directory.
+For the example above the first download will be saved to `/tmp/app.rpm`, the second to `/root/downloads/firmware.bin` and the last to `/root/downloads/license.txt`.
 
 ## Rendezvous Server Configuration
 
