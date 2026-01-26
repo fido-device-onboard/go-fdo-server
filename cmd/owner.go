@@ -385,18 +385,6 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 	delete(s.states, token)
 }
 
-func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
-	replacementGUID, err := dbState.GetReplacementGUID(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get replacement GUID: %w", err)
-	}
-	deviceUploadDir := filepath.Join(baseDir, hex.EncodeToString(replacementGUID[:]))
-	if err := os.MkdirAll(deviceUploadDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create device upload directory %q: %w", deviceUploadDir, err)
-	}
-	return deviceUploadDir, nil
-}
-
 func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if config == nil || len(config.Fsims) == 0 {
@@ -439,42 +427,43 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 				}
 
 			case "fdo.upload":
+				// Create a per-device upload directory under the configured destination directory. This per-device
+				// directory uses the value of the device's replacement GUID as its name. If a per-upload
+				// destination is configured (file.Dst) create any subdirectories it requires under the per-device
+				// directory.
 				for _, file := range op.UploadParams.Files {
 					var uploadDir, rename string
 
-					if file.Dst != "" {
-						// dst is provided - must be relative (validation enforces this)
-						// Append to params.dir
-						baseDir := op.UploadParams.Dir
-						if baseDir == "" {
-							baseDir = "."
-						}
-						relativePath := filepath.Join(baseDir, file.Dst)
-						// Split into directory and filename components
-						uploadDir = filepath.Dir(relativePath)
-						rename = filepath.Base(relativePath)
-					} else {
-						// dst not provided - use params.dir and leave rename empty
-						uploadDir = op.UploadParams.Dir
-						if uploadDir == "" {
-							uploadDir = "."
-						}
-						rename = "" // Server will use basename of src
+					uploadDir = op.UploadParams.Dir
+					if uploadDir == "" {
+						uploadDir = "."
 					}
-
-					// Use per-device directory structure from main branch
-					deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
+					replacementGUID, err := dbState.GetReplacementGUID(ctx)
 					if err != nil {
-						slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
+						slog.Error("fdo.upload: failed to get per device upload directory name", "err", err)
 						return
+					}
+					uploadDir = filepath.Join(uploadDir, hex.EncodeToString(replacementGUID[:]))
+
+					// note: file.Dst has been validated as a relative path.
+					if file.Dst != "" {
+						subDir := filepath.Dir(file.Dst)
+						if subDir != "." {
+							uploadDir = filepath.Join(uploadDir, subDir)
+						}
+						rename = filepath.Base(file.Dst)
+					}
+					if err = os.MkdirAll(uploadDir, 0o755); err != nil {
+						slog.Error("fdo.upload: failed to create device upload directory", "dir", uploadDir, "err", err)
+						continue
 					}
 
 					if !yield("fdo.upload", &fsim.UploadRequest{
-						Dir:    deviceUploadDir,
+						Dir:    uploadDir,
 						Name:   file.Src,
 						Rename: rename,
 						CreateTemp: func() (*os.File, error) {
-							return os.CreateTemp(deviceUploadDir, ".fdo-upload_*")
+							return os.CreateTemp(uploadDir, ".fdo-upload_*")
 						},
 					}) {
 						return

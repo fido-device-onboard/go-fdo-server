@@ -16,7 +16,7 @@ device_files=("source-file1" "subdir/source-file2" "source-file3")
 
 # Destination files on the owner. These are all relative to the $owner_uploads_dir/{GUID}.
 # The last filename is taken from the source (see lack of dst: in configuration below)
-owner_files=("dest-file1" "dest-file2" "source-file3")
+owner_files=("dest-file1" "subdir/dest-file2" "source-file3")
 
 configure_service_owner() {
   cat > "${owner_config_file}" <<EOF
