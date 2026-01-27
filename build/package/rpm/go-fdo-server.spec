@@ -4,7 +4,14 @@
 # https://github.com/fido-device-onboard/go-fdo-server
 %global goipath         github.com/fido-device-onboard/go-fdo-server
 
-%global debug_package   %{nil}
+%global with_debug 1
+
+%if 0%{?with_debug}
+%global _find_debuginfo_dwz_opts %{nil}
+%global _dwz_low_mem_die_limit 0
+%else
+%global debug_package %{nil}
+%endif
 
 Version:        0.0.4
 
@@ -46,12 +53,15 @@ devices when they are first powered on in their final location.
 
 %build
 %global gomodulesmode GO111MODULE=on
-export LDFLAGS="-X %{goipath}/internal/version.VERSION=%{version}"
+# https://discussion.fedoraproject.org/t/why-does-the-go-compiler-uses-x-nodwarf5-by-default/179804
+# https://github.com/golang/go/issues/75079
+export GOEXPERIMENT="nodwarf5"
+export GO_LDFLAGS="-X %{goipath}/internal/version.VERSION=%{version}"
 %gobuild -o %{gobuilddir}/bin/go-fdo-server %{goipath}
 
 %install
 install -m 0755 -vd %{buildroot}%{_bindir}
-install -m 0755 -vp -s %{gobuilddir}/bin/* %{buildroot}%{_bindir}
+install -m 0755 -vp %{gobuilddir}/bin/* %{buildroot}%{_bindir}
 # Configuration
 install -m 0750 -vd %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp configs/manufacturing.yaml %{buildroot}%{_sysconfdir}/%{name}
