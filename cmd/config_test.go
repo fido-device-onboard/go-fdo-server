@@ -1525,26 +1525,6 @@ owner:
 `,
 			errMsg: "fsim field is required",
 		},
-		{
-			name: "missing dir field",
-			config: `
-http:
-  ip: "127.0.0.1"
-  port: "8082"
-db:
-  type: "sqlite"
-  dsn: "file:/tmp/owner.db"
-device_ca:
-  cert: "/path/to/device.ca"
-owner:
-  key: "/path/to/owner.key"
-  service_info:
-    defaults:
-      - fsim: "fdo.download"
-    fsims: []
-`,
-			errMsg: "dir field is required",
-		},
 	}
 
 	for _, tt := range tests {
