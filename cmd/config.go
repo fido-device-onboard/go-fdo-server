@@ -225,15 +225,10 @@ func (s *ServiceInfoConfig) validate() error {
 	// Validate defaults
 	seenFsims := make(map[string]bool)
 	for i, def := range s.Defaults {
-		// Both fields are required
+		// A valid "fsim" field is required
 		if def.FSIM == "" {
 			return fmt.Errorf("defaults entry %d: fsim field is required", i)
 		}
-		if def.Dir == "" {
-			return fmt.Errorf("defaults entry %d: dir field is required", i)
-		}
-
-		// Validate fsim is one of the allowed values
 		if def.FSIM != "fdo.download" && def.FSIM != "fdo.upload" && def.FSIM != "fdo.wget" {
 			return fmt.Errorf("defaults entry %d: fsim must be one of: fdo.download, fdo.upload, fdo.wget", i)
 		}
@@ -245,11 +240,11 @@ func (s *ServiceInfoConfig) validate() error {
 		seenFsims[def.FSIM] = true
 
 		// Validate dir is an absolute path
-		if !filepath.IsAbs(def.Dir) {
+		if def.Dir != "" && !filepath.IsAbs(def.Dir) {
 			return fmt.Errorf("defaults entry %d: dir must be an absolute path, got %q", i, def.Dir)
 		}
 
-		// For server-side operations, verify directory exists
+		// For server-side operations, verify base directory exists
 		if def.FSIM == "fdo.download" || def.FSIM == "fdo.upload" {
 			info, err := os.Stat(def.Dir)
 			if err != nil {

@@ -58,12 +58,9 @@ generate_upload_files() {
 }
 
 verify_uploads() {
-  # Currently there is no way to get the replacement GUID for the device,
-  # which is what the upload uses for the destination directory name. For now
-  # read the directory and assume the result is correct
-  local guid=$(ls "${owner_uploads_dir}" | grep -e "^[a-f0-9]\{32\}$")
+  local device_guid=$1
   for (( i=0; i<${#device_files[@]}; i+=1 )); do
-    dst="${owner_uploads_dir}/${guid}/${owner_files[$i]}"
+    dst="${owner_uploads_dir}/${device_guid}/${owner_files[$i]}"
     src="${device_files[$i]}"
     if [ "${src:0:1}" != "/" ]; then
       # source is relative and was created in the go-fdo-client working dir
@@ -71,6 +68,13 @@ verify_uploads() {
     fi
     verify_equal_files "${src}" "${dst}"
   done
+}
+
+get_device_guid() {
+  local owner_url=$1
+  local guid=$2
+  local device_guid=$(curl -s "${owner_url}/api/v1/owner/devices?old_guid=${guid}" | jq -r '.[0].guid')
+  echo "${device_guid}"
 }
 
 # Public entrypoint used by CI
@@ -124,8 +128,11 @@ run_test() {
   log_info "Running FIDO Device Onboard with FSIM fdo.upload"
   run_fido_device_onboard "${guid}"
 
+  device_guid=$(get_device_guid "${owner_url}" "${guid}")
+  log_info "Device GUID after onboarding: ${device_guid}"
+
   log_info "Verify uploaded files"
-  verify_uploads
+  verify_uploads "${device_guid}"
 
   log_info "Unsetting the error trap handler"
   trap - ERR
