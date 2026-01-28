@@ -41,10 +41,11 @@ import (
 
 // The owner server configuration
 type OwnerConfig struct {
-	OwnerCertificate string `mapstructure:"cert"`
-	OwnerPrivateKey  string `mapstructure:"key"`
-	ReuseCred        bool   `mapstructure:"reuse_credentials"`
-	TO0InsecureTLS   bool   `mapstructure:"to0_insecure_tls"`
+	OwnerCertificate string            `mapstructure:"cert"`
+	OwnerPrivateKey  string            `mapstructure:"key"`
+	ReuseCred        bool              `mapstructure:"reuse_credentials"`
+	TO0InsecureTLS   bool              `mapstructure:"to0_insecure_tls"`
+	ServiceInfo      ServiceInfoConfig `mapstructure:"service_info"`
 }
 
 // Owner server configuration file structure
@@ -66,8 +67,8 @@ func (o *OwnerServerConfig) validate() error {
 		return errors.New("a device CA certificate file is required")
 	}
 
-	// Validate FSIM parameters
-	if err := validateFSIMParameters(); err != nil {
+	// Validate ServiceInfo configuration.
+	if err := o.Owner.ServiceInfo.validate(); err != nil {
 		return err
 	}
 
@@ -75,15 +76,7 @@ func (o *OwnerServerConfig) validate() error {
 }
 
 var (
-	// FSIM command line flags
-	date          bool
-	wgets         []string
-	wgetURLs      []*url.URL // Parsed wget URLs
-	uploads       []string
-	uploadDir     string
-	downloads     []string
-	downloadPaths []string // Cleaned download file paths
-	defaultTo0TTL uint32   = 300
+	defaultTo0TTL uint32 = 300
 )
 
 // ownerCmd represents the owner command
@@ -228,71 +221,6 @@ func getOwnerServerState(config *OwnerServerConfig) (*OwnerServerState, error) {
 	}, nil
 }
 
-func validateFSIMParameters() error {
-	// Only validate if FSIM parameters are actually being used
-	if !hasFSIMParameters() {
-		return nil // No FSIM parameters to validate
-	}
-
-	// Parse and validate wget URLs
-	wgetURLs = make([]*url.URL, 0, len(wgets))
-	for _, urlString := range wgets {
-		parsedURL, err := url.Parse(urlString)
-		if err != nil {
-			return fmt.Errorf("invalid wget URL %q: %w", urlString, err)
-		}
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return fmt.Errorf("wget URL %q must use http or https scheme, got %q", urlString, parsedURL.Scheme)
-		}
-		if parsedURL.Host == "" {
-			return fmt.Errorf("wget URL %q missing host", urlString)
-		}
-		wgetURLs = append(wgetURLs, parsedURL)
-	}
-
-	// Validate and store cleaned download file paths
-	downloadPaths = make([]string, 0, len(downloads))
-	for _, filePath := range downloads {
-		cleanPath := filepath.Clean(filePath)
-		if _, err := os.Stat(cleanPath); err != nil {
-			return fmt.Errorf("cannot access download file %q: %w", filePath, err)
-		}
-		downloadPaths = append(downloadPaths, cleanPath)
-	}
-
-	if len(uploads) > 0 && uploadDir == "" {
-		return fmt.Errorf("upload directory must be specified when using --command-upload")
-	}
-
-	if uploadDir != "" {
-		info, err := os.Stat(uploadDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("upload directory %q does not exist", uploadDir)
-			}
-			return fmt.Errorf("cannot access upload directory %q: %w", uploadDir, err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("upload path %q is not a directory", uploadDir)
-		}
-
-		testFile, err := os.CreateTemp(uploadDir, ".fdo-write-test-*")
-		if err != nil {
-			return fmt.Errorf("upload directory %q is not writable: %w", uploadDir, err)
-		}
-
-		// Best effort cleanup after validation
-		testFile.Close()
-		os.Remove(testFile.Name())
-	}
-
-	return nil
-}
-
-func hasFSIMParameters() bool {
-	return len(wgets) > 0 || len(downloads) > 0 || len(uploads) > 0 || uploadDir != "" || date
-}
-
 func serveOwner(config *OwnerServerConfig) error {
 	state, err := getOwnerServerState(config)
 	if err != nil {
@@ -307,7 +235,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
 			return voucher.Header.Val.RvInfo, nil
 		},
-		Modules:         moduleStateMachines{DB: state.DB, states: make(map[string]*moduleStateMachineState)},
+		Modules:         moduleStateMachines{DB: state.DB, config: &config.Owner.ServiceInfo, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
 			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
@@ -394,7 +322,8 @@ func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.Ke
 }
 
 type moduleStateMachines struct {
-	DB *db.State
+	DB     *db.State
+	config *ServiceInfoConfig
 	// current module state machine state for all sessions (indexed by token)
 	states map[string]*moduleStateMachineState
 }
@@ -430,7 +359,7 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(ctx, modules, s.DB))
+		next, stop := iter.Pull2(ownerModules(ctx, s.config, modules, s.DB))
 		module = &moduleStateMachineState{
 			Next: next,
 			Stop: stop,
@@ -456,92 +385,174 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 	delete(s.states, token)
 }
 
-func getPerDeviceUploadDir(ctx context.Context, baseDir string, dbState *db.State) (string, error) {
-	replacementGUID, err := dbState.GetReplacementGUID(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get replacement GUID: %w", err)
-	}
-	deviceUploadDir := filepath.Join(baseDir, hex.EncodeToString(replacementGUID[:]))
-	if err := os.MkdirAll(deviceUploadDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create device upload directory %q: %w", deviceUploadDir, err)
-	}
-	return deviceUploadDir, nil
-}
-
-func ownerModules(ctx context.Context, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
+func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
-		if slices.Contains(modules, "fdo.download") {
-			for i, cleanPath := range downloadPaths {
-				f, err := os.Open(cleanPath)
-				if err != nil {
-					slog.Error("error opening %q for download FSIM: %v", cleanPath, err)
-					continue
-				}
-				defer func() { _ = f.Close() }()
+		if config == nil || len(config.Fsims) == 0 {
+			return
+		}
 
-				if !yield("fdo.download", &fsim.DownloadContents[*os.File]{
-					Name:         downloads[i], // Use original name for display
-					Contents:     f,
-					MustDownload: true,
-				}) {
+		// Process operations in order as defined in configuration
+		for _, op := range config.Fsims {
+			// Check if the device supports this FSIM module
+			if !slices.Contains(modules, op.FSIM) {
+				slog.Debug("Device does not support FSIM module, skipping", "module", op.FSIM)
+				continue
+			}
+
+			switch op.FSIM {
+			case "fdo.download":
+				for _, file := range op.DownloadParams.Files {
+					// Determine absolute path for src
+					var srcPath string
+					if filepath.IsAbs(file.Src) {
+						srcPath = file.Src
+					} else {
+						srcPath = filepath.Join(op.DownloadParams.Dir, file.Src)
+					}
+
+					f, err := os.Open(srcPath)
+					if err != nil {
+						slog.Error("error opening file for download FSIM", "path", srcPath, "err", err)
+						continue
+					}
+					defer func() { _ = f.Close() }()
+
+					if !yield("fdo.download", &fsim.DownloadContents[*os.File]{
+						Name:         file.Dst,
+						Contents:     f,
+						MustDownload: !file.MayFail,
+					}) {
+						return
+					}
+				}
+
+			case "fdo.upload":
+				// Create a per-device upload directory under the configured destination directory. This per-device
+				// directory uses the value of the device's replacement GUID as its name. If a per-upload
+				// destination is configured (file.Dst) create any subdirectories it requires under the per-device
+				// directory.
+				for _, file := range op.UploadParams.Files {
+					var uploadDir, rename string
+
+					uploadDir = op.UploadParams.Dir
+					if uploadDir == "" {
+						uploadDir = "."
+					}
+					replacementGUID, err := dbState.GetReplacementGUID(ctx)
+					if err != nil {
+						slog.Error("fdo.upload: failed to get per device upload directory name", "err", err)
+						return
+					}
+					uploadDir = filepath.Join(uploadDir, hex.EncodeToString(replacementGUID[:]))
+
+					// note: file.Dst has been validated as a relative path.
+					if file.Dst != "" {
+						subDir := filepath.Dir(file.Dst)
+						if subDir != "." {
+							uploadDir = filepath.Join(uploadDir, subDir)
+						}
+						rename = filepath.Base(file.Dst)
+					}
+					if err = os.MkdirAll(uploadDir, 0755); err != nil {
+						slog.Error("fdo.upload: failed to create device upload directory", "dir", uploadDir, "err", err)
+						continue
+					}
+
+					if !yield("fdo.upload", &fsim.UploadRequest{
+						Dir:    uploadDir,
+						Name:   file.Src,
+						Rename: rename,
+						CreateTemp: func() (*os.File, error) {
+							return os.CreateTemp(uploadDir, ".fdo-upload_*")
+						},
+					}) {
+						return
+					}
+				}
+
+			case "fdo.wget":
+				for _, file := range op.WgetParams.Files {
+					parsedURL, err := url.Parse(file.URL)
+					if err != nil {
+						slog.Error("error parsing wget URL", "url", file.URL, "err", err)
+						continue
+					}
+
+					// Determine the destination path on the device
+					var wgetName string
+					if file.Dst != "" {
+						// Dst is provided - can be absolute or relative
+						if filepath.IsAbs(file.Dst) {
+							// Absolute path - use as-is
+							wgetName = file.Dst
+						} else {
+							// Relative path - join with dir if available
+							if op.WgetParams.Dir != "" {
+								wgetName = filepath.Join(op.WgetParams.Dir, file.Dst)
+							} else {
+								wgetName = file.Dst
+							}
+						}
+					} else {
+						// Dst not provided - use basename of URL, potentially with dir
+						basename := path.Base(parsedURL.Path)
+						if op.WgetParams.Dir != "" {
+							wgetName = filepath.Join(op.WgetParams.Dir, basename)
+						} else {
+							wgetName = basename
+						}
+					}
+
+					wgetCmd := &fsim.WgetCommand{
+						Name: wgetName,
+						URL:  parsedURL,
+					}
+
+					if file.Length > 0 {
+						wgetCmd.Length = file.Length
+					}
+
+					if file.Checksum != "" {
+						checksum, err := hex.DecodeString(file.Checksum)
+						if err != nil {
+							slog.Error("error decoding checksum", "checksum", file.Checksum, "err", err)
+							continue
+						}
+						wgetCmd.Checksum = checksum
+					}
+
+					if !yield("fdo.wget", wgetCmd) {
+						return
+					}
+				}
+
+			case "fdo.command":
+				cmd := &fsim.RunCommand{
+					Command: op.CommandParams.Command,
+					Args:    op.CommandParams.Args,
+					MayFail: op.CommandParams.MayFail,
+				}
+
+				if op.CommandParams.RetStdout {
+					cmd.Stdout = os.Stdout
+				}
+
+				if op.CommandParams.RetStderr {
+					cmd.Stderr = os.Stderr
+				}
+
+				if !yield("fdo.command", cmd) {
 					return
 				}
 			}
 		}
 
-		if slices.Contains(modules, "fdo.upload") {
-			deviceUploadDir, err := getPerDeviceUploadDir(ctx, uploadDir, dbState)
-			if err != nil {
-				slog.Error("fdo.upload: failed to get per device upload directory", "err", err)
-				return
-			}
-			for _, name := range uploads {
-				if !yield("fdo.upload", &fsim.UploadRequest{
-					Dir:  deviceUploadDir,
-					Name: name,
-					CreateTemp: func() (*os.File, error) {
-						return os.CreateTemp(deviceUploadDir, ".fdo-upload_*")
-					},
-				}) {
-					return
-				}
-			}
-		}
-
-		if slices.Contains(modules, "fdo.wget") {
-			for _, url := range wgetURLs {
-				if !yield("fdo.wget", &fsim.WgetCommand{
-					Name: path.Base(url.Path),
-					URL:  url,
-				}) {
-					return
-				}
-			}
-		}
-
-		if date && slices.Contains(modules, "fdo.command") {
-			if !yield("fdo.command", &fsim.RunCommand{
-				Command: "date",
-				Args:    []string{"--utc"},
-				Stdout:  os.Stdout,
-				Stderr:  os.Stderr,
-			}) {
-				return
-			}
-		}
 	}
 }
 
 // Set up the owner command line. Used by the unit tests to reset state between tests.
 func ownerCmdInit() {
 	rootCmd.AddCommand(ownerCmd)
-
-	// TODO: add FSIM to configuration file TBD
-	ownerCmd.Flags().BoolVar(&date, "command-date", false, "Use fdo.command FSIM to have device run \"date --utc\"")
-	ownerCmd.Flags().StringArrayVar(&wgets, "command-wget", nil, "Use fdo.wget FSIM for each `url` (flag may be used multiple times)")
-	ownerCmd.Flags().StringArrayVar(&uploads, "command-upload", nil, "Use fdo.upload FSIM for each `file` (flag may be used multiple times)")
-	ownerCmd.Flags().StringVar(&uploadDir, "upload-directory", "", "The directory `path` to put file uploads")
-	ownerCmd.Flags().StringArrayVar(&downloads, "command-download", nil, "Use fdo.download FSIM for each `file` (flag may be used multiple times)")
 
 	// Declare any CLI flags for overriding configuration file settings.
 	// These flags are bound to Viper in the ownerCmd PreRun handler.

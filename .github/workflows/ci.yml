@@ -236,6 +236,35 @@ jobs:
           source test/ci/test-fsim-download.sh
           cleanup
 
+  test-fsim-command:
+    name: Test FSIM fdo.command
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test FSIM fdo.command
+        run: |
+          source test/ci/test-fsim-command.sh
+          run_test
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs
+        if: always()
+        run: |
+          source test/ci/test-fsim-command.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-fsim-command.sh
+          cleanup
+
   test-onboarding-config:
     name: Test FIDO device onboarding using a configuration file
     runs-on: ubuntu-latest
@@ -263,4 +292,33 @@ jobs:
         if: always()
         run: |
           source test/ci/test-onboarding-config.sh
+          cleanup
+
+  test-fsim-config:
+    name: Test a sequence of FSIM operations using a configuration file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test FSIM Sequence
+        run: |
+          source test/ci/test-fsim-config.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
+        run: |
+          source test/ci/test-fsim-config.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-fsim-config.sh
           cleanup

@@ -1,4 +1,0 @@
-include:
-  - path:
-    - fdo-onboarding-servers.yaml
-    - fsim-fdo-upload-override.yaml
