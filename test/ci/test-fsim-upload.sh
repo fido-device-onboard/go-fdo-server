@@ -19,7 +19,7 @@ device_files=("source-file1" "subdir/source-file2" "source-file3")
 owner_files=("dest-file1" "subdir/dest-file2" "source-file3")
 
 configure_service_owner() {
-  cat > "${owner_config_file}" <<EOF
+  cat >"${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -59,7 +59,7 @@ generate_upload_files() {
 
 verify_uploads() {
   local device_guid=$1
-  for (( i=0; i<${#device_files[@]}; i+=1 )); do
+  for ((i = 0; i < ${#device_files[@]}; i += 1)); do
     dst="${owner_uploads_dir}/${device_guid}/${owner_files[$i]}"
     src="${device_files[$i]}"
     if [ "${src:0:1}" != "/" ]; then
@@ -140,4 +140,7 @@ run_test() {
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || {
+  run_test
+  cleanup
+}
