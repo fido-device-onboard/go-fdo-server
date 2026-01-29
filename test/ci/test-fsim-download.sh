@@ -16,7 +16,7 @@ owner_files=("owner-file1" "owner-file2" "subdir/owner-file3")
 device_files=("${device_download_dir}/device-file1" "device-file2" "device-file3")
 
 configure_service_owner() {
-  cat > "${owner_config_file}" <<EOF
+  cat >"${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -54,7 +54,7 @@ generate_download_files() {
 }
 
 verify_downloads() {
-  for (( i=0; i<${#owner_files[@]}; i+=1 )); do
+  for ((i = 0; i < ${#owner_files[@]}; i += 1)); do
     src="${owner_download_dir}/${owner_files[$i]}"
     dst="${device_files[$i]}"
     if [ "${dst:0:1}" != "/" ]; then

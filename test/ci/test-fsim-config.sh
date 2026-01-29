@@ -41,7 +41,7 @@ export TMPDIR="${tmp_dir}"
 # a different filename on the device to ensure the device correctly
 # executes its local copy of the script
 generate_test_script() {
-  cat > "${owner_download_dir}/${test_script_name}" <<EOF
+  cat >"${owner_download_dir}/${test_script_name}" <<EOF
 #!/bin/bash
 set -ueo pipefail
 outdir="\${1:?}"
@@ -55,7 +55,7 @@ EOF
 }
 
 configure_service_owner() {
-  cat > "${owner_config_file}" <<EOF
+  cat >"${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -170,4 +170,7 @@ run_test() {
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || {
+  run_test
+  cleanup
+}

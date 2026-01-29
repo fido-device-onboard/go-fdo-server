@@ -48,7 +48,7 @@ wget_device_download_absolute_dir="${fsim_wget_dir}/device"
 wget_device_download_absolute_file="${wget_device_download_absolute_dir}/abs_file2"
 
 configure_service_owner() {
-  cat > "${owner_config_file}" <<EOF
+  cat >"${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:

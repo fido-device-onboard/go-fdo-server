@@ -13,7 +13,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-fsim-config.sh"
 
 configure_service_owner() {
-  cat > "${owner_config_file}" <<EOF
+  cat >"${owner_config_file}" <<EOF
 log:
   level: "debug"
 db:
@@ -106,4 +106,7 @@ run_test() {
 }
 
 # Allow running directly
-[[ "${BASH_SOURCE[0]}" != "$0" ]] || { run_test; cleanup; }
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || {
+  run_test
+  cleanup
+}
