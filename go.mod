@@ -3,8 +3,11 @@ module github.com/fido-device-onboard/go-fdo-server
 go 1.25.5
 
 require (
+	github.com/elnormous/contenttype v1.0.4
 	github.com/fido-device-onboard/go-fdo v0.0.0-20251217141835-8aceb06ebe21
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
+	github.com/jackc/pgx/v5 v5.7.6
+	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/spf13/cobra v1.9.1
@@ -28,13 +31,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.6 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/neilotoole/jsoncolor v0.7.1 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.5.1 // indirect
