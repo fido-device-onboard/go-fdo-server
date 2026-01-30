@@ -1,0 +1,486 @@
+openapi: 3.0.0
+info:
+  title: Trusted device CA certificates management API
+  version: 0.0.1
+  description: An API for managing a list of Trusted device CA certificates in PEM format. It supports List, Create, Read and Delete (LCRD) operations.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+servers:
+  - url: https://localhost/api/v1
+    description: Go FDO server
+tags:
+  - name: Trusted device CA certificates
+    description: Operations related to trusted device CA certificates
+paths:
+  /device-ca:
+    get:
+      tags:
+        - Trusted device CA certificates
+      summary: List all trusted device CA certificates
+      description: |
+        Retrieves a paginated, filterable, and sortable list of all registered trusted device CA certificates.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns certificate metadata as JSON (default)
+        - `application/x-pem-file` - Returns certificates as concatenated PEM file
+      operationId: ListTrustedDeviceCACerts
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return per page.
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result set.
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: issuer
+          in: query
+          description: Filters the results by the exact issuer distinguished name.
+          required: false
+          schema:
+            type: string
+            example: 'CN=Example Device CA, O=Example Inc, C=US'
+        - name: subject
+          in: query
+          description: Filters the results by the exact subject distinguished name.
+          required: false
+          schema:
+            type: string
+            example: 'CN=Example Device CA, O=Example Inc, C=US'
+        - name: validityStatus
+          in: query
+          description: Filters certificates by their validity status.
+          required: false
+          schema:
+            type: string
+            enum:
+              - valid
+              - expired
+              - not-yet-valid
+        - name: search
+          in: query
+          description: Searches within subject and issuer fields (case-insensitive).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: Sorts the results by the specified field.
+          required: false
+          schema:
+            type: string
+            enum:
+              - createdAt
+              - notBefore
+              - notAfter
+              - subject
+              - issuer
+            default: createdAt
+        - name: sortOrder
+          in: query
+          description: Specifies the sorting order.
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+      responses:
+        '200':
+          description: A paginated list of trusted device CA certificates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACertsPaginated'
+
+              examples:
+                success:
+                  summary: Example of a successful response
+                  value:
+                    total: 2
+                    limit: 20
+                    offset: 0
+                    certs:
+                      - fingerprint: 'a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-01-01T00:00:00Z'
+                        notAfter: '2026-01-01T00:00:00Z'
+                        createdAt: '2025-05-10T10:30:00Z'
+                      - fingerprint: 'b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-02-15T00:00:00Z'
+                        notAfter: '2026-02-15T00:00:00Z'
+                        createdAt: '2025-06-20T12:00:00Z'
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+              examples:
+                getPEMCACerts:
+                  summary: Example of a successful response
+                  value: |
+                    -----BEGIN CERTIFICATE-----
+                    MIID... (truncated) ...
+                    -----END CERTIFICATE-----
+                    -----BEGIN CERTIFICATE-----
+                    MIID... (truncated) ...
+                    -----END CERTIFICATE-----
+        '400':
+          $ref: './components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    post:
+      tags:
+        - Trusted device CA certificates
+      summary: Import one or more trusted device CA certificates
+      description: |
+        Uploads one or more PEM-encoded certificates for trusted device certificate authorities.
+        A single PEM file may contain multiple certificates.
+
+        This operation is idempotent:
+        - Valid, non-expired certificates that don't exist in the database are imported
+        - Certificates that already exist (duplicate fingerprint) are silently skipped
+        - Expired certificates are silently skipped
+        - Malformed or invalid certificates are silently skipped
+
+        The response includes statistics and detailed messages about the operation:
+        
+        - `detected`:  Total number of parsable certificate blocks found in the PEM data.
+        - `malformed`: Number of PEM blocks that could not be parsed as valid certificates.
+        - `imported`:  Number of new, valid certificates successfully imported into the database.
+        - `skipped`:   Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.
+        - `messages`:  Array of detailed status messages for each certificate processed
+
+      operationId: ImportTrustedDeviceCACerts
+      requestBody:
+        description: One or more PEM-encoded certificates. The file may contain multiple certificates.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+              maxLength: 1048576
+            examples:
+              createCert:
+                summary: Example of creating new CA certificates
+                value: |
+                  -----BEGIN CERTIFICATE-----
+                  MIID... (truncated) ...
+                  -----END CERTIFICATE-----
+                  -----BEGIN CERTIFICATE-----
+                  MIID... (truncated) ...
+                  -----END CERTIFICATE-----
+      responses:
+        '200':
+          description: Certificate upload processed successfully. Returns statistics and details of imported certificates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACertsImportResult'
+              examples:
+                allImported:
+                  summary: All certificates successfully imported
+                  value:
+                    detected: 2
+                    imported: 2
+                    skipped: 0
+                    malformed: 0
+                    messages:
+                      - "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully"
+                      - "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                    certs:
+                      - fingerprint: 'c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                      - fingerprint: 'd4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                partialImport:
+                  summary: Some certificates skipped (duplicates, expired or malformed)
+                  value:
+                    detected: 4
+                    imported: 2
+                    skipped: 1
+                    malformed: 1
+                    messages:
+                      - "the certificate at position 1 is malformed"
+                      - "the certificate at position 2 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully"
+                      - "the certificate at position 3 with subject 'CN=Example Device CA Expired, O=Example Corp, C=US' was skipped because it is expired"
+                      - "the certificate at position 4 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                    certs:
+                      - fingerprint: 'c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                      - fingerprint: 'd4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123'
+                        pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                noneImported:
+                  summary: All certificates already exist
+                  value:
+                    detected: 2
+                    imported: 0
+                    skipped: 2
+                    malformed: 0
+                    messages:
+                      - "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was skipped because it already exists"
+                      - "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was skipped because it already exists"
+                    certs: []
+        '400':
+          $ref: './components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '413':
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            application/json:
+              schema:
+                $ref: './components.yaml#/components/schemas/Error'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+  /device-ca/{fingerprint}:
+    get:
+      tags:
+        - Trusted device CA certificates
+      summary: Get a trusted device CA certificate by fingerprint
+      description: |
+        Retrieves a specific trusted device CA certificate by its SHA-256 fingerprint.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns certificate metadata as JSON (default)
+        - `application/x-pem-file` - Returns certificate as PEM file
+      operationId: GetTrustedDeviceCACertByFingerprint
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{64}$'
+            example: 'a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0'
+      responses:
+        '200':
+          description: The requested trusted device CA certificate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACert'
+              examples:
+                getCertJson:
+                  summary: Example JSON certificate response
+                  value:
+                    fingerprint: 'a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0'
+                    pem: "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n"
+                    subject: 'CN=Example Device CA, O=Example Corp, C=US'
+                    issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                    notBefore: '2025-01-01T00:00:00Z'
+                    notAfter: '2026-01-01T00:00:00Z'
+                    createdAt: '2025-05-10T10:30:00Z'
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+                description: The certificate content in PEM format.
+              examples:
+                getCertPem:
+                  summary: Example PEM certificate response
+                  value: |
+                    -----BEGIN CERTIFICATE-----
+                    MIIDzTCCArWgAwIBAgIQC+2PL2fUi... (truncated)
+                    -----END CERTIFICATE-----
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: './components.yaml#/components/responses/NotFound'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Trusted device CA certificates
+      summary: Delete a trusted device CA certificate by fingerprint
+      description: Deletes a specific trusted device CA certificate by its SHA-256 fingerprint.
+      operationId: DeleteTrustedDeviceCACert
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{64}$'
+            example: 'a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0'
+      responses:
+        '204':
+          description: Trusted device CA certificate deleted successfully.
+        '401':
+          $ref: './components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './components.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: './components.yaml#/components/responses/NotFound'
+        '500':
+          $ref: './components.yaml#/components/responses/InternalServerError'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: './components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: './components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: './components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: './components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: './components.yaml#/components/securitySchemes/Oauth2Auth'
+  schemas:
+    TrustedDeviceCACertsPaginated:
+      type: object
+      required:
+        - total
+        - limit
+        - offset
+        - certs
+      properties:
+        total:
+          type: integer
+          description: Total number of trusted device CA certificates available.
+        limit:
+          type: integer
+          description: The number of items returned in this response.
+        offset:
+          type: integer
+          description: The offset from the beginning of the collection.
+        certs:
+          $ref: '#/components/schemas/TrustedDeviceCACerts'
+    TrustedDeviceCACertsImportResult:
+      type: object
+      required:
+        - detected
+        - imported
+        - skipped
+        - malformed
+        - messages
+        - certs
+      properties:
+        detected:
+          type: integer
+          description: Total number of certificate blocks found in the PEM data.
+          example: 5
+        imported:
+          type: integer
+          description: Number of certificates successfully added to the database.
+          example: 2
+        skipped:
+          type: integer
+          description: Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.
+          example: 2
+        malformed:
+          type: integer
+          description: Number of certificate blocks that could not be parsed or validated.
+          example: 1
+        messages:
+          type: array
+          description: Detailed import result messages for each certificate found in the PEM data.
+          items:
+            type: string
+          example:
+            - "the certificate at position 1 is malformed"
+            - "the certificate at position 2 with subject 'CN=Device CA 2,O=Example Inc' was imported successfully"
+            - "the certificate at position 3 with subject 'CN=Device CA 3,O=Example Inc' was skipped because it is expired"
+            - "the certificate at position 4 with subject 'CN=Device CA 4,O=Example Inc' was skipped because it already exists"
+            - "the certificate at position 5 with subject 'CN=Device CA 5,O=Example Inc' was imported successfully"
+        certs:
+          type: array
+          description: Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).
+          items:
+            $ref: '#/components/schemas/TrustedDeviceCACert'
+    TrustedDeviceCACerts:
+      type: array
+      items:
+        $ref: '#/components/schemas/TrustedDeviceCACert'
+    TrustedDeviceCACert:
+      type: object
+      required:
+        - fingerprint
+        - pem
+        - subject
+        - issuer
+        - notBefore
+        - notAfter
+        - createdAt
+      properties:
+        fingerprint:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          example: 'a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0'
+        pem:
+          type: string
+          description: The full certificate content in PEM format.
+          format: pem
+          pattern: '^-----BEGIN CERTIFICATE-----\n[\s\S]+\n-----END CERTIFICATE-----\n?$'
+          maxLength: 10000
+        subject:
+          type: string
+          description: The subject distinguished name of the certificate.
+        issuer:
+          type: string
+          description: The issuer distinguished name of the certificate.
+        notBefore:
+          type: string
+          format: date-time
+          description: The start date of the certificate's validity period.
+        notAfter:
+          type: string
+          format: date-time
+          description: The end date of the certificate's validity period.
+        createdAt:
+          type: string
+          format: date-time
+          description: The timestamp when the certificate was added.
