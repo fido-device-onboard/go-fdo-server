@@ -34,6 +34,7 @@ prepare:
       - openssl
       - curl
       - git
+      - jq
 
 execute:
     how: tmt

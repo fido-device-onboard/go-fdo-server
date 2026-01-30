@@ -60,6 +60,9 @@ run_test() {
   start_service_rendezvous
   wait_for_service_ready rendezvous
 
+  log_info "Adding Device CA certificate to rendezvous"
+  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
   log_info "Running FIDO Device Onboard with retries until rendezvous/TO0 become available"
   run_fido_device_onboard "${guid}" --debug || log_error "Device onboarding did not complete successfully after rendezvous start"
 
