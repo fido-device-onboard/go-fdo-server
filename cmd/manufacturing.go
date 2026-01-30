@@ -247,7 +247,11 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
 	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
 	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
-	httpHandler := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
+	httpHandler, err := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
+	if err != nil {
+		slog.Error("failed to register routes", "err", err)
+		return err
+	}
 
 	// Listen and serve
 	server := NewManufacturingServer(config.HTTP, httpHandler)

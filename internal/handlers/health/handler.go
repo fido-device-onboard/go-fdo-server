@@ -7,15 +7,15 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 )
 
 type Server struct {
-	State *db.State
+	State *state.HealthState
 }
 
-func NewServer(state *db.State) Server {
+func NewServer(state *state.HealthState) Server {
 	return Server{State: state}
 }
 
