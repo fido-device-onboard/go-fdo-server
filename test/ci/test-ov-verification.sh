@@ -38,6 +38,9 @@ run_test() {
   log_info "Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
+  log_info "Adding Device CA certificate to rendezvous"
+  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
   log_info "Run Device Initialization"
   guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
