@@ -39,6 +39,9 @@ run_test() {
   rv_info="[{\"dns\": \"${owner_dns}\", \"device_port\": \"${owner_port}\", \"protocol\": \"${owner_protocol}\", \"ip\": \"${owner_ip}\", \"owner_port\": \"${owner_port}\", \"rv_bypass\": true}]"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
+  log_info "Adding Device CA certificate to rendezvous"
+  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
   log_info "Run Device Initialization"
   guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"

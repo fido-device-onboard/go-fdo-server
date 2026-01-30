@@ -4,6 +4,8 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
+certs_file="${logs_dir}/certs.json"
+
 run_test() {
 
   log_info "Setting the error trap handler"
@@ -36,9 +38,6 @@ run_test() {
   log_info "Setting or updating Rendezvous Info (RendezvousInfo)"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
-  log_info "Adding Device CA certificate to rendezvous"
-  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
-
   log_info "Run Device Initialization"
   guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
@@ -49,8 +48,31 @@ run_test() {
   log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"
 
+  log_info "Running FIDO Device Onboard (expected to fail)"
+  ! run_fido_device_onboard "${guid}" --debug || log_error "Onboarding must fail!"
+
+  # We use get_service_logs instead of find_in_log here to make it work with containers:
+  # server logs are only saved to log files if the test fails.
+  get_service_logs "rendezvous" | grep "cryptographic verification failed: x509: certificate signed by unknown authority" || log_error "Rendezvous didn't reject the ownership voucher!"
+
+  log_info "Adding Device CA certificate to rendezvous"
+  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
+  log_info "Get the rendezvous Device CA certificates"
+  fingerprint=$(get_device_ca_certs ${rendezvous_url} | jq -r -M '.certs[0].fingerprint')
+
+  log_info "Deleting certificate with fingerprint '${fingerprint}'"
+  delete_device_ca_cert "${rendezvous_url}" "${fingerprint}"
+
+  log_info "Running FIDO Device Onboard (expected to fail again)"
+  ! run_fido_device_onboard "${guid}" --debug || log_error "Onboarding must fail!"
+  get_service_logs "rendezvous" | grep "cryptographic verification failed: x509: certificate signed by unknown authority" || log_error "Rendezvous didn't reject the ownership voucher!"
+
+  log_info "Adding Device CA certificate to rendezvous"
+  add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
   log_info "Running FIDO Device Onboard"
-  run_fido_device_onboard ${guid} --debug || log_error "Onboarding failed!"
+  run_fido_device_onboard "${guid}" --debug || log_error "Onboarding failed!"
 
   log_info "Unsetting the error trap handler"
   trap - EXIT
