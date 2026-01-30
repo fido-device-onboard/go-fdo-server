@@ -4,9 +4,11 @@
 package cmd
 
 import (
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,14 +16,17 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/mitchellh/mapstructure"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-// Log configuration
+// LogConfig Log configuration
 type LogConfig struct {
 	Level string `mapstructure:"level"`
 }
 
-// Configuration for the server's HTTP endpoint
+// HTTPConfig Configuration for the server's HTTP endpoint
 type HTTPConfig struct {
 	CertPath string `mapstructure:"cert"`
 	KeyPath  string `mapstructure:"key"`
@@ -29,13 +34,13 @@ type HTTPConfig struct {
 	Port     string `mapstructure:"port"`
 }
 
-// Device Certificate Authority
+// DeviceCAConfig Device Certificate Authority configuration
 type DeviceCAConfig struct {
 	CertPath string `mapstructure:"cert"` // path to certificate file
 	KeyPath  string `mapstructure:"key"`  // path to key file
 }
 
-// Structure to hold the common contents of the configuration file
+// FDOServerConfig Structure to hold the common contents of the configuration file
 type FDOServerConfig struct {
 	Log  LogConfig      `mapstructure:"log"`
 	DB   DatabaseConfig `mapstructure:"db"`
@@ -66,10 +71,49 @@ func (h *HTTPConfig) validate() error {
 	return nil
 }
 
-// Database configuration
+// DatabaseConfig represents the database configuration
 type DatabaseConfig struct {
 	Type string `mapstructure:"type"`
 	DSN  string `mapstructure:"dsn"`
+}
+
+func (dc *DatabaseConfig) getDB() (*gorm.DB, error) {
+	dsn := dc.DSN
+	dialect := strings.ToLower(dc.Type)
+	slog.Debug("Initializing database", "dialect", dialect)
+	if dsn == "" {
+		slog.Error("Database DSN is required but not provided")
+		return nil, errors.New("database configuration error: dsn is required")
+	}
+
+	var dialector gorm.Dialector
+	switch dialect {
+	case "sqlite":
+		dialector = sqlite.Open(dc.DSN)
+	case "postgres":
+		dialector = postgres.Open(dc.DSN)
+	default:
+		slog.Error("Unsupported database type", "type", dialect, "supported", []string{"sqlite", "postgres"})
+		return nil, fmt.Errorf("unsupported database type: %s (must be 'sqlite' or 'postgres')", dialect)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Enable foreign keys for SQLite
+	if dialect == "sqlite" {
+		var sqlDB *sql.DB
+		if sqlDB, err = db.DB(); err != nil {
+			slog.Error("failed to get database connection", "err", err)
+			return nil, err
+		}
+		if _, err := sqlDB.Exec("PRAGMA foreign_keys = ON"); err != nil {
+			slog.Warn("failed to enable foreign keys for sqlite", "err", err)
+		}
+	}
+	return db, nil
 }
 
 func (dc *DatabaseConfig) getState() (*db.State, error) {
