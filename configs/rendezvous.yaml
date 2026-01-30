@@ -13,3 +13,18 @@ http:
   # server's certificate, any intermediates, and the CA's certificate.
   ##cert: /etc/pki/go-fdo-server/rendezvous-https-example.crt
   ##key: /etc/pki/go-fdo-server/rendezvous-https-example.key
+rendezvous:
+  # Minimum wait time in seconds the rendezvous server will accept for TO0 rendezvous entries.
+  # If an owner server requests a wait time lower than this value during TO0,
+  # the request will be rejected.
+  # This prevents owner servers from setting very short wait times that could
+  # cause devices to miss their rendezvous window.
+  # Default: 0 (no minimum, all requests accepted)
+  ##to0_min_wait: 0
+
+  # Maximum wait time in seconds the rendezvous server will accept for TO0 rendezvous entries.
+  # If an owner server requests a wait time higher than this value during TO0,
+  # the request will be accepted but the wait time will be capped at this maximum.
+  # This prevents owner servers from registering rendezvous blobs for excessively long periods.
+  # Default: 86400 (24 hours)
+  ##to0_max_wait: 86400

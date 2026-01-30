@@ -20,8 +20,38 @@ import (
 	"github.com/spf13/viper"
 )
 
-// RendezvousConfig server configuration (TBD)
-type RendezvousConfig struct{}
+const (
+	// defaultMinWaitSecs Default minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected)
+	// Default: 0 (no minimum)
+	defaultMinWaitSecs uint32 = 0
+	// defaultMaxWaitSecs Default maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped)
+	// Default: 86400 (24h)
+	defaultMaxWaitSecs uint32 = 86400
+)
+
+// RendezvousConfig server configuration
+type RendezvousConfig struct {
+	// MinWaitSecs is the minimum time in seconds the rendezvous server will accept
+	// to maintain a rendezvous blob registered in the database.
+	// If an owner server requests a wait time lower than this value during TO0,
+	// the request will be rejected.
+	// Default: 0 (no minimum)
+	MinWaitSecs uint32 `mapstructure:"to0_min_wait"`
+
+	// MaxWaitSecs is the maximum time in seconds the rendezvous server will accept
+	// to maintain a rendezvous blob registered in the database.
+	// If an owner server requests a wait time higher than this value during TO0,
+	// the request will be accepted but capped at this maximum value.
+	// Default: 86400 (24h)
+	MaxWaitSecs uint32 `mapstructure:"to0_max_wait"`
+}
+
+func (rv *RendezvousConfig) validate() error {
+	if rv.MinWaitSecs > rv.MaxWaitSecs {
+		return fmt.Errorf("'to0_max_wait' (%d) must be greater or equal than 'to0_min_wait' (%d)", rv.MaxWaitSecs, rv.MinWaitSecs)
+	}
+	return nil
+}
 
 // RendezvousServerConfig server configuration file structure
 type RendezvousServerConfig struct {
@@ -31,9 +61,17 @@ type RendezvousServerConfig struct {
 
 // validate checks that required configuration is present
 func (rv *RendezvousServerConfig) validate() error {
+	slog.Debug("Validating rendezvous server configuration")
 	if err := rv.HTTP.validate(); err != nil {
+		slog.Error("HTTP configuration validation failed", "err", err)
 		return err
 	}
+	if err := rv.Rendezvous.validate(); err != nil {
+		slog.Error("rendezvous configuration validation failed", "err", err)
+		return err
+	}
+	slog.Debug("Rendezvous server configuration validated successfully")
+
 	return nil
 }
 
@@ -41,6 +79,22 @@ func (rv *RendezvousServerConfig) validate() error {
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		slog.Debug("Binding rendezvous command flags")
+		// Rebind only those keys needed by the rendezvous command. This is
+		// necessary because Viper cannot bind the same key twice and
+		// the other sub commands use the same keys.
+		if err := viper.BindPFlag("rendezvous.to0_min_wait", cmd.Flags().Lookup("to0-min-wait")); err != nil {
+			slog.Error("Failed to bind to0-min-wait flag", "err", err)
+			return err
+		}
+		if err := viper.BindPFlag("rendezvous.to0_max_wait", cmd.Flags().Lookup("to0-max-wait")); err != nil {
+			slog.Error("Failed to bind to0-max-wait flag", "err", err)
+			return err
+		}
+		slog.Debug("Flags bound successfully")
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var rvConfig RendezvousServerConfig
 		if err := viper.Unmarshal(&rvConfig); err != nil {
@@ -121,14 +175,25 @@ func (s *RendezvousServer) Start() error {
 }
 
 func serveRendezvous(config *RendezvousServerConfig) error {
-	dbState, err := config.DB.getState()
+	slog.Info("Initializing rendezvous server")
+
+	db, err := config.DB.getDB()
 	if err != nil {
-		return err
+		slog.Error("Failed to get a database connection", "err", err)
+		return fmt.Errorf("failed to get a database connection: %w", err)
 	}
 
-	rendezvous := rendezvous.NewRendezvous(dbState)
-	handler := rendezvous.Handler()
+	maxWaitSecs := config.Rendezvous.MaxWaitSecs
+	minWaitSecs := config.Rendezvous.MinWaitSecs
+	slog.Info("TO0 wait time limits configured", "minWaitSecs", minWaitSecs, "maxWaitSecs", maxWaitSecs)
 
+	rendezvous := rendezvous.NewRendezvous(db, minWaitSecs, maxWaitSecs)
+	if err = rendezvous.InitDB(); err != nil {
+		slog.Error("failed to initialize rendezvous database", "err", err)
+		return fmt.Errorf("failed to initialize rendezvous database: %w", err)
+	}
+	slog.Info("Database initialized successfully", "type", config.DB.Type)
+	handler := rendezvous.Handler()
 	// Listen and serve
 	server := NewRendezvousServer(config.HTTP, handler)
 
@@ -139,6 +204,10 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
+	rendezvousCmd.Flags().Uint32("to0-min-wait", defaultMinWaitSecs, "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)")
+	rendezvousCmd.Flags().Uint32("to0-max-wait", defaultMaxWaitSecs, fmt.Sprintf("Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)", defaultMaxWaitSecs))
+	viper.SetDefault("rendezvous.to0_min_wait", defaultMinWaitSecs)
+	viper.SetDefault("rendezvous.to0_max_wait", defaultMaxWaitSecs)
 }
 
 func init() {
