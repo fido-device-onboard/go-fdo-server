@@ -410,7 +410,7 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 						srcPath = filepath.Join(op.DownloadParams.Dir, file.Src)
 					}
 
-					f, err := os.Open(srcPath)
+					f, err := os.Open(srcPath) //#nosec G304 //nolint:gosec -- srcPath from service config
 					if err != nil {
 						slog.Error("error opening file for download FSIM", "path", srcPath, "err", err)
 						continue

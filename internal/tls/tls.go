@@ -26,7 +26,7 @@ func TlsTransport(baseURL string, conf *tls.Config, insecureTLS bool) fdo.Transp
 	if conf == nil {
 		conf = &tls.Config{
 			CipherSuites:       preferredCipherSuites,
-			InsecureSkipVerify: insecureTLS, //nolint:gosec
+			InsecureSkipVerify: insecureTLS, //#nosec G402 //nolint:gosec -- CLI flag for testing with self-signed certs
 		}
 	}
 
