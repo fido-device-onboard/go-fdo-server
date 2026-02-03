@@ -453,7 +453,7 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 						}
 						rename = filepath.Base(file.Dst)
 					}
-					if err = os.MkdirAll(uploadDir, 0o755); err != nil {
+					if err = os.MkdirAll(uploadDir, 0o750); err != nil {
 						slog.Error("fdo.upload: failed to create device upload directory", "dir", uploadDir, "err", err)
 						continue
 					}
