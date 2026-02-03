@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding"
 	"fmt"
+	"math"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo/cbor"
@@ -334,6 +335,11 @@ func (s *State) MTU(ctx context.Context) (uint16, error) {
 
 	if to2Session.MTU == nil {
 		return 0, fdo.ErrNotFound
+	}
+
+	// Validate MTU is within uint16 range before conversion
+	if *to2Session.MTU < 0 || *to2Session.MTU > math.MaxUint16 {
+		return 0, fmt.Errorf("MTU value out of valid range (0-%d): %d", math.MaxUint16, *to2Session.MTU)
 	}
 
 	return uint16(*to2Session.MTU), nil
