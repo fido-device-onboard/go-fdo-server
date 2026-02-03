@@ -145,7 +145,7 @@ func init() {
 }
 
 func parsePrivateKey(keyPath string) (crypto.Signer, error) {
-	b, err := os.ReadFile(keyPath)
+	b, err := os.ReadFile(keyPath) //#nosec G304 //nolint:gosec -- keyPath from CLI flag
 	if err != nil {
 		return nil, err
 	}
