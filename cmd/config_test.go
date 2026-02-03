@@ -903,7 +903,7 @@ func TestOwner_FSIMConfigFromTOML(t *testing.T) {
 	dir := t.TempDir()
 	// Create a subdirectory to test relative paths
 	subdir := filepath.Join(dir, "files")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
+	if err := os.Mkdir(subdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	// file1 will be accessed via relative path
@@ -1128,7 +1128,7 @@ func TestOwner_FSIMConfigFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	// Create a subdirectory to test relative paths
 	subdir := filepath.Join(dir, "data")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
+	if err := os.Mkdir(subdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	// file1 will be accessed via relative path
