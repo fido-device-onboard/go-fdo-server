@@ -9,7 +9,6 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -59,9 +58,7 @@ func GetVoucherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(vouchers); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	encodeJSONResponse(w, vouchers)
 }
 
 // GetVoucherByGUIDHandler returns a PEM-encoded voucher by path GUID.

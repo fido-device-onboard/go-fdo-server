@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -45,9 +44,5 @@ func OwnerDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(devices); err != nil {
-		slog.Error("Error encoding devices response", "err", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	encodeJSONResponse(w, devices)
 }
