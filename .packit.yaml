@@ -98,6 +98,7 @@ jobs:
      - "fedora-eln-aarch64"
 
   # Only Fedora >= 43 have golang >= 1.25.0
+  # https://packit.dev/docs/configuration/upstream/propose_downstream
   - job: propose_downstream
     trigger: release
     packages: [go-fdo-server-fedora]
@@ -169,6 +170,13 @@ jobs:
       - "epel-9-aarch64"
       - "epel-10-x86"
       - "epel-10-aarch64"
+
+  # https://packit.dev/docs/configuration/upstream/propose_downstream#syncing-the-release-to-centos-stream
+  - job: propose_downstream
+    trigger: release
+    packages: [go-fdo-server-centos]
+    dist_git_branches:
+      - "c10s"
 
   # CentOS E2E Testing jobs
   #
