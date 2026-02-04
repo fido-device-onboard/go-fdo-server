@@ -45,7 +45,7 @@ func getRvInfo(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(rvInfoJSON)
+	writeResponse(w, rvInfoJSON)
 }
 
 func createRvInfo(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +76,7 @@ func createRvInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(rvInfo)
+	writeResponse(w, rvInfo)
 }
 
 func updateRvInfo(w http.ResponseWriter, r *http.Request) {
@@ -106,5 +106,5 @@ func updateRvInfo(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("rvInfo updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(rvInfo)
+	writeResponse(w, rvInfo)
 }

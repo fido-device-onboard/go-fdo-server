@@ -43,7 +43,7 @@ func getOwnerInfo(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(ownerInfoJSON)
+	writeResponse(w, ownerInfoJSON)
 }
 
 func createOwnerInfo(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func createOwnerInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(ownerInfo)
+	writeResponse(w, ownerInfo)
 }
 
 func updateOwnerInfo(w http.ResponseWriter, r *http.Request) {
@@ -104,5 +104,5 @@ func updateOwnerInfo(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("ownerInfo updated")
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(ownerInfo)
+	writeResponse(w, ownerInfo)
 }
