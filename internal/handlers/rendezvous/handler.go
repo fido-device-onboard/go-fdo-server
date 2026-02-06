@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
@@ -42,6 +43,77 @@ func (r *Rendezvous) InitDB() error {
 	slog.Debug("Trusted device CA certificates loaded")
 	r.State = state
 	return nil
+}
+
+// StartPeriodicCleanup starts background cleanup tasks for expired rendezvous blobs and sessions
+// The cleanup runs at the specified interval until the context is canceled
+func (r *Rendezvous) StartPeriodicCleanup(ctx context.Context, cleanupInterval, sessionMaxAge, initialDelay time.Duration) {
+	if cleanupInterval == 0 {
+		slog.Info("Periodic cleanup is disabled")
+		return
+	}
+
+	slog.Info("Starting periodic cleanup",
+		"cleanupInterval", cleanupInterval,
+		"sessionMaxAge", sessionMaxAge,
+		"initialDelay", initialDelay)
+
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+
+	// Wait for initial delay before first cleanup
+	select {
+	case <-ctx.Done():
+		slog.Info("Stopping periodic cleanup before initial run")
+		return
+	case <-time.After(initialDelay):
+		r.runCleanup(ctx, sessionMaxAge)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("Stopping periodic cleanup")
+			return
+		case <-ticker.C:
+			r.runCleanup(ctx, sessionMaxAge)
+		}
+	}
+}
+
+// runCleanup executes all cleanup tasks
+func (r *Rendezvous) runCleanup(ctx context.Context, sessionMaxAge time.Duration) {
+	startTime := time.Now()
+	var blobCount, sessionCount int64
+	var errors []error
+
+	// Cleanup expired rendezvous blobs
+	count, err := r.State.RVBlob.CleanupExpiredBlobs(ctx)
+	if err != nil {
+		slog.Error("Failed to cleanup expired rendezvous blobs", "err", err)
+		errors = append(errors, err)
+	} else {
+		blobCount = count
+	}
+
+	// Cleanup expired sessions
+	count, err = r.State.Token.CleanupExpiredSessions(ctx, sessionMaxAge)
+	if err != nil {
+		slog.Error("Failed to cleanup expired sessions", "err", err)
+		errors = append(errors, err)
+	} else {
+		sessionCount = count
+	}
+
+	duration := time.Since(startTime)
+	totalDeleted := blobCount + sessionCount
+
+	slog.Info("Cleanup completed",
+		"duration_ms", duration.Milliseconds(),
+		"blobs_deleted", blobCount,
+		"sessions_deleted", sessionCount,
+		"total_deleted", totalDeleted,
+		"errors", len(errors))
 }
 
 func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
