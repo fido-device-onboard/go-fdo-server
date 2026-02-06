@@ -318,7 +318,10 @@ For the example above the first download will be saved to `/tmp/app.rpm`, the se
 
 The rendezvous server configuration is under the `[rendezvous]` section:
 
-No specific configuration options are required for the rendezvous server beyond the common HTTP and database configurations.
+| Key | Type | Description | Default |
+|-----|------|-------------|---------|
+| `to0_min_wait` | integer | Minimum wait time in seconds for TO0 rendezvous entries. Requests below this value are rejected. Set to 0 for no minimum. | 0 |
+| `to0_max_wait` | integer | Maximum wait time in seconds for TO0 rendezvous entries. Requests above this value are accepted but capped at this maximum. This prevents owner servers from registering rendezvous blobs for excessively long periods. | 86400 (24 hours) |
 
 ## Configuration File Examples
 
@@ -424,6 +427,9 @@ type = "sqlite"
 dsn = "file:rendezvous.db"
 
 [rendezvous]
+# TO0 wait time limits
+to0_min_wait = 0        # No minimum (default)
+to0_max_wait = 86400    # 24 hours (default)
 ```
 
 ### YAML Configuration Example
@@ -503,6 +509,28 @@ owner:
           files:
             - url: "https://example.com/package.tar.gz"
               dst: "package.tar.gz"
+```
+
+### Rendezvous Server Configuration (YAML)
+
+```yaml
+log:
+  level: "debug"
+
+http:
+  ip: "127.0.0.1"
+  port: "8041"
+  cert: "/path/to/rendezvous.crt"
+  key: "/path/to/rendezvous.key"
+
+db:
+  type: "sqlite"
+  dsn: "file:rendezvous.db"
+
+rendezvous:
+  # TO0 wait time limits
+  to0_min_wait: 0        # No minimum (default)
+  to0_max_wait: 86400    # 24 hours (default)
 ```
 
 ## Notes

@@ -253,7 +253,11 @@ func serveOwner(config *OwnerServerConfig) error {
 	apiRouter.HandleFunc("/owner/redirect", handlers.OwnerInfoHandler)
 	apiRouter.Handle("POST /owner/resell/{guid}", handlers.ResellHandler(to2Server))
 	apiRouter.Handle("GET /owner/devices", http.HandlerFunc(handlers.OwnerDevicesHandler))
-	httpHandler := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
+	httpHandler, err := api.NewHTTPHandler(handler, state.DB).RegisterRoutes(apiRouter)
+	if err != nil {
+		slog.Error("failed to register routes", "err", err)
+		return err
+	}
 
 	// Listen and serve
 	server := NewOwnerServer(config.HTTP, httpHandler)
@@ -546,7 +550,6 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 				}
 			}
 		}
-
 	}
 }
 
