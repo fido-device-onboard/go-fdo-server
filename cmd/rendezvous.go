@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,8 +21,57 @@ import (
 	"github.com/spf13/viper"
 )
 
-// RendezvousConfig server configuration (TBD)
-type RendezvousConfig struct{}
+const (
+	// defaultMinWaitSecs Default minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected)
+	// Default: 0 (no minimum)
+	defaultMinWaitSecs uint32 = 0
+	// defaultMaxWaitSecs Default maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped)
+	// Default: 86400 (24h)
+	defaultMaxWaitSecs uint32 = 86400
+)
+
+// defaultCleanupIntervalSecs Default interval in seconds for cleaning up expired rendezvous blobs and sessions
+var defaultCleanupIntervalSecs uint32 = 3600 // 1 hour
+
+// defaultSessionMaxAgeSecs Default maximum age in seconds for sessions before cleanup
+var defaultSessionMaxAgeSecs uint32 = 3600 // 1 hour
+
+// defaultInitialCleanupDelaySecs Default delay before first cleanup after startup
+var defaultInitialCleanupDelaySecs uint32 = 300 // 5 minutes
+
+// RendezvousConfig server configuration
+type RendezvousConfig struct {
+	// MinWaitSecs is the minimum time in seconds the rendezvous server will accept
+	// to maintain a rendezvous blob registered in the database.
+	// If an owner server requests a wait time lower than this value during TO0,
+	// the request will be rejected.
+	// Default: 0 (no minimum)
+	MinWaitSecs uint32 `mapstructure:"to0_min_wait"`
+
+	// MaxWaitSecs is the maximum time in seconds the rendezvous server will accept
+	// to maintain a rendezvous blob registered in the database.
+	// If an owner server requests a wait time higher than this value during TO0,
+	// the request will be accepted but capped at this maximum value.
+	// Default: 86400 (24h)
+	MaxWaitSecs uint32 `mapstructure:"to0_max_wait"`
+
+	// CleanupIntervalSecs is the interval in seconds at which the server will
+	// automatically cleanup expired rendezvous blobs and old sessions from the database.
+	// Set to 0 to disable automatic cleanup.
+	// Default: 3600 (1 hour)
+	CleanupIntervalSecs uint32 `mapstructure:"cleanup_interval"`
+
+	// SessionMaxAgeSecs is the maximum age in seconds for sessions before they are
+	// considered expired and cleaned up. Sessions older than this will be deleted
+	// along with their associated TO0/TO1 session data.
+	// Default: 3600 (1 hour)
+	SessionMaxAgeSecs uint32 `mapstructure:"session_timeout"`
+
+	// InitialCleanupDelaySecs is the delay in seconds before the first cleanup runs after startup.
+	// This prevents startup spikes when restarting servers with large amounts of expired data.
+	// Default: 300 (5 minutes)
+	InitialCleanupDelaySecs uint32 `mapstructure:"initial_cleanup_delay"`
+}
 
 // RendezvousServerConfig server configuration file structure
 type RendezvousServerConfig struct {
@@ -31,9 +81,13 @@ type RendezvousServerConfig struct {
 
 // validate checks that required configuration is present
 func (rv *RendezvousServerConfig) validate() error {
+	slog.Debug("Validating HTTP configuration")
 	if err := rv.HTTP.validate(); err != nil {
+		slog.Error("HTTP configuration validation failed", "err", err)
 		return err
 	}
+	slog.Debug("HTTP configuration valid")
+
 	return nil
 }
 
@@ -41,6 +95,34 @@ func (rv *RendezvousServerConfig) validate() error {
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
 	Short: "Serve an instance of the rendezvous server",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		slog.Debug("Binding rendezvous command flags")
+		// Rebind only those keys needed by the rendezvous command. This is
+		// necessary because Viper cannot bind the same key twice and
+		// the other sub commands use the same keys.
+		if err := viper.BindPFlag("rendezvous.to0_min_wait", cmd.Flags().Lookup("to0-min-wait")); err != nil {
+			slog.Error("Failed to bind to0-min-wait flag", "err", err)
+			return err
+		}
+		if err := viper.BindPFlag("rendezvous.to0_max_wait", cmd.Flags().Lookup("to0-max-wait")); err != nil {
+			slog.Error("Failed to bind to0-max-wait flag", "err", err)
+			return err
+		}
+		if err := viper.BindPFlag("rendezvous.cleanup_interval", cmd.Flags().Lookup("cleanup-interval")); err != nil {
+			slog.Error("Failed to bind cleanup-interval flag", "err", err)
+			return err
+		}
+		if err := viper.BindPFlag("rendezvous.session_timeout", cmd.Flags().Lookup("session-timeout")); err != nil {
+			slog.Error("Failed to bind session-timeout flag", "err", err)
+			return err
+		}
+		if err := viper.BindPFlag("rendezvous.initial_cleanup_delay", cmd.Flags().Lookup("initial-cleanup-delay")); err != nil {
+			slog.Error("Failed to bind initial-cleanup-delay flag", "err", err)
+			return err
+		}
+		slog.Debug("Flags bound successfully")
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var rvConfig RendezvousServerConfig
 		if err := viper.Unmarshal(&rvConfig); err != nil {
@@ -121,24 +203,89 @@ func (s *RendezvousServer) Start() error {
 }
 
 func serveRendezvous(config *RendezvousServerConfig) error {
-	dbState, err := config.DB.getState()
+	slog.Info("Initializing rendezvous server")
+
+	db, err := config.DB.getDB()
 	if err != nil {
-		return err
+		slog.Error("Failed to get a database connection", "err", err)
+		return fmt.Errorf("failed to get a database connection: %w", err)
 	}
 
-	rendezvous := rendezvous.NewRendezvous(dbState)
-	handler := rendezvous.Handler()
+	maxWaitSecs := config.Rendezvous.MaxWaitSecs
+	minWaitSecs := config.Rendezvous.MinWaitSecs
+	slog.Info("TO0 wait time limits configured", "minWaitSecs", minWaitSecs, "maxWaitSecs", maxWaitSecs)
 
+	rendezvous := rendezvous.NewRendezvous(db, minWaitSecs, maxWaitSecs)
+	if err = rendezvous.InitDB(); err != nil {
+		slog.Error("failed to initialize rendezvous database", "err", err)
+		return fmt.Errorf("failed to initialize rendezvous database: %w", err)
+	}
+
+	// Set up cleanup configuration
+	var cleanupIntervalSecs uint32
+	if viper.IsSet("rendezvous.cleanup_interval") {
+		cleanupIntervalSecs = config.Rendezvous.CleanupIntervalSecs
+	} else {
+		cleanupIntervalSecs = defaultCleanupIntervalSecs
+	}
+
+	var sessionMaxAgeSecs uint32
+	if viper.IsSet("rendezvous.session_timeout") {
+		sessionMaxAgeSecs = config.Rendezvous.SessionMaxAgeSecs
+	} else {
+		sessionMaxAgeSecs = defaultSessionMaxAgeSecs
+	}
+
+	var initialCleanupDelaySecs uint32
+	if viper.IsSet("rendezvous.initial_cleanup_delay") {
+		initialCleanupDelaySecs = config.Rendezvous.InitialCleanupDelaySecs
+	} else {
+		initialCleanupDelaySecs = defaultInitialCleanupDelaySecs
+	}
+
+	// Start background cleanup (if enabled)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var cleanupWg sync.WaitGroup
+	cleanupWg.Add(1)
+	go func() {
+		defer cleanupWg.Done()
+		rendezvous.StartPeriodicCleanup(ctx,
+			time.Duration(cleanupIntervalSecs)*time.Second,
+			time.Duration(sessionMaxAgeSecs)*time.Second,
+			time.Duration(initialCleanupDelaySecs)*time.Second)
+	}()
+
+	handler := rendezvous.Handler()
 	// Listen and serve
 	server := NewRendezvousServer(config.HTTP, handler)
 
 	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
-	return server.Start()
+	err = server.Start()
+
+	// Signal shutdown and wait for cleanup to finish
+	cancel()
+	slog.Info("Waiting for cleanup to finish...")
+	cleanupWg.Wait()
+	slog.Info("Cleanup finished, server shutdown complete")
+
+	return err
 }
 
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
+	rendezvousCmd.Flags().Uint32("to0-min-wait", defaultMinWaitSecs, "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)")
+	rendezvousCmd.Flags().Uint32("to0-max-wait", defaultMaxWaitSecs, fmt.Sprintf("Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)", defaultMaxWaitSecs))
+	rendezvousCmd.Flags().Uint32("cleanup-interval", defaultCleanupIntervalSecs, fmt.Sprintf("Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions (set to 0 to disable, default: %d seconds)", defaultCleanupIntervalSecs))
+	rendezvousCmd.Flags().Uint32("session-timeout", defaultSessionMaxAgeSecs, fmt.Sprintf("Maximum age in seconds for sessions before cleanup (default: %d seconds)", defaultSessionMaxAgeSecs))
+	rendezvousCmd.Flags().Uint32("initial-cleanup-delay", defaultInitialCleanupDelaySecs, fmt.Sprintf("Delay in seconds before first cleanup after startup (default: %d seconds)", defaultInitialCleanupDelaySecs))
+	viper.SetDefault("rendezvous.to0_min_wait", defaultMinWaitSecs)
+	viper.SetDefault("rendezvous.to0_max_wait", defaultMaxWaitSecs)
+	viper.SetDefault("rendezvous.cleanup_interval", defaultCleanupIntervalSecs)
+	viper.SetDefault("rendezvous.session_timeout", defaultSessionMaxAgeSecs)
+	viper.SetDefault("rendezvous.initial_cleanup_delay", defaultInitialCleanupDelaySecs)
 }
 
 func init() {

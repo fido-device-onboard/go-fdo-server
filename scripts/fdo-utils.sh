@@ -111,3 +111,28 @@ resell() {
   }
   curl --fail --verbose --silent --insecure "${owner_url}/api/v1/owner/resell/${guid}" --data-binary @"${new_owner_pubkey}" -o "${output}"
 }
+
+get_device_ca_certs() {
+  local url=$1
+  curl --fail --verbose --silent --insecure \
+    --request GET \
+    "${url}/api/v1/device-ca"
+}
+
+add_device_ca_cert() {
+  local url=$1
+  local crt=$2
+  curl --fail --verbose --silent --insecure \
+    --request POST \
+    --header 'Content-Type: application/x-pem-file' \
+    --data-binary @"${crt}" \
+    "${url}/api/v1/device-ca"
+}
+
+delete_device_ca_cert() {
+  local url=$1
+  local fingerprint=$2
+  curl --fail --verbose --silent --insecure \
+    --request DELETE --header 'Content-Type: application/x-pem-file' \
+    "${url}/api/v1/device-ca/${fingerprint}"
+}

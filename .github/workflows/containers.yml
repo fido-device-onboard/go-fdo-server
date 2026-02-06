@@ -250,3 +250,63 @@ jobs:
         run: |
           source test/container/test-onboarding-config.sh
           cleanup
+
+  test-container-device-ca-api:
+    name: Test Device CA API
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test Device CA API
+        run: |
+          source test/container/test-device-ca-api.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
+        run: |
+          source test/container/test-device-ca-api.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/container/test-device-ca-api.sh
+          cleanup
+
+  test-container-device-ca-rendezvous-trust:
+    name: Test Device CA rendezvous trust verification
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test Device CA rendezvous trust verification
+        run: |
+          source test/container/test-device-ca-rendezvous-trust.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
+        run: |
+          source test/container/test-device-ca-rendezvous-trust.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/container/test-device-ca-rendezvous-trust.sh
+          cleanup
