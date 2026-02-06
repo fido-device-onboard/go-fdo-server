@@ -22,7 +22,7 @@ type TO1SessionState struct {
 
 // TO1Session stores TO1 session state
 type TO1Session struct {
-	Session []byte `gorm:"primaryKey"`
+	Session []byte `gorm:"primaryKey;constraint:OnDelete:CASCADE"`
 	Nonce   []byte
 	Alg     *int `gorm:"type:integer"`
 }
@@ -41,6 +41,9 @@ func InitTO1SessionDB(db *gorm.DB) (*TO1SessionState, error) {
 		Token: tokenServiceState,
 		DB:    db,
 	}
+	// Auto-migrate all schemas
+	// GORM will automatically create the foreign key constraint with CASCADE DELETE
+	// based on the constraint tag in the TO1Session model
 	err = state.DB.AutoMigrate(
 		&TO1Session{},
 	)
@@ -48,6 +51,7 @@ func InitTO1SessionDB(db *gorm.DB) (*TO1SessionState, error) {
 		slog.Error("Failed to migrate database schema", "error", err)
 		return nil, err
 	}
+
 	slog.Debug("TO1 Session database initialized successfully")
 	return state, nil
 }
