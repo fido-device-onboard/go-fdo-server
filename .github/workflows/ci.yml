@@ -380,3 +380,32 @@ jobs:
         run: |
           source test/ci/test-device-ca-rendezvous-trust.sh
           cleanup
+
+  test-rv-bypass:
+    name: Test RV bypass (direct device to owner)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test RV bypass
+        run: |
+          source test/ci/test-rv-bypass.sh
+          run_test
+
+      - name: Get manufacturer and owner server logs
+        if: always()
+        run: |
+          source test/ci/test-rv-bypass.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-rv-bypass.sh
+          cleanup
