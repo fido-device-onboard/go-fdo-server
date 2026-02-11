@@ -108,3 +108,16 @@ func (s RendezvousBlobPersistentState) RVBlob(ctx context.Context, guid protocol
 
 	return &to1d, &voucher, nil
 }
+
+// CleanupExpiredBlobs deletes all rendezvous blobs that have expired
+// Returns the number of deleted blobs and any error encountered
+func (s RendezvousBlobPersistentState) CleanupExpiredBlobs(ctx context.Context) (int64, error) {
+	result := s.DB.WithContext(ctx).Where("exp < ?", time.Now()).Delete(&RvBlob{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to cleanup expired rv blobs: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
+		slog.Debug("Cleaned up expired rendezvous blobs", "count", result.RowsAffected)
+	}
+	return result.RowsAffected, nil
+}
