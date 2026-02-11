@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -103,6 +104,48 @@ func (rv *RendezvousServerConfig) validate() error {
 	return nil
 }
 
+// rendezvousFlagConfig defines a single flag's metadata
+type rendezvousFlagConfig struct {
+	name         string // CLI flag name (e.g., "cleanup-interval")
+	viperKey     string // Viper config key (e.g., "rendezvous.cleanup_interval")
+	defaultValue uint32 // Default value
+	description  string // Help text
+}
+
+// rendezvousFlags defines all rendezvous command flags in one place
+var rendezvousFlags = []rendezvousFlagConfig{
+	{
+		name:         "to0-min-wait",
+		viperKey:     "rendezvous.to0_min_wait",
+		defaultValue: defaultMinWaitSecs,
+		description:  "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)",
+	},
+	{
+		name:         "to0-max-wait",
+		viperKey:     "rendezvous.to0_max_wait",
+		defaultValue: defaultMaxWaitSecs,
+		description:  "Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)",
+	},
+	{
+		name:         "cleanup-interval",
+		viperKey:     "rendezvous.cleanup_interval",
+		defaultValue: defaultCleanupIntervalSecs,
+		description:  "Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions (set to 0 to disable, default: %d seconds)",
+	},
+	{
+		name:         "session-timeout",
+		viperKey:     "rendezvous.session_timeout",
+		defaultValue: defaultSessionMaxAgeSecs,
+		description:  "Maximum age in seconds for sessions before cleanup (default: %d seconds)",
+	},
+	{
+		name:         "initial-cleanup-delay",
+		viperKey:     "rendezvous.initial_cleanup_delay",
+		defaultValue: defaultInitialCleanupDelaySecs,
+		description:  "Delay in seconds before first cleanup after startup (default: %d seconds)",
+	},
+}
+
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
 	Use:   "rendezvous http_address",
@@ -112,25 +155,11 @@ var rendezvousCmd = &cobra.Command{
 		// Rebind only those keys needed by the rendezvous command. This is
 		// necessary because Viper cannot bind the same key twice and
 		// the other sub commands use the same keys.
-		if err := viper.BindPFlag("rendezvous.to0_min_wait", cmd.Flags().Lookup("to0-min-wait")); err != nil {
-			slog.Error("Failed to bind to0-min-wait flag", "err", err)
-			return err
-		}
-		if err := viper.BindPFlag("rendezvous.to0_max_wait", cmd.Flags().Lookup("to0-max-wait")); err != nil {
-			slog.Error("Failed to bind to0-max-wait flag", "err", err)
-			return err
-		}
-		if err := viper.BindPFlag("rendezvous.cleanup_interval", cmd.Flags().Lookup("cleanup-interval")); err != nil {
-			slog.Error("Failed to bind cleanup-interval flag", "err", err)
-			return err
-		}
-		if err := viper.BindPFlag("rendezvous.session_timeout", cmd.Flags().Lookup("session-timeout")); err != nil {
-			slog.Error("Failed to bind session-timeout flag", "err", err)
-			return err
-		}
-		if err := viper.BindPFlag("rendezvous.initial_cleanup_delay", cmd.Flags().Lookup("initial-cleanup-delay")); err != nil {
-			slog.Error("Failed to bind initial-cleanup-delay flag", "err", err)
-			return err
+		for _, flag := range rendezvousFlags {
+			if err := viper.BindPFlag(flag.viperKey, cmd.Flags().Lookup(flag.name)); err != nil {
+				slog.Error("Failed to bind flag", "flag", flag.name, "err", err)
+				return fmt.Errorf("failed to bind %s flag: %w", flag.name, err)
+			}
 		}
 		slog.Debug("Flags bound successfully")
 		return nil
@@ -267,16 +296,21 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
-	rendezvousCmd.Flags().Uint32("to0-min-wait", defaultMinWaitSecs, "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)")
-	rendezvousCmd.Flags().Uint32("to0-max-wait", defaultMaxWaitSecs, fmt.Sprintf("Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)", defaultMaxWaitSecs))
-	rendezvousCmd.Flags().Uint32("cleanup-interval", defaultCleanupIntervalSecs, fmt.Sprintf("Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions (set to 0 to disable, default: %d seconds)", defaultCleanupIntervalSecs))
-	rendezvousCmd.Flags().Uint32("session-timeout", defaultSessionMaxAgeSecs, fmt.Sprintf("Maximum age in seconds for sessions before cleanup (default: %d seconds)", defaultSessionMaxAgeSecs))
-	rendezvousCmd.Flags().Uint32("initial-cleanup-delay", defaultInitialCleanupDelaySecs, fmt.Sprintf("Delay in seconds before first cleanup after startup (default: %d seconds)", defaultInitialCleanupDelaySecs))
-	viper.SetDefault("rendezvous.to0_min_wait", defaultMinWaitSecs)
-	viper.SetDefault("rendezvous.to0_max_wait", defaultMaxWaitSecs)
-	viper.SetDefault("rendezvous.cleanup_interval", defaultCleanupIntervalSecs)
-	viper.SetDefault("rendezvous.session_timeout", defaultSessionMaxAgeSecs)
-	viper.SetDefault("rendezvous.initial_cleanup_delay", defaultInitialCleanupDelaySecs)
+
+	// Register all flags and set viper defaults in a single loop
+	for _, flag := range rendezvousFlags {
+		// Format description with default value if it contains %d
+		description := flag.description
+		if strings.Contains(description, "%d") {
+			description = fmt.Sprintf(description, flag.defaultValue)
+		}
+
+		// Register the flag
+		rendezvousCmd.Flags().Uint32(flag.name, flag.defaultValue, description)
+
+		// Set viper default
+		viper.SetDefault(flag.viperKey, flag.defaultValue)
+	}
 }
 
 func init() {
