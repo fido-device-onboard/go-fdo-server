@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo"
@@ -22,9 +23,10 @@ type TO1SessionState struct {
 
 // TO1Session stores TO1 session state
 type TO1Session struct {
-	Session []byte `gorm:"primaryKey"`
-	Nonce   []byte
-	Alg     *int `gorm:"type:integer"`
+	Session    []byte `gorm:"primaryKey"`
+	Nonce      []byte
+	Alg        *int     `gorm:"type:integer"`
+	SessionRef *Session `gorm:"foreignKey:Session;references:ID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName specifies the table name for TO1Session model
@@ -41,6 +43,7 @@ func InitTO1SessionDB(db *gorm.DB) (*TO1SessionState, error) {
 		Token: tokenServiceState,
 		DB:    db,
 	}
+	// Auto-migrate all schemas
 	err = state.DB.AutoMigrate(
 		&TO1Session{},
 	)
@@ -48,6 +51,17 @@ func InitTO1SessionDB(db *gorm.DB) (*TO1SessionState, error) {
 		slog.Error("Failed to migrate database schema", "error", err)
 		return nil, err
 	}
+
+	// Explicitly create the foreign key constraint using GORM's Migrator
+	// This ensures CASCADE DELETE works properly to prevent orphaned sessions
+	if !state.DB.Migrator().HasConstraint(&TO1Session{}, "SessionRef") {
+		if err := state.DB.Migrator().CreateConstraint(&TO1Session{}, "SessionRef"); err != nil {
+			slog.Error("Failed to create foreign key constraint for TO1 sessions", "error", err)
+			return nil, fmt.Errorf("failed to create CASCADE DELETE constraint: %w", err)
+		}
+		slog.Debug("Created foreign key constraint for TO1 sessions")
+	}
+
 	slog.Debug("TO1 Session database initialized successfully")
 	return state, nil
 }
