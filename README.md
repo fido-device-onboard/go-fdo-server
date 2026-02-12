@@ -48,7 +48,9 @@ openssl req -x509 -key /tmp/fdo/keys/owner_key.der -keyform der -out /tmp/fdo/ke
 
 ```
 
-Start the services in three terminals (or background them). Use distinct databases under `/tmp/fdo/db` and a strong DB passphrase.
+**Note**: Certificates are NOT auto-generated. For single-host testing with RPM-based installations, a helper script is provided (location may vary by distribution). For production deployments and detailed certificate setup information, see [CERTIFICATE_SETUP.md](CERTIFICATE_SETUP.md).
+
+Start the services in three terminals (or background them). Use distinct databases under /tmp/fdo/db and a strong DB passphrase.
 
 ```bash
 mkdir -p /tmp/fdo/db /tmp/fdo/keys /tmp/fdo/ov

@@ -10,7 +10,6 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"iter"
 	"log/slog"
@@ -60,11 +59,13 @@ func (o *OwnerServerConfig) validate() error {
 	if err := o.HTTP.validate(); err != nil {
 		return err
 	}
-	if o.Owner.OwnerPrivateKey == "" {
-		return errors.New("an owner private key file is required")
+	// Validate owner private key exists
+	if err := validateCertFile(o.Owner.OwnerPrivateKey, "owner private key", ""); err != nil {
+		return err
 	}
-	if o.DeviceCA.CertPath == "" {
-		return errors.New("a device CA certificate file is required")
+	// Validate device CA certificate exists
+	if err := validateCertFile(o.DeviceCA.CertPath, "device CA certificate", "this certificate must be shared with the manufacturer server"); err != nil {
+		return err
 	}
 
 	// Validate ServiceInfo configuration.
