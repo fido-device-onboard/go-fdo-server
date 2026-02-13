@@ -102,10 +102,7 @@ jobs:
   - job: propose_downstream
     trigger: release
     packages: [go-fdo-server-fedora]
-    # Avoid divergent branches: https://packit.dev/docs/fedora-releases-guide/non-divergent-dist-git-branches
-    dist_git_branches:
-      rawhide:
-        fast_forward_merge_into: ["fedora-latest-stable","fedora-latest"]
+    dist_git_branches: ["fedora-development", "fedora-latest-stable"]
 
   - job: koji_build
     trigger: commit
