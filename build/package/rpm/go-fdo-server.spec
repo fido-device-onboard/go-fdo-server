@@ -89,7 +89,7 @@ install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libex
 
 %files
 %license LICENSE vendor/modules.txt
-%doc DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
+%doc CERTIFICATE_SETUP.md CONFIG.md DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
 %{_bindir}/go-fdo-server
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/%{name}
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/pki/%{name}
@@ -97,20 +97,9 @@ install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libex
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/cert-utils.sh
 %{_libexecdir}/%{name}/generate-go-fdo-server-certs.sh
-# Systemd unit
-%{_unitdir}/go-fdo-server-init.service
 
 %pre
 %sysusers_create_compat %{SOURCE2}
-
-%post
-%systemd_post go-fdo-server-init.service
-
-%preun
-%systemd_preun go-fdo-server-init.service
-
-%postun
-%systemd_postun_with_restart go-fdo-server-init.service
 
 %package manufacturer
 Requires: go-fdo-server
