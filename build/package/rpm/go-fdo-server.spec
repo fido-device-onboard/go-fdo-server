@@ -13,7 +13,7 @@
 %global debug_package %{nil}
 %endif
 
-Version:        0.0.5
+Version:        1.0.0
 
 %gometa -L -f
 
