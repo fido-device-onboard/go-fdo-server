@@ -1,0 +1,58 @@
+openapi: 3.0.0
+info:
+  title: FDO Owner Server API
+  version: 0.0.1
+  description: |
+    API for the FDO Owner Server role. The Owner Server is responsible for managing
+    device ownership, including ownership vouchers, trusted device CA certificates,
+    and rendezvous TO2 addresses for device onboarding.
+
+    This specification aggregates the following management APIs:
+    - Ownership Voucher Management (/vouchers)
+    - Trusted Device CA Certificates (/device-ca)
+    - RVTO2 Address Configuration (/rvto2addr)
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: health
+    description: Server's health monitoring
+  - name: device-ca
+    description: Operations related to trusted device CA certificates management
+  - name: rvto2addr
+    description: Operations related to rendezvous TO2 address management
+  - name: voucher
+    description: Operations related to ownership voucher management
+paths:
+  /health:
+    $ref: 'health.yaml#/paths/~1health'
+  /vouchers:
+    $ref: 'voucher.yaml#/paths/~1vouchers'
+  /vouchers/{guid}:
+    $ref: 'voucher.yaml#/paths/~1vouchers~1{guid}'
+  /vouchers/{guid}/extend:
+    $ref: 'voucher.yaml#/paths/~1vouchers~1{guid}~1extend'
+  /device-ca:
+    $ref: 'device-ca.yaml#/paths/~1device-ca'
+  /device-ca/{fingerprint}:
+    $ref: 'device-ca.yaml#/paths/~1device-ca~1{fingerprint}'
+  /rvto2addr:
+    $ref: 'rvto2addr.yaml#/paths/~1rvto2addr'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'

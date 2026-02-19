@@ -11,6 +11,7 @@
 - Go 1.25.0 or later
 - `openssl` and `curl` available
 - `jq` to parse JSON output (optional)
+- `npx` to run `openapi-format`
 
 ## Quickstart: Run the three services locally (no TLS)
 This project exposes separate subcommands for each role: `rendezvous`, `manufacturing`, and `owner`.

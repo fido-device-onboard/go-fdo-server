@@ -1,0 +1,44 @@
+openapi: 3.0.0
+info:
+  title: FDO Rendezvous Server API
+  version: 0.0.1
+  description: |
+    API for the FDO Rendezvous Server role. The Rendezvous Server acts as an intermediary
+    between devices and owners during the device onboarding process (TO2 protocol).
+    It manages trusted device CA certificates to verify device authenticity.
+
+    This specification aggregates the following management APIs:
+    - Trusted Device CA Certificates (/device-ca)
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: health
+    description: Server's health monitoring
+  - name: device-ca
+    description: Operations related to trusted device CA certificates management
+paths:
+  /health:
+    $ref: 'health.yaml#/paths/~1health'
+  /device-ca:
+    $ref: 'device-ca.yaml#/paths/~1device-ca'
+  /device-ca/{fingerprint}:
+    $ref: 'device-ca.yaml#/paths/~1device-ca~1{fingerprint}'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'

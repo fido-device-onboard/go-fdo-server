@@ -6,25 +6,26 @@ info:
   contact:
     name: Go FDO Server API Support
     url: https://github.com/fido-device-onboard/go-fdo-server/issues
-servers:
-  - url: http://localhost/api/v1
-    description: Go FDO server
 tags:
-  - name: Health API
-    description: Operations related to server's health
+  - name: health
+    description: Server's health monitoring 
 paths:
   /health:
     get:
       summary: Get server health status
-      description: Returns the server version and health status
-      operationId: getHealth
+      description: |
+        Returns the server version and health status.
+
+        Note: This endpoint does not require authentication and is intended
+        for health checks by monitoring systems and load balancers.
+      operationId: GetHealth
       tags:
-        - Health API
+        - health
       responses:
         '200':
           $ref: "#/components/responses/HealthStatus"
         '500':
-          $ref: "#/components/responses/HealthStatus"
+          $ref: "components.yaml#/components/responses/InternalServerError"
 components:
   schemas:
     Health:
@@ -44,6 +45,7 @@ components:
           example: "OK"
         message:
           type: string
+          description: Human-readable status message or error description
           example: "the service is up and running"
   responses:
     HealthStatus:
@@ -62,6 +64,4 @@ components:
             error:
               summary: Example of an unhealthy server
               value:
-                version: "0.0.1"
-                status: "ERROR"
                 message: "database error: driver: bad connection"

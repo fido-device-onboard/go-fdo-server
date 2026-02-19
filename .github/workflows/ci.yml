@@ -13,7 +13,7 @@ jobs:
     container: fedora:latest
     steps:
       - name: Install dependencies
-        run: dnf install -y git make gcc shfmt
+        run: dnf install -y git make gcc shfmt npm
 
       - name: Install golang
         uses: actions/setup-go@v5
@@ -39,7 +39,7 @@ jobs:
     container: fedora:latest
     steps:
       - name: Install dependencies
-        run: dnf install -y git make node
+        run: dnf install -y git make npm
 
       - name: Install golang
         uses: actions/setup-go@v5

@@ -1,0 +1,326 @@
+openapi: 3.0.0
+info:
+  title: Common API Objects
+  version: 0.0.1
+  description: Common components, schemas, security definitions, and reusable response objects used across all FDO server APIs.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication using username and password.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer Token authentication. The token can be a JWT or an opaque token.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key authentication via the X-API-Key header.
+    OidcAuth:
+      type: openIdConnect
+      openIdConnectUrl: https://localhost:8080/auth/realms/fdo/.well-known/openid-configuration
+      description: OpenID Connect authentication using a JWT obtained from an OIDC provider.
+    Oauth2Auth:
+      type: oauth2
+      description: OAuth 2.0 authentication.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:8080/auth/realms/fdo/protocol/openid-connect/token
+          scopes:
+            'read:device-ca-certs': "Grants read access to trusted device CA certificates."
+            'write:device-ca-certs': "Grants create, update, and delete access to trusted device CA certificates."
+  schemas:
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: A human-readable error message.
+    DNSHostname:
+      type: string
+      format: hostname
+      example: 'rendezvous.example.com'
+    IPv4Address:
+      type: string
+      format: ipv4
+      example: '192.168.1.100'
+    ProtocolType:
+      type: string
+      description: |
+        Protocol to use for communication:
+        - `rest` - RESTful HTTP/HTTPS
+        - `http` - HTTP protocol
+        - `https` - HTTPS protocol (recommended for production)
+        - `tcp` - Raw TCP connection
+        - `tls` - TLS-secured TCP connection
+        - `coap+tcp` - CoAP over TCP
+        - `coap` - Constrained Application Protocol
+      enum:
+        - "rest"
+        - "http"
+        - "https"
+        - "tcp"
+        - "tls"
+        - "coap+tcp"
+        - "coap"
+      example: 'https'
+    PortNumber:
+      type: integer
+      minimum: 1
+      maximum: 65535
+      example: 8443
+    RVInfo:
+      type: array
+      description: |
+        Rendezvous information array containing one or more instruction sets.
+        Each instruction set guides devices on how to connect to the rendezvous server,
+        including network configuration, protocols, and connection parameters.
+        Multiple instruction sets provide fallback options for device connectivity.
+      items:
+        $ref: "#/components/schemas/RVInstruction"
+    RVInstruction:
+      type: array
+      items:
+        anyOf:
+          - $ref: "#/components/schemas/DNS"
+          - $ref: "#/components/schemas/IP"
+          - $ref: "#/components/schemas/Protocol"
+          - $ref: "#/components/schemas/Medium"
+          - $ref: "#/components/schemas/DevicePort"
+          - $ref: "#/components/schemas/OwnerPort"
+          - $ref: "#/components/schemas/WifiSSID"
+          - $ref: "#/components/schemas/WifiPW"
+          - $ref: "#/components/schemas/DevOnly"
+          - $ref: "#/components/schemas/OwnerOnly"
+          - $ref: "#/components/schemas/RVBypass"
+          - $ref: "#/components/schemas/DelaySeconds"
+          - $ref: "#/components/schemas/SvCertHash"
+          - $ref: "#/components/schemas/ClCertHash"
+          - $ref: "#/components/schemas/UserInput"
+          - $ref: "#/components/schemas/ExtRV"
+    DNS:
+      type: object
+      description: DNS hostname for the server
+      properties:
+        dns:
+          $ref: "#/components/schemas/DNSHostname"
+      example:
+        dns: 'rendezvous.example.com'
+    IP:
+      type: object
+      description: IPv4 address for the server
+      properties:
+        ip:
+          $ref: "#/components/schemas/IPv4Address"
+      example:
+        ip: '192.168.1.100'
+    Protocol:
+      type: object
+      description: Communication protocol specification
+      properties:
+        protocol:
+          $ref: "#/components/schemas/ProtocolType"
+      example:
+        protocol: 'https'
+    Medium:
+      type: object
+      description: |
+        Network medium/interface to use for communication:
+        - `wired_1` through `wired_9` - Specific wired network interfaces
+        - `wifi_1` through `wifi_9` - Specific WiFi network interfaces
+        - `wired_all` - Any available wired interface
+        - `wifi_all` - Any available WiFi interface
+      properties:
+        medium:
+          type: string
+          enum:
+            - "wired_1"
+            - "wired_2"
+            - "wired_3"
+            - "wired_4"
+            - "wired_5"
+            - "wired_6"
+            - "wired_7"
+            - "wired_8"
+            - "wired_9"
+            - "wifi_1"
+            - "wifi_2"
+            - "wifi_3"
+            - "wifi_4"
+            - "wifi_5"
+            - "wifi_6"
+            - "wifi_7"
+            - "wifi_8"
+            - "wifi_9"
+            - "wired_all"
+            - "wifi_all"
+      example:
+        medium: 'wifi_all'
+    DevicePort:
+      type: object
+      description: Port number on the device side
+      properties:
+        device_port:
+          $ref: "#/components/schemas/PortNumber"
+      example:
+        device_port: 8080
+    OwnerPort:
+      type: object
+      description: Port number on the owner/server side
+      properties:
+        owner_port:
+          $ref: "#/components/schemas/PortNumber"
+      example:
+        owner_port: 8443
+    WifiSSID:
+      type: object
+      description: WiFi network SSID (Service Set Identifier)
+      properties:
+        wifi_ssid:
+          type: string
+          maxLength: 32
+      example:
+        wifi_ssid: 'FDO-Network'
+    WifiPW:
+      type: object
+      description: WiFi network password
+      properties:
+        wifi_pw:
+          type: string
+          format: password
+      example:
+        wifi_pw: 'SecurePassword123'
+    DevOnly:
+      type: object
+      description: Instruction applies to device only (not owner)
+      properties:
+        dev_only:
+          type: boolean
+      example:
+        dev_only: true
+    OwnerOnly:
+      type: object
+      description: Instruction applies to owner only (not device)
+      properties:
+        owner_only:
+          type: boolean
+      example:
+        owner_only: true
+    RVBypass:
+      type: object
+      description: Bypass rendezvous server and connect directly to owner
+      properties:
+        rv_bypass:
+          type: boolean
+      example:
+        rv_bypass: true
+    DelaySeconds:
+      type: object
+      description: Delay in seconds before attempting connection
+      properties:
+        delay_seconds:
+          type: integer
+          format: uint32
+          minimum: 0
+      example:
+        delay_seconds: 30
+    SvCertHash:
+      type: object
+      description: Server certificate hash for validation (SHA-256 or SHA-384)
+      properties:
+        sv_cert_hash:
+          type: string
+          # Allow SHA-256 and SHA-384 hashes
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        sv_cert_hash: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01'
+    ClCertHash:
+      type: object
+      description: Client certificate hash for validation (SHA-256 or SHA-384)
+      properties:
+        cl_cert_hash:
+          type: string
+          # Allow SHA-256 and SHA-384 hashes
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        cl_cert_hash: 'b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1'
+    UserInput:
+      type: object
+      description: Requires user input during rendezvous
+      properties:
+        user_input:
+          type: string
+      example:
+        user_input: 'true'
+    ExtRV:
+      type: object
+      description: Extended rendezvous information
+      properties:
+        ext_rv:
+          type: string
+      example:
+        ext_rv: 'extended-rv-data'
+  responses:
+    BadRequest:
+      description: Bad Request - The request was malformed or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              summary: Example of a bad request error
+              value:
+                message: "Invalid Request."
+    Unauthorized:
+      description: Unauthorized - Authentication credentials missing, invalid, or expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              summary: Example of an unauthorized error
+              value:
+                message: "Authentication token is invalid or has expired."
+    Forbidden:
+      description: Forbidden - The authenticated user does not have permission to perform this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            forbidden:
+              summary: Example of a forbidden error
+              value:
+                message: "User does not have the right access level."
+    NotFound:
+      description: Not Found - The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              summary: Example of a not found error
+              value:
+                message: "Object not found."
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            serverError:
+              summary: Example of a server error
+              value:
+                message: "An unexpected error occurred."

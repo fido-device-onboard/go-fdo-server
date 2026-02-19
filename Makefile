@@ -178,3 +178,9 @@ rpm: $(RPMBUILD_RPM_FILE)
 clean:
 	rm -rf $(RPMBUILD_TOP_DIR)
 	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.{gz,bz2}
+
+.PHONY: fdo-openapi-ui
+fdo-openapi-ui:
+	docker rm --force fdo-openapi-ui
+	docker run --rm --name fdo-openapi-ui -d -p 9080:8080 -v ./api:/usr/share/nginx/html/api -e URLS='[{"url": "/api/manufacturer/openapi.yaml", "name": "Manufacturer API"}, {"url": "/api/rendezvous/openapi.yaml", "name": "Rendezvous API"}, {"url": "/api/owner/openapi.yaml", "name": "Owner API"} ]' docker.swagger.io/swaggerapi/swagger-ui
+	open_url_cmd=`command -v xdg-open`; [ -n "$${open_url_cmd}" ] || open_url_cmd=`command -v open`; $${open_url_cmd} http://localhost:9080

@@ -1,0 +1,33 @@
+openapi: 3.0.0
+info:
+  title: FDO Manufacturer Server API
+  version: 0.0.1
+  description: |
+    API for the FDO Manufacturer Server role. The Manufacturer Server is responsible
+    for device initialization, creating ownership vouchers, and configuring rendezvous
+    information for newly manufactured devices.
+
+    This specification aggregates the following management APIs:
+    - Ownership Voucher Management (/vouchers)
+    - Rendezvous Info Configuration (/rvinfo)
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: health
+    description: Server's health monitoring
+  - name: rvinfo
+    description: Operations related to rendezvous info management
+  - name: voucher
+    description: Operations related to ownership voucher management
+paths:
+  /health:
+    $ref: 'health.yaml#/paths/~1health'
+  /vouchers:
+    $ref: 'voucher.yaml#/paths/~1vouchers'
+  /vouchers/{guid}:
+    $ref: 'voucher.yaml#/paths/~1vouchers~1{guid}'
+  /vouchers/{guid}/extend:
+    $ref: 'voucher.yaml#/paths/~1vouchers~1{guid}~1extend'
+  /rvinfo:
+    $ref: 'rvinfo.yaml#/paths/~1rvinfo'
