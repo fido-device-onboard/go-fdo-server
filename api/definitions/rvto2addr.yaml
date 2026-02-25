@@ -1,0 +1,260 @@
+openapi: 3.0.0
+info:
+  title: Rendezvous TO2 Address API
+  version: 1.0.0
+  description: An API for managing the RVTO2Addr
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: rvto2addr
+    description: |
+      Operations related to rendezvous TO2 address management.
+
+      Typical workflow: Get current configuration (GET) →
+      Update configuration (PUT) → Delete when no longer needed (DELETE).
+      The TO2 address tells devices where to find the owner server after rendezvous.
+paths:
+  /v1/rvto2addr:
+    get:
+      operationId: GetRVTO2Addr
+      summary: Get the current RVTO2 address configuration
+      description: |
+        Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address
+        configuration that specifies where devices should connect to the owner server
+        after completing the rendezvous protocol.
+      tags:
+        - rvto2addr
+      responses:
+        '200':
+          description: Successfully retrieved the RVTO2 address configuration. Returns an empty array if no configuration has been set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+              examples:
+                simpleHttpConfig:
+                  summary: Simple HTTP configuration with DNS
+                  value:
+                    - protocol: http
+                      dns: owner.example.com
+                      port: 8080
+                httpsWithDNS:
+                  summary: HTTPS configuration with DNS
+                  value:
+                    - protocol: https
+                      dns: owner-secure.example.com
+                      port: 8443
+                httpsWithIP:
+                  summary: HTTPS configuration with IP address
+                  value:
+                    - protocol: https
+                      ip: 192.168.1.100
+                      port: 8443
+                httpsWithBothDnsAndIP:
+                  summary: HTTPS configuration with both DNS and IP
+                  description: Both dns and ip can be provided together
+                  value:
+                    - protocol: https
+                      dns: owner.example.com
+                      ip: 192.168.1.100
+                      port: 8443
+                multipleAddresses:
+                  summary: Multiple addresses with primary and backup
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+                    - protocol: https
+                      ip: 192.168.1.100
+                      port: 8443
+                emptyConfiguration:
+                  summary: No configuration set
+                  value: []
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    put:
+      operationId: UpdateRVTO2Addr
+      summary: Update the RVTO2 address configuration
+      description: |
+        Updates the rendezvous TO2 address configuration.
+
+        The new configuration will be used by devices completing the TO2 protocol
+        to determine where to connect to the owner server. This typically includes
+        the owner server's hostname/IP address, protocol, and port.
+      tags:
+        - rvto2addr
+      requestBody:
+        description: The new RVTO2 address configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RVTO2Addr"
+            examples:
+              updateToHttps:
+                summary: Update to HTTPS with DNS
+                value:
+                  - protocol: https
+                    dns: owner-new.example.com
+                    port: 8443
+              updateToMultipleAddresses:
+                summary: Update with primary and backup addresses
+                value:
+                  - protocol: https
+                    dns: owner-primary.example.com
+                    port: 8443
+                  - protocol: https
+                    dns: owner-backup.example.com
+                    port: 8443
+              updateToIPBased:
+                summary: Update to IP-based configuration
+                value:
+                  - protocol: https
+                    ip: 10.0.0.50
+                    port: 8443
+              updateWithBothDnsAndIP:
+                summary: Update with both DNS and IP address
+                description: Demonstrates that both dns and ip can be provided together
+                value:
+                  - protocol: https
+                    dns: owner-dual.example.com
+                    ip: 10.0.0.100
+                    port: 8443
+      responses:
+        '200':
+          description: Successfully updated the RVTO2 address configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+              examples:
+                updatedHttpsConfiguration:
+                  summary: Successfully updated to HTTPS configuration
+                  value:
+                    - protocol: https
+                      dns: owner-new.example.com
+                      port: 8443
+                updatedMultipleAddresses:
+                  summary: Successfully updated with multiple addresses
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+        '400':
+          $ref: 'components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    delete:
+      operationId: DeleteRVTO2Addr
+      summary: Delete the RVTO2 address configuration
+      description: |
+        Deletes the current rendezvous TO2 address configuration.
+
+        After deletion, devices will not have owner server address information
+        available until a new configuration is set via PUT. Returns the deleted
+        configuration, or an empty array if no configuration was set.
+      tags:
+        - rvto2addr
+      responses:
+        '200':
+          description: Successfully deleted the RVTO2 address configuration. Returns the deleted configuration or an empty array if nothing was configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RVTO2Addr"
+              examples:
+                deletedHttpsConfiguration:
+                  summary: Deleted HTTPS configuration
+                  value:
+                    - protocol: https
+                      dns: owner.example.com
+                      port: 8443
+                deletedMultipleAddresses:
+                  summary: Deleted multiple address configuration
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+                noConfigurationToDelete:
+                  summary: No configuration was set
+                  value: []
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'
+  schemas:
+    RVTO2Addr:
+      type: array
+      description: |
+        Rendezvous TO2 address configuration. Specifies one or more owner server
+        addresses that devices should use to connect during the TO2 (Transfer of
+        Ownership 2) protocol after completing rendezvous. Multiple entries provide
+        fallback options if the primary address is unreachable.
+      items:
+        $ref: "#/components/schemas/RVTO2AddrEntry"
+    RVTO2AddrEntry:
+      type: object
+      description: |
+        A single owner server address entry. Each entry specifies the protocol,
+        network location (DNS hostname and/or IP address), and port for connecting
+        to the owner server during TO2 protocol.
+
+        Both 'dns' and 'ip' fields are optional and may be provided independently
+        or together. However, at least one addressing method MUST be specified
+        (non-null) as required by FDO specification section 3.3.14. Requests that
+        omit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.
+
+        When both 'dns' and 'ip' are provided, the device MUST attempt to connect
+        using the DNS address first. The device MUST only use the IP address after
+        all DNS connection attempts have failed. This behavior is defined in the
+        FDO specification section 3.3.14.
+      required:
+        - protocol
+        - port
+      properties:
+        protocol:
+          $ref: 'components.yaml#/components/schemas/ProtocolType'
+        dns:
+          $ref: 'components.yaml#/components/schemas/DNSHostname'
+        ip:
+          $ref: 'components.yaml#/components/schemas/IPv4Address'
+        port:
+          $ref: 'components.yaml#/components/schemas/PortNumber'
