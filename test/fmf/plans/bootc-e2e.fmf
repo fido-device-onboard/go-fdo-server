@@ -29,6 +29,7 @@ prepare:
       - curl
       - git
       - jq
+      - npm
       - podman
       - qemu-img
       - qemu-kvm
