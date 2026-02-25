@@ -44,6 +44,242 @@ components:
         message:
           type: string
           description: A human-readable error message.
+    DNSHostname:
+      type: string
+      format: hostname
+      example: 'rendezvous.example.com'
+    IPv4Address:
+      type: string
+      format: ipv4
+      example: '192.168.1.100'
+    ProtocolType:
+      type: string
+      description: |
+        Protocol to use for communication:
+        - `rest` - RESTful HTTP/HTTPS
+        - `http` - HTTP protocol
+        - `https` - HTTPS protocol (recommended for production)
+        - `tcp` - Raw TCP connection
+        - `tls` - TLS-secured TCP connection
+        - `coap+tcp` - CoAP over TCP
+        - `coap` - Constrained Application Protocol
+      enum:
+        - "rest"
+        - "http"
+        - "https"
+        - "tcp"
+        - "tls"
+        - "coap+tcp"
+        - "coap"
+      example: 'https'
+    PortNumber:
+      type: integer
+      minimum: 1
+      maximum: 65535
+      example: 8443
+    RVInfo:
+      type: array
+      description: |
+        Rendezvous information array containing one or more instruction sets
+        (RendezvousDirective). Each instruction set guides devices and owners on how
+        to connect to the rendezvous server, including network configuration, protocols,
+        and connection parameters.
+
+        Processing behavior (FDO specification section 3.7):
+        - Instruction sets are processed in order (index 0 first, then 1, etc.)
+        - The first successful connection to a rendezvous server MAY be used
+        - All DNS addresses within an instruction set MUST be processed before
+          moving to the next instruction set
+        - Multiple instruction sets provide fallback options for device connectivity
+        - Devices and owners may avoid redundant operations (e.g., contacting the
+          same IP address twice)
+      items:
+        $ref: "#/components/schemas/RVInstruction"
+    RVInstruction:
+      type: array
+      items:
+        anyOf:
+          - $ref: "#/components/schemas/DNS"
+          - $ref: "#/components/schemas/IP"
+          - $ref: "#/components/schemas/Protocol"
+          - $ref: "#/components/schemas/Medium"
+          - $ref: "#/components/schemas/DevicePort"
+          - $ref: "#/components/schemas/OwnerPort"
+          - $ref: "#/components/schemas/WifiSSID"
+          - $ref: "#/components/schemas/WifiPW"
+          - $ref: "#/components/schemas/DevOnly"
+          - $ref: "#/components/schemas/OwnerOnly"
+          - $ref: "#/components/schemas/RVBypass"
+          - $ref: "#/components/schemas/DelaySeconds"
+          - $ref: "#/components/schemas/SvCertHash"
+          - $ref: "#/components/schemas/ClCertHash"
+          - $ref: "#/components/schemas/UserInput"
+          - $ref: "#/components/schemas/ExtRV"
+    DNS:
+      type: object
+      description: DNS hostname for the server
+      properties:
+        dns:
+          $ref: "#/components/schemas/DNSHostname"
+      example:
+        dns: 'rendezvous.example.com'
+    IP:
+      type: object
+      description: IPv4 address for the server
+      properties:
+        ip:
+          $ref: "#/components/schemas/IPv4Address"
+      example:
+        ip: '192.168.1.100'
+    Protocol:
+      type: object
+      description: Communication protocol specification
+      properties:
+        protocol:
+          $ref: "#/components/schemas/ProtocolType"
+      example:
+        protocol: 'https'
+    Medium:
+      type: object
+      description: |
+        Network medium/interface to use for communication:
+        - `wired_1` through `wired_9` - Specific wired network interfaces
+        - `wifi_1` through `wifi_9` - Specific WiFi network interfaces
+        - `wired_all` - Any available wired interface
+        - `wifi_all` - Any available WiFi interface
+      properties:
+        medium:
+          type: string
+          enum:
+            - "wired_1"
+            - "wired_2"
+            - "wired_3"
+            - "wired_4"
+            - "wired_5"
+            - "wired_6"
+            - "wired_7"
+            - "wired_8"
+            - "wired_9"
+            - "wifi_1"
+            - "wifi_2"
+            - "wifi_3"
+            - "wifi_4"
+            - "wifi_5"
+            - "wifi_6"
+            - "wifi_7"
+            - "wifi_8"
+            - "wifi_9"
+            - "wired_all"
+            - "wifi_all"
+      example:
+        medium: 'wifi_all'
+    DevicePort:
+      type: object
+      description: Port number on the device side
+      properties:
+        device_port:
+          $ref: "#/components/schemas/PortNumber"
+      example:
+        device_port: 8080
+    OwnerPort:
+      type: object
+      description: Port number on the owner/server side
+      properties:
+        owner_port:
+          $ref: "#/components/schemas/PortNumber"
+      example:
+        owner_port: 8443
+    WifiSSID:
+      type: object
+      description: WiFi network SSID (Service Set Identifier)
+      properties:
+        wifi_ssid:
+          type: string
+          minLength: 1
+          maxLength: 32
+      example:
+        wifi_ssid: 'FDO-Network'
+    WifiPW:
+      type: object
+      description: WiFi network password
+      properties:
+        wifi_pw:
+          type: string
+          format: password
+      example:
+        wifi_pw: 'SecurePassword123'
+    DevOnly:
+      type: object
+      description: Instruction applies to device only (not owner)
+      properties:
+        dev_only:
+          type: boolean
+      example:
+        dev_only: true
+    OwnerOnly:
+      type: object
+      description: Instruction applies to owner only (not device)
+      properties:
+        owner_only:
+          type: boolean
+      example:
+        owner_only: true
+    RVBypass:
+      type: object
+      description: Bypass rendezvous server and connect directly to owner
+      properties:
+        rv_bypass:
+          type: boolean
+      example:
+        rv_bypass: true
+    DelaySeconds:
+      type: object
+      description: Delay in seconds before attempting connection (with up to 25% randomization)
+      properties:
+        delay_seconds:
+          type: integer
+          format: int32
+          minimum: 0
+      example:
+        delay_seconds: 30
+    SvCertHash:
+      type: object
+      description: Server certificate hash for validation (SHA-256 or SHA-384)
+      properties:
+        sv_cert_hash:
+          type: string
+          # Allow SHA-256 and SHA-384 hashes
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        sv_cert_hash: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01'
+    ClCertHash:
+      type: object
+      description: Client certificate hash for validation (SHA-256 or SHA-384)
+      properties:
+        cl_cert_hash:
+          type: string
+          # Allow SHA-256 and SHA-384 hashes
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        cl_cert_hash: 'b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1'
+    UserInput:
+      type: object
+      description: Indicates whether user input is allowed to update rendezvous variables during device onboarding
+      properties:
+        user_input:
+          type: boolean
+      example:
+        user_input: true
+    ExtRV:
+      type: object
+      description: Extended rendezvous information for custom device-specific instructions
+      properties:
+        ext_rv:
+          type: array
+          items:
+            type: string
+      example:
+        ext_rv: ['custom-instruction-1', 'custom-instruction-2']
   responses:
     BadRequest:
       description: Bad Request - The request was malformed or invalid.
