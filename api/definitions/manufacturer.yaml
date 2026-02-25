@@ -1,0 +1,71 @@
+openapi: 3.0.0
+info:
+  title: FDO Manufacturer Server API
+  version: 1.0.0
+  description: |
+    API for the FDO Manufacturer Server role. The Manufacturer Server is responsible
+    for device initialization, creating ownership vouchers, and configuring rendezvous
+    information for newly manufactured devices.
+
+    This specification aggregates the following management APIs:
+    - Ownership Voucher Management (/v1/vouchers)
+    - Rendezvous Info Configuration (/v1/rvinfo)
+
+    ## API Versioning
+    This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major
+    version in the URL path (e.g., `/v1/vouchers`).
+
+    - **MAJOR version** changes indicate breaking changes (incompatible API changes)
+    - **MINOR version** changes add functionality in a backward-compatible manner
+    - **PATCH version** changes are backward-compatible bug fixes
+
+    ### Version Support Policy
+    - The current major version (v1) is fully supported
+    - When a new major version is released, the previous major version will be
+      supported for a minimum of 12 months
+    - Deprecated endpoints or fields will be marked in the documentation and
+      supported for at least 6 months before removal
+    - Deprecation notices will include the deprecation date, removal date, and
+      migration guidance
+
+    ### Breaking Changes
+    Breaking changes that trigger a major version increment include:
+    - Removing or renaming endpoints
+    - Removing or renaming request/response fields
+    - Changing field types or validation rules
+    - Changing authentication mechanisms
+
+    ## Pagination
+    List operations support pagination using `offset` and `limit` query parameters:
+    - `offset`: Number of items to skip (default: 0, minimum: 0)
+    - `limit`: Maximum number of items to return (default: 100, minimum: 1, maximum: 1000)
+
+    ## Rate Limiting
+    API requests may be subject to rate limiting to ensure service stability.
+    Rate limit information is provided in response headers when applicable:
+    - `X-RateLimit-Limit`: Maximum requests allowed in the time window
+    - `X-RateLimit-Remaining`: Remaining requests in the current window
+    - `X-RateLimit-Reset`: Time when the rate limit resets (Unix timestamp)
+
+    When rate limits are exceeded, the API returns a 429 Too Many Requests status code.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: health
+    description: Server's health monitoring
+  - name: rvinfo
+    description: Operations related to rendezvous info management
+  - name: voucher
+    description: Operations related to ownership voucher management
+paths:
+  /health:
+    $ref: 'health.yaml#/paths/~1health'
+  /v1/vouchers:
+    $ref: 'voucher.yaml#/paths/~1v1~1vouchers'
+  /v1/vouchers/{guid}:
+    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}'
+  /v1/vouchers/{guid}/extend:
+    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}~1extend'
+  /v1/rvinfo:
+    $ref: 'rvinfo.yaml#/paths/~1v1~1rvinfo'
