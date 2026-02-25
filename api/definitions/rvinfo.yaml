@@ -1,0 +1,240 @@
+openapi: 3.0.0
+info:
+  title: RendezvousInfo management API
+  version: 1.0.0
+  description: An API for managing the RendezvousInfo
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: rvinfo
+    description: |
+      Operations related to rendezvous info management.
+
+      Typical workflow: Get current configuration (GET) →
+      Update configuration (PUT) → Delete when no longer needed (DELETE).
+      The configuration is embedded in ownership vouchers during device manufacturing.
+paths:
+  /v1/rvinfo:
+    get:
+      tags:
+        - rvinfo
+      summary: Get the current RendezvousInfo
+      description: Retrieves the current rendezvous information configuration that devices will use to connect to the rendezvous server. Returns an empty array if no configuration has been set.
+      operationId: GetRendezvousInfo
+      responses:
+        '200':
+          description: Successfully retrieved the RendezvousInfo configuration. Returns an empty array if no configuration has been set.
+          content:
+            application/json:
+              schema:
+                $ref: "components.yaml#/components/schemas/RVInfo"
+              examples:
+                simpleHttpRendezvous:
+                  summary: Simple HTTP rendezvous configuration
+                  value:
+                    - - dns: 'rendezvous.example.com'
+                      - protocol: 'http'
+                      - owner_port: 8080
+                httpsRendezvousWithCertHash:
+                  summary: HTTPS rendezvous with certificate hash validation
+                  value:
+                    - - dns: 'rv.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - sv_cert_hash: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01'
+                multipleRendezvousServers:
+                  summary: Multiple rendezvous servers with fallback
+                  value:
+                    - - dns: 'rv-primary.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                    - - dns: 'rv-fallback.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - delay_seconds: 30
+                wifiConfiguration:
+                  summary: WiFi rendezvous configuration
+                  value:
+                    - - medium: 'wifi_all'
+                      - wifi_ssid: 'FDO-Network'
+                      - wifi_pw: 'SecurePassword123'
+                      - dns: 'rv.local.network'
+                      - protocol: 'http'
+                      - owner_port: 8080
+                ipBasedRendezvous:
+                  summary: IP-based rendezvous (no DNS)
+                  value:
+                    - - ip: '192.168.1.100'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                bypassRendezvous:
+                  summary: Direct owner connection bypassing rendezvous
+                  description: Used for direct device-to-owner connections without rendezvous server
+                  value:
+                    - - dns: 'owner.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - rv_bypass: true
+                emptyConfiguration:
+                  summary: No configuration set
+                  value: []
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    put:
+      tags:
+        - rvinfo
+      summary: Update the RendezvousInfo
+      description: |
+        Updates the rendezvous information configuration.
+
+        The new configuration will be used by newly manufactured or initialized devices.
+        Existing devices will continue using their current rendezvous information.
+      operationId: UpdateRendezvousInfo
+      requestBody:
+        description: Set the RendezvousInfo
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "components.yaml#/components/schemas/RVInfo"
+            examples:
+              updateToHttps:
+                summary: Update to HTTPS rendezvous
+                value:
+                  - - dns: 'rv-secure.example.com'
+                    - protocol: 'https'
+                    - owner_port: 8443
+                    - sv_cert_hash: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01'
+              updateWithMultipleServers:
+                summary: Update with primary and fallback servers
+                value:
+                  - - dns: 'rv-primary.example.com'
+                    - protocol: 'https'
+                    - owner_port: 8443
+                  - - dns: 'rv-fallback.example.com'
+                    - protocol: 'https'
+                    - owner_port: 8443
+                    - delay_seconds: 60
+              updateToLocalWifi:
+                summary: Update to local WiFi configuration
+                value:
+                  - - medium: 'wifi_all'
+                    - wifi_ssid: 'FactoryNetwork'
+                    - wifi_pw: 'Factory2024!'
+                    - dns: 'rv.local'
+                    - protocol: 'http'
+                    - owner_port: 8080
+              updateToBypassRendezvous:
+                summary: Update to bypass rendezvous (direct owner connection)
+                value:
+                  - - dns: 'owner-direct.example.com'
+                    - protocol: 'https'
+                    - owner_port: 8443
+                    - rv_bypass: true
+      responses:
+        '200':
+          description: Returns the new RendezvousInfo
+          content:
+            application/json:
+              schema:
+                $ref: "components.yaml#/components/schemas/RVInfo"
+              examples:
+                updatedHttpsConfiguration:
+                  summary: Successfully updated to HTTPS configuration
+                  value:
+                    - - dns: 'rv-secure.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - sv_cert_hash: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01'
+                updatedMultiServerConfiguration:
+                  summary: Successfully updated with multiple servers
+                  value:
+                    - - dns: 'rv-primary.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                    - - dns: 'rv-fallback.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - delay_seconds: 60
+                updatedBypassConfiguration:
+                  summary: Successfully updated to bypass rendezvous
+                  value:
+                    - - dns: 'owner-direct.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - rv_bypass: true
+        '400':
+          $ref: 'components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - rvinfo
+      summary: Delete the RendezvousInfo
+      description: |
+        Deletes the current rendezvous information configuration.
+
+        After deletion, devices will not have rendezvous information available
+        until a new configuration is set via PUT. Returns the deleted
+        configuration, or an empty array if no configuration was set.
+      operationId: DeleteRendezvousInfo
+      responses:
+        '200':
+          description: Successfully deleted the RendezvousInfo configuration. Returns the deleted configuration or an empty array if nothing was configured.
+          content:
+            application/json:
+              schema:
+                $ref: "components.yaml#/components/schemas/RVInfo"
+              examples:
+                deletedHttpsConfiguration:
+                  summary: Deleted HTTPS rendezvous configuration
+                  value:
+                    - - dns: 'rv-secure.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                deletedMultiServerConfiguration:
+                  summary: Deleted multi-server configuration
+                  value:
+                    - - dns: 'rv-primary.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                    - - dns: 'rv-fallback.example.com'
+                      - protocol: 'https'
+                      - owner_port: 8443
+                      - delay_seconds: 60
+                noConfigurationToDelete:
+                  summary: No configuration was set
+                  value: []
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'
