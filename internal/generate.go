@@ -6,3 +6,7 @@ package internal
 //go:generate go tool oapi-codegen -config ../configs/goapi-codegen/rvinfo.yaml ../api/definitions/rvinfo.yaml
 //go:generate go tool oapi-codegen -config ../configs/goapi-codegen/rvto2addr.yaml ../api/definitions/rvto2addr.yaml
 //go:generate go tool oapi-codegen -config ../configs/goapi-codegen/voucher.yaml ../api/definitions/voucher.yaml
+
+//go:generate npx openapi-format ../api/definitions/manufacturer.yaml -o ../api/manufacturer/openapi.yaml
+//go:generate npx openapi-format ../api/definitions/rendezvous.yaml -o ../api/rendezvous/openapi.yaml
+//go:generate npx openapi-format ../api/definitions/owner.yaml -o ../api/owner/openapi.yaml

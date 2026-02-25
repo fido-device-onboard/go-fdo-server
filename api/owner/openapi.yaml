@@ -1,0 +1,1731 @@
+openapi: 3.0.0
+info:
+  title: FDO Owner Server API
+  version: 1.0.0
+  description: |
+    API for the FDO Owner Server role. The Owner Server is responsible for managing
+    device ownership, including ownership vouchers, trusted device CA certificates,
+    and rendezvous TO2 addresses for device onboarding.
+
+    This specification aggregates the following management APIs:
+    - Ownership Voucher Management (/v1/vouchers)
+    - Trusted Device CA Certificates (/v1/device-ca)
+    - RVTO2 Address Configuration (/v1/rvto2addr)
+
+    ## API Versioning
+    This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major
+    version in the URL path (e.g., `/v1/vouchers`).
+
+    - **MAJOR version** changes indicate breaking changes (incompatible API changes)
+    - **MINOR version** changes add functionality in a backward-compatible manner
+    - **PATCH version** changes are backward-compatible bug fixes
+
+    ### Version Support Policy
+    - The current major version (v1) is fully supported
+    - When a new major version is released, the previous major version will be
+      supported for a minimum of 12 months
+    - Deprecated endpoints or fields will be marked in the documentation and
+      supported for at least 6 months before removal
+    - Deprecation notices will include the deprecation date, removal date, and
+      migration guidance
+
+    ### Breaking Changes
+    Breaking changes that trigger a major version increment include:
+    - Removing or renaming endpoints
+    - Removing or renaming request/response fields
+    - Changing field types or validation rules
+    - Changing authentication mechanisms
+
+    ## Pagination
+    List operations support pagination using `offset` and `limit` query parameters:
+    - `offset`: Number of items to skip (default: 0, minimum: 0)
+    - `limit`: Maximum number of items to return (default: 100, minimum: 1, maximum: 1000)
+
+    ## Rate Limiting
+    API requests may be subject to rate limiting to ensure service stability.
+    Rate limit information is provided in response headers when applicable:
+    - `X-RateLimit-Limit`: Maximum requests allowed in the time window
+    - `X-RateLimit-Remaining`: Remaining requests in the current window
+    - `X-RateLimit-Reset`: Time when the rate limit resets (Unix timestamp)
+
+    When rate limits are exceeded, the API returns a 429 Too Many Requests status code.
+  contact:
+    name: Go FDO Server API Support
+    url: 'https://github.com/fido-device-onboard/go-fdo-server/issues'
+paths:
+  /health:
+    get:
+      operationId: GetHealth
+      summary: Get server health status
+      description: |
+        Returns the server version and health status.
+
+        Note: This endpoint does not require authentication and is intended
+        for health checks by monitoring systems and load balancers.
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthStatus'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+          examples:
+            error:
+              summary: Example of an unhealthy server
+              value:
+                message: database error
+      tags:
+        - health
+  /v1/vouchers:
+    get:
+      operationId: ListOwnershipVouchers
+      summary: List all ownership vouchers
+      description: |
+        Retrieves a paginated, filterable, and sortable list of all ownership vouchers.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns voucher metadata as JSON (default)
+        - `application/x-pem-file` - Returns vouchers as concatenated PEM file
+
+        If no Accept header is provided, the response defaults to `application/json`.
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return per page.
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            minimum: 1
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result set.
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: guid
+          in: query
+          description: Filters the results by the exact device GUID.
+          required: false
+          schema:
+            type: string
+            example: d21d841a3f54f4e89a60ed9b9779e9e8
+            pattern: '^[a-f0-9]{32}$'
+        - name: deviceInfo
+          in: query
+          description: Filters the results by device information (case-insensitive partial match).
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Searches within device info and GUID fields (case-insensitive).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: Sorts the results by the specified field.
+          required: false
+          schema:
+            type: string
+            default: createdAt
+            enum:
+              - createdAt
+              - updatedAt
+              - guid
+              - deviceInfo
+        - name: sortOrder
+          in: query
+          description: Specifies the sorting order.
+          required: false
+          schema:
+            type: string
+            default: asc
+            enum:
+              - asc
+              - desc
+      responses:
+        '200':
+          description: A paginated list of ownership vouchers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnershipVouchersPaginated'
+              examples:
+                success:
+                  summary: Example of a successful response
+                  description: |
+                    Shows page 1 of results (items 0-19 of 2 total).
+                    To navigate pages:
+                    - Next page: GET /vouchers?limit=20&offset=20
+                    - Previous page: GET /vouchers?limit=20&offset=0 (already at first page)
+                    - Total pages: ceil(total / limit) = ceil(2 / 20) = 1
+                  value:
+                    total: 2
+                    limit: 20
+                    offset: 0
+                    vouchers:
+                      - voucher:
+                          guid: d21d841a3f54f4e89a60ed9b9779e9e8
+                          protocolVersion: 101
+                          deviceInfo: Intel Device
+                          numEntries: 1
+                        createdAt: '2025-05-10T10:30:00Z'
+                        updatedAt: '2025-05-10T10:30:00Z'
+                      - voucher:
+                          guid: a1b2c3d4e5f6789012345678abcdef01
+                          protocolVersion: 101
+                          deviceInfo: ARM IoT Device
+                          numEntries: 2
+                        createdAt: '2025-06-20T12:00:00Z'
+                        updatedAt: '2025-06-21T08:15:00Z'
+            application/x-pem-file:
+              schema:
+                type: string
+              examples:
+                getPEMVouchers:
+                  summary: Example of a successful response
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
+                    ...
+                    -----END OWNERSHIP VOUCHER-----
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
+                    GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
+                    ...
+                    -----END OWNERSHIP VOUCHER-----
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - voucher
+    post:
+      operationId: ImportOwnershipVouchers
+      summary: Import ownership voucher(s)
+      description: |
+        Imports one or more ownership vouchers into the system.
+
+        This operation is idempotent:
+        - Valid vouchers that don't exist in the database are imported
+        - Vouchers that already exist (duplicate GUID) are rejected with a 409 error
+        - Malformed or invalid vouchers are rejected with a 400 error
+
+        Ownership vouchers can be provided in PEM or JSON format.
+        You can import a single voucher or an array of vouchers.
+      requestBody:
+        description: One or more ownership vouchers in PEM or JSON format.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              maxLength: 1048576
+            examples:
+              importFromPEM:
+                summary: Example of importing vouchers from PEM
+                value: |
+                  -----BEGIN OWNERSHIP VOUCHER-----
+                  oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                  AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
+                  ...
+                  -----END OWNERSHIP VOUCHER-----
+                  -----BEGIN OWNERSHIP VOUCHER-----
+                  oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
+                  GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
+                  ...
+                  -----END OWNERSHIP VOUCHER-----
+      responses:
+        '201':
+          description: Ownership voucher(s) imported successfully.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+              examples:
+                success:
+                  summary: Vouchers successfully imported
+                  value:
+                    - voucher:
+                        guid: d21d841a3f54f4e89a60ed9b9779e9e8
+                        protocolVersion: 101
+                        deviceInfo: Intel Device
+                        numEntries: 1
+                      createdAt: '2025-10-27T14:00:00Z'
+                      updatedAt: '2025-10-27T14:00:00Z'
+                    - voucher:
+                        guid: a1b2c3d4e5f6789012345678abcdef01
+                        protocolVersion: 101
+                        deviceInfo: ARM IoT Device
+                        numEntries: 1
+                      createdAt: '2025-10-27T14:00:00Z'
+                      updatedAt: '2025-10-27T14:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflict - A voucher with this GUID already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - voucher
+  '/v1/vouchers/{guid}':
+    get:
+      operationId: GetOwnershipVoucherByGuid
+      summary: Get an ownership voucher by GUID
+      description: |
+        Retrieves a specific ownership voucher by its device GUID.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns voucher metadata as JSON (default)
+        - `application/x-pem-file` - Returns voucher as PEM file
+
+        If no Accept header is provided, the response defaults to `application/json`.
+      parameters:
+        - name: guid
+          in: path
+          description: The device GUID (32 hexadecimal characters).
+          required: true
+          schema:
+            type: string
+            example: d21d841a3f54f4e89a60ed9b9779e9e8
+            pattern: '^[a-f0-9]{32}$'
+      responses:
+        '200':
+          description: The requested ownership voucher.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnershipVoucher'
+              examples:
+                getVoucherJson:
+                  summary: Example JSON voucher response
+                  value:
+                    guid: d21d841a3f54f4e89a60ed9b9779e9e8
+                    protocolVersion: 101
+                    deviceInfo: Intel Device
+                    numEntries: 1
+                    header:
+                      version: 101
+                      guid: d21d841a3f54f4e89a60ed9b9779e9e8
+                      rvInfo:
+                        - - dns: rendezvous.example.com
+                          - protocol: http
+                          - owner_port: 8080
+                      deviceInfo: Intel Device
+                      manufacturerKey:
+                        type: SECP256R1
+                        value: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+                      certChainHash:
+                        algorithm: SHA-384
+                        value: a1b2c3d4...
+                    hmac:
+                      algorithm: HMAC-SHA-384
+                      value: e5f6a7b8...
+                    certChain:
+                      - '-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'
+                    entries:
+                      - previousHash:
+                          algorithm: SHA-384
+                          value: 00000000...
+                        headerHash:
+                          algorithm: SHA-384
+                          value: c3d4e5f6...
+                        publicKey:
+                          type: SECP256R1
+                          value: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+            application/x-pem-file:
+              schema:
+                description: The voucher content in PEM format.
+                type: string
+              examples:
+                getVoucherPem:
+                  summary: Example PEM voucher response
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
+                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
+                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
+                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXk=
+                    -----END OWNERSHIP VOUCHER-----
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - voucher
+    delete:
+      operationId: DeleteOwnershipVoucher
+      summary: Delete an ownership voucher by GUID
+      description: Deletes a specific ownership voucher by its device GUID.
+      parameters:
+        - name: guid
+          in: path
+          description: The device GUID (32 hexadecimal characters).
+          required: true
+          schema:
+            type: string
+            example: d21d841a3f54f4e89a60ed9b9779e9e8
+            pattern: '^[a-f0-9]{32}$'
+      responses:
+        '204':
+          description: Ownership voucher deleted successfully.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - voucher
+  '/v1/vouchers/{guid}/extend':
+    post:
+      operationId: ExtendOwnershipVoucher
+      summary: Extend an ownership voucher
+      description: |
+        Extends an ownership voucher by adding a new ownership entry. This operation
+        is used to transfer ownership of a device from one owner to another.
+
+        The request must include the new owner's public key and will be signed
+        with the current owner's private key.
+      parameters:
+        - name: guid
+          in: path
+          description: The device GUID (32 hexadecimal characters).
+          required: true
+          schema:
+            type: string
+            example: d21d841a3f54f4e89a60ed9b9779e9e8
+            pattern: '^[a-f0-9]{32}$'
+      requestBody:
+        description: New owner's public key or certificate in PEM format.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+            examples:
+              extendWithPublicKey:
+                summary: Extend voucher with PEM encoded public key
+                value: |
+                  -----BEGIN PUBLIC KEY-----
+                  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaXhXuQUiGqKv5VqJ3VZqDz7XJ8v5
+                  KxMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8Pw==
+                  -----END PUBLIC KEY-----
+              extendWithCertificate:
+                summary: Extend voucher with PEM encoded certificate
+                value: |
+                  -----BEGIN CERTIFICATE-----
+                  MIICljCCAX4CCQDqJ0HQqh0W5jANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV
+                  UzAeFw0yNTEwMjcxNDAwMDBaFw0yNjEwMjcxNDAwMDBaMA0xCzAJBgNVBAYTAlVT
+                  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx2q5VqJ3VZqDz7XJ8v5K
+                  xMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PwIDAQAB
+                  MA0GCSqGSIb3DQEBCwUAA4IBAQBqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3Yq
+                  N8PzGqKJ5vZ3YqN8Pw==
+                  -----END CERTIFICATE-----
+      responses:
+        '200':
+          description: Ownership voucher extended successfully.
+          content:
+            application/x-pem-file:
+              schema:
+                description: The extended voucher in PEM format.
+                type: string
+              examples:
+                extendedVoucher:
+                  summary: Extended voucher in PEM format
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
+                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
+                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
+                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlY
+                    a6EBAmhta2V5dmFsdWUGaGNlcnRDaGFpbkhhc2ihaEFsZ29yaXRobUhTSEEt
+                    Mzg0aVZhbHVlWDCwkz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNl
+                    IGluZm9ybWF0aW9uBWJtZnJLZXk=
+                    -----END OWNERSHIP VOUCHER-----
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - voucher
+  /v1/device-ca:
+    get:
+      operationId: ListTrustedDeviceCACerts
+      summary: List all trusted device CA certificates
+      description: |
+        Retrieves a paginated, filterable, and sortable list of all registered trusted device CA certificates.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns certificate metadata as JSON (default)
+        - `application/x-pem-file` - Returns certificates as concatenated PEM file
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return per page.
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            minimum: 1
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result set.
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: issuer
+          in: query
+          description: Filters the results by the exact issuer distinguished name.
+          required: false
+          schema:
+            type: string
+            example: 'CN=Example Device CA, O=Example Inc, C=US'
+        - name: subject
+          in: query
+          description: Filters the results by the exact subject distinguished name.
+          required: false
+          schema:
+            type: string
+            example: 'CN=Example Device CA, O=Example Inc, C=US'
+        - name: validityStatus
+          in: query
+          description: Filters certificates by their validity status.
+          required: false
+          schema:
+            type: string
+            enum:
+              - valid
+              - expired
+              - not-yet-valid
+        - name: search
+          in: query
+          description: Searches within subject and issuer fields (case-insensitive).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: Sorts the results by the specified field.
+          required: false
+          schema:
+            type: string
+            default: createdAt
+            enum:
+              - createdAt
+              - notBefore
+              - notAfter
+              - subject
+              - issuer
+        - name: sortOrder
+          in: query
+          description: Specifies the sorting order.
+          required: false
+          schema:
+            type: string
+            default: asc
+            enum:
+              - asc
+              - desc
+      responses:
+        '200':
+          description: A paginated list of trusted device CA certificates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACertsPaginated'
+              examples:
+                success:
+                  summary: Example of a successful response
+                  value:
+                    total: 2
+                    limit: 20
+                    offset: 0
+                    certs:
+                      - fingerprint: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-01-01T00:00:00Z'
+                        notAfter: '2026-01-01T00:00:00Z'
+                        createdAt: '2025-05-10T10:30:00Z'
+                      - fingerprint: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-02-15T00:00:00Z'
+                        notAfter: '2026-02-15T00:00:00Z'
+                        createdAt: '2025-06-20T12:00:00Z'
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+              examples:
+                getPEMCACerts:
+                  summary: Example of a successful response
+                  value: |
+                    -----BEGIN CERTIFICATE-----
+                    MIID... (truncated) ...
+                    -----END CERTIFICATE-----
+                    -----BEGIN CERTIFICATE-----
+                    MIID... (truncated) ...
+                    -----END CERTIFICATE-----
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - device-ca
+    post:
+      operationId: ImportTrustedDeviceCACerts
+      summary: Import one or more trusted device CA certificates
+      description: |
+        Uploads one or more PEM-encoded certificates for trusted device certificate authorities.
+        A single PEM file may contain multiple certificates.
+
+        This operation is idempotent:
+        - Valid, non-expired certificates that don't exist in the database are imported
+        - Certificates that already exist (duplicate fingerprint) are silently skipped
+        - Expired certificates are silently skipped
+        - Malformed or invalid certificates are silently skipped
+
+        The response includes statistics and detailed messages about the operation:
+
+        - `detected`:  Total number of parsable certificate blocks found in the PEM data.
+        - `malformed`: Number of PEM blocks that could not be parsed as valid certificates.
+        - `imported`:  Number of new, valid certificates successfully imported into the database.
+        - `skipped`:   Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.
+        - `messages`:  Array of detailed status messages for each certificate processed
+      requestBody:
+        description: One or more PEM-encoded certificates. The file may contain multiple certificates.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+              maxLength: 1048576
+            examples:
+              createCert:
+                summary: Example of creating new CA certificates
+                value: |
+                  -----BEGIN CERTIFICATE-----
+                  MIID... (truncated) ...
+                  -----END CERTIFICATE-----
+                  -----BEGIN CERTIFICATE-----
+                  MIID... (truncated) ...
+                  -----END CERTIFICATE-----
+      responses:
+        '200':
+          description: Certificate upload processed successfully. Returns statistics and details of imported certificates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACertsImportResult'
+              examples:
+                allImported:
+                  summary: All certificates successfully imported
+                  value:
+                    detected: 2
+                    imported: 2
+                    skipped: 0
+                    malformed: 0
+                    messages:
+                      - 'the certificate at position 1 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was imported successfully'
+                      - 'the certificate at position 2 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was imported successfully'
+                    certs:
+                      - fingerprint: c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                      - fingerprint: d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                partialImport:
+                  summary: 'Some certificates skipped (duplicates, expired or malformed)'
+                  value:
+                    detected: 4
+                    imported: 2
+                    skipped: 1
+                    malformed: 1
+                    messages:
+                      - the certificate at position 1 is malformed
+                      - 'the certificate at position 2 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was imported successfully'
+                      - 'the certificate at position 3 with subject ''CN=Example Device CA Expired, O=Example Corp, C=US'' was skipped because it is expired'
+                      - 'the certificate at position 4 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was imported successfully'
+                    certs:
+                      - fingerprint: c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                      - fingerprint: d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123
+                        pem: |
+                          -----BEGIN CERTIFICATE-----
+                          MIID... (truncated) 
+                          -----END CERTIFICATE-----
+                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
+                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                        notBefore: '2025-10-01T00:00:00Z'
+                        notAfter: '2026-10-01T00:00:00Z'
+                        createdAt: '2025-10-27T14:00:00Z'
+                noneImported:
+                  summary: All certificates already exist
+                  value:
+                    detected: 2
+                    imported: 0
+                    skipped: 2
+                    malformed: 0
+                    messages:
+                      - 'the certificate at position 1 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was skipped because it already exists'
+                      - 'the certificate at position 2 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was skipped because it already exists'
+                    certs: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - device-ca
+  '/v1/device-ca/{fingerprint}':
+    get:
+      operationId: GetTrustedDeviceCACertByFingerprint
+      summary: Get a trusted device CA certificate by fingerprint
+      description: |
+        Retrieves a specific trusted device CA certificate by its SHA-256 fingerprint.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns certificate metadata as JSON (default)
+        - `application/x-pem-file` - Returns certificate as PEM file
+      parameters:
+        - name: fingerprint
+          in: path
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          required: true
+          schema:
+            type: string
+            example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+            pattern: '^[a-f0-9]{64}$'
+      responses:
+        '200':
+          description: The requested trusted device CA certificate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedDeviceCACert'
+              examples:
+                getCertJson:
+                  summary: Example JSON certificate response
+                  value:
+                    fingerprint: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+                    pem: |
+                      -----BEGIN CERTIFICATE-----
+                      MIID... (truncated) 
+                      -----END CERTIFICATE-----
+                    subject: 'CN=Example Device CA, O=Example Corp, C=US'
+                    issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
+                    notBefore: '2025-01-01T00:00:00Z'
+                    notAfter: '2026-01-01T00:00:00Z'
+                    createdAt: '2025-05-10T10:30:00Z'
+            application/x-pem-file:
+              schema:
+                description: The certificate content in PEM format.
+                type: string
+                format: binary
+              examples:
+                getCertPem:
+                  summary: Example PEM certificate response
+                  value: |
+                    -----BEGIN CERTIFICATE-----
+                    MIIDzTCCArWgAwIBAgIQC+2PL2fUi... (truncated)
+                    -----END CERTIFICATE-----
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - device-ca
+    delete:
+      operationId: DeleteTrustedDeviceCACert
+      summary: Delete a trusted device CA certificate by fingerprint
+      description: Deletes a specific trusted device CA certificate by its SHA-256 fingerprint.
+      parameters:
+        - name: fingerprint
+          in: path
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          required: true
+          schema:
+            type: string
+            example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+            pattern: '^[a-f0-9]{64}$'
+      responses:
+        '204':
+          description: Trusted device CA certificate deleted successfully.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - device-ca
+  /v1/rvto2addr:
+    get:
+      operationId: GetRVTO2Addr
+      summary: Get the current RVTO2 address configuration
+      description: |
+        Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address
+        configuration that specifies where devices should connect to the owner server
+        after completing the rendezvous protocol.
+      responses:
+        '200':
+          description: Successfully retrieved the RVTO2 address configuration. Returns an empty array if no configuration has been set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RVTO2Addr'
+              examples:
+                simpleHttpConfig:
+                  summary: Simple HTTP configuration with DNS
+                  value:
+                    - protocol: http
+                      dns: owner.example.com
+                      port: 8080
+                httpsWithDNS:
+                  summary: HTTPS configuration with DNS
+                  value:
+                    - protocol: https
+                      dns: owner-secure.example.com
+                      port: 8443
+                httpsWithIP:
+                  summary: HTTPS configuration with IP address
+                  value:
+                    - protocol: https
+                      ip: 192.168.1.100
+                      port: 8443
+                httpsWithBothDnsAndIP:
+                  summary: HTTPS configuration with both DNS and IP
+                  description: Both dns and ip can be provided together
+                  value:
+                    - protocol: https
+                      dns: owner.example.com
+                      ip: 192.168.1.100
+                      port: 8443
+                multipleAddresses:
+                  summary: Multiple addresses with primary and backup
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+                    - protocol: https
+                      ip: 192.168.1.100
+                      port: 8443
+                emptyConfiguration:
+                  summary: No configuration set
+                  value: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - rvto2addr
+    put:
+      operationId: UpdateRVTO2Addr
+      summary: Update the RVTO2 address configuration
+      description: |
+        Updates the rendezvous TO2 address configuration.
+
+        The new configuration will be used by devices completing the TO2 protocol
+        to determine where to connect to the owner server. This typically includes
+        the owner server's hostname/IP address, protocol, and port.
+      requestBody:
+        description: The new RVTO2 address configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RVTO2Addr'
+            examples:
+              updateToHttps:
+                summary: Update to HTTPS with DNS
+                value:
+                  - protocol: https
+                    dns: owner-new.example.com
+                    port: 8443
+              updateToMultipleAddresses:
+                summary: Update with primary and backup addresses
+                value:
+                  - protocol: https
+                    dns: owner-primary.example.com
+                    port: 8443
+                  - protocol: https
+                    dns: owner-backup.example.com
+                    port: 8443
+              updateToIPBased:
+                summary: Update to IP-based configuration
+                value:
+                  - protocol: https
+                    ip: 10.0.0.50
+                    port: 8443
+              updateWithBothDnsAndIP:
+                summary: Update with both DNS and IP address
+                description: Demonstrates that both dns and ip can be provided together
+                value:
+                  - protocol: https
+                    dns: owner-dual.example.com
+                    ip: 10.0.0.100
+                    port: 8443
+      responses:
+        '200':
+          description: Successfully updated the RVTO2 address configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RVTO2Addr'
+              examples:
+                updatedHttpsConfiguration:
+                  summary: Successfully updated to HTTPS configuration
+                  value:
+                    - protocol: https
+                      dns: owner-new.example.com
+                      port: 8443
+                updatedMultipleAddresses:
+                  summary: Successfully updated with multiple addresses
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - rvto2addr
+    delete:
+      operationId: DeleteRVTO2Addr
+      summary: Delete the RVTO2 address configuration
+      description: |
+        Deletes the current rendezvous TO2 address configuration.
+
+        After deletion, devices will not have owner server address information
+        available until a new configuration is set via PUT. Returns the deleted
+        configuration, or an empty array if no configuration was set.
+      responses:
+        '200':
+          description: Successfully deleted the RVTO2 address configuration. Returns the deleted configuration or an empty array if nothing was configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RVTO2Addr'
+              examples:
+                deletedHttpsConfiguration:
+                  summary: Deleted HTTPS configuration
+                  value:
+                    - protocol: https
+                      dns: owner.example.com
+                      port: 8443
+                deletedMultipleAddresses:
+                  summary: Deleted multiple address configuration
+                  value:
+                    - protocol: https
+                      dns: owner-primary.example.com
+                      port: 8443
+                    - protocol: https
+                      dns: owner-backup.example.com
+                      port: 8443
+                noConfigurationToDelete:
+                  summary: No configuration was set
+                  value: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - rvto2addr
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        version:
+          description: The server version
+          type: string
+          example: 0.0.1
+        status:
+          description: The server health status
+          type: string
+          example: OK
+        message:
+          description: Human-readable status message or error description
+          type: string
+          example: the service is up and running
+      required:
+        - version
+        - status
+        - message
+    Error:
+      type: object
+      properties:
+        message:
+          description: A human-readable error message.
+          type: string
+      required:
+        - message
+    VoucherGuid:
+      description: The device GUID (32 hexadecimal characters).
+      type: string
+      example: d21d841a3f54f4e89a60ed9b9779e9e8
+      pattern: '^[a-f0-9]{32}$'
+    VoucherProtocolVersion:
+      description: 'The FDO protocol version (e.g., 101 for version 1.1).'
+      type: integer
+      example: 101
+    VoucherDeviceInfo:
+      description: Device information string.
+      type: string
+      example: Intel Device
+      maxLength: 256
+    VoucherNumEntries:
+      description: Number of ownership entries in the voucher.
+      type: integer
+      example: 1
+      minimum: 0
+    OwnershipVoucherSummary:
+      type: object
+      properties:
+        guid:
+          $ref: '#/components/schemas/VoucherGuid'
+        protocolVersion:
+          $ref: '#/components/schemas/VoucherProtocolVersion'
+        deviceInfo:
+          $ref: '#/components/schemas/VoucherDeviceInfo'
+        numEntries:
+          $ref: '#/components/schemas/VoucherNumEntries'
+      required:
+        - guid
+        - protocolVersion
+        - deviceInfo
+        - numEntries
+    OwnershipVoucherCreatedAt:
+      description: The timestamp when the voucher was created.
+      type: string
+      format: date-time
+    OwnershipVoucherUpdatedAt:
+      description: The timestamp when the voucher was last updated.
+      type: string
+      format: date-time
+    OwnershipVoucherSummaryInfo:
+      type: object
+      properties:
+        voucher:
+          $ref: '#/components/schemas/OwnershipVoucherSummary'
+        createdAt:
+          $ref: '#/components/schemas/OwnershipVoucherCreatedAt'
+        updatedAt:
+          $ref: '#/components/schemas/OwnershipVoucherUpdatedAt'
+      required:
+        - voucher
+        - createdAt
+        - updatedAt
+    OwnershipVouchersPaginated:
+      type: object
+      properties:
+        total:
+          description: Total number of ownership vouchers available.
+          type: integer
+        limit:
+          description: The number of items returned in this response.
+          type: integer
+        offset:
+          description: The offset from the beginning of the collection.
+          type: integer
+        vouchers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+      required:
+        - total
+        - limit
+        - offset
+        - vouchers
+    DNSHostname:
+      type: string
+      format: hostname
+      example: rendezvous.example.com
+    DNS:
+      description: DNS hostname for the server
+      type: object
+      properties:
+        dns:
+          $ref: '#/components/schemas/DNSHostname'
+      example:
+        dns: rendezvous.example.com
+    IPv4Address:
+      type: string
+      format: ipv4
+      example: 192.168.1.100
+    IP:
+      description: IPv4 address for the server
+      type: object
+      properties:
+        ip:
+          $ref: '#/components/schemas/IPv4Address'
+      example:
+        ip: 192.168.1.100
+    ProtocolType:
+      description: |
+        Protocol to use for communication:
+        - `rest` - RESTful HTTP/HTTPS
+        - `http` - HTTP protocol
+        - `https` - HTTPS protocol (recommended for production)
+        - `tcp` - Raw TCP connection
+        - `tls` - TLS-secured TCP connection
+        - `coap+tcp` - CoAP over TCP
+        - `coap` - Constrained Application Protocol
+      type: string
+      example: https
+      enum:
+        - rest
+        - http
+        - https
+        - tcp
+        - tls
+        - coap+tcp
+        - coap
+    Protocol:
+      description: Communication protocol specification
+      type: object
+      properties:
+        protocol:
+          $ref: '#/components/schemas/ProtocolType'
+      example:
+        protocol: https
+    Medium:
+      description: |
+        Network medium/interface to use for communication:
+        - `wired_1` through `wired_9` - Specific wired network interfaces
+        - `wifi_1` through `wifi_9` - Specific WiFi network interfaces
+        - `wired_all` - Any available wired interface
+        - `wifi_all` - Any available WiFi interface
+      type: object
+      properties:
+        medium:
+          type: string
+          enum:
+            - wired_1
+            - wired_2
+            - wired_3
+            - wired_4
+            - wired_5
+            - wired_6
+            - wired_7
+            - wired_8
+            - wired_9
+            - wifi_1
+            - wifi_2
+            - wifi_3
+            - wifi_4
+            - wifi_5
+            - wifi_6
+            - wifi_7
+            - wifi_8
+            - wifi_9
+            - wired_all
+            - wifi_all
+      example:
+        medium: wifi_all
+    PortNumber:
+      type: integer
+      example: 8443
+      maximum: 65535
+      minimum: 1
+    DevicePort:
+      description: Port number on the device side
+      type: object
+      properties:
+        device_port:
+          $ref: '#/components/schemas/PortNumber'
+      example:
+        device_port: 8080
+    OwnerPort:
+      description: Port number on the owner/server side
+      type: object
+      properties:
+        owner_port:
+          $ref: '#/components/schemas/PortNumber'
+      example:
+        owner_port: 8443
+    WifiSSID:
+      description: WiFi network SSID (Service Set Identifier)
+      type: object
+      properties:
+        wifi_ssid:
+          type: string
+          maxLength: 32
+          minLength: 1
+      example:
+        wifi_ssid: FDO-Network
+    WifiPW:
+      description: WiFi network password
+      type: object
+      properties:
+        wifi_pw:
+          type: string
+          format: password
+      example:
+        wifi_pw: SecurePassword123
+    DevOnly:
+      description: Instruction applies to device only (not owner)
+      type: object
+      properties:
+        dev_only:
+          type: boolean
+      example:
+        dev_only: true
+    OwnerOnly:
+      description: Instruction applies to owner only (not device)
+      type: object
+      properties:
+        owner_only:
+          type: boolean
+      example:
+        owner_only: true
+    RVBypass:
+      description: Bypass rendezvous server and connect directly to owner
+      type: object
+      properties:
+        rv_bypass:
+          type: boolean
+      example:
+        rv_bypass: true
+    DelaySeconds:
+      description: Delay in seconds before attempting connection (with up to 25% randomization)
+      type: object
+      properties:
+        delay_seconds:
+          type: integer
+          format: int32
+          minimum: 0
+      example:
+        delay_seconds: 30
+    SvCertHash:
+      description: Server certificate hash for validation (SHA-256 or SHA-384)
+      type: object
+      properties:
+        sv_cert_hash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        sv_cert_hash: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01
+    ClCertHash:
+      description: Client certificate hash for validation (SHA-256 or SHA-384)
+      type: object
+      properties:
+        cl_cert_hash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+      example:
+        cl_cert_hash: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
+    UserInput:
+      description: Indicates whether user input is allowed to update rendezvous variables during device onboarding
+      type: object
+      properties:
+        user_input:
+          type: boolean
+      example:
+        user_input: true
+    ExtRV:
+      description: Extended rendezvous information for custom device-specific instructions
+      type: object
+      properties:
+        ext_rv:
+          type: array
+          items:
+            type: string
+      example:
+        ext_rv:
+          - custom-instruction-1
+          - custom-instruction-2
+    RVInstruction:
+      type: array
+      items:
+        anyOf:
+          - $ref: '#/components/schemas/DNS'
+          - $ref: '#/components/schemas/IP'
+          - $ref: '#/components/schemas/Protocol'
+          - $ref: '#/components/schemas/Medium'
+          - $ref: '#/components/schemas/DevicePort'
+          - $ref: '#/components/schemas/OwnerPort'
+          - $ref: '#/components/schemas/WifiSSID'
+          - $ref: '#/components/schemas/WifiPW'
+          - $ref: '#/components/schemas/DevOnly'
+          - $ref: '#/components/schemas/OwnerOnly'
+          - $ref: '#/components/schemas/RVBypass'
+          - $ref: '#/components/schemas/DelaySeconds'
+          - $ref: '#/components/schemas/SvCertHash'
+          - $ref: '#/components/schemas/ClCertHash'
+          - $ref: '#/components/schemas/UserInput'
+          - $ref: '#/components/schemas/ExtRV'
+    RVInfo:
+      description: |
+        Rendezvous information array containing one or more instruction sets
+        (RendezvousDirective). Each instruction set guides devices and owners on how
+        to connect to the rendezvous server, including network configuration, protocols,
+        and connection parameters.
+
+        Processing behavior (FDO specification section 3.7):
+        - Instruction sets are processed in order (index 0 first, then 1, etc.)
+        - The first successful connection to a rendezvous server MAY be used
+        - All DNS addresses within an instruction set MUST be processed before
+          moving to the next instruction set
+        - Multiple instruction sets provide fallback options for device connectivity
+        - Devices and owners may avoid redundant operations (e.g., contacting the
+          same IP address twice)
+      type: array
+      items:
+        $ref: '#/components/schemas/RVInstruction'
+    PublicKey:
+      type: object
+      properties:
+        type:
+          description: Public key algorithm type.
+          type: string
+          example: SECP256R1
+          enum:
+            - RSA2048RESTR
+            - RSAPKCS
+            - SECP256R1
+            - SECP384R1
+        value:
+          description: Base64-encoded public key.
+          type: string
+          example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+      required:
+        - type
+        - value
+    Hash:
+      type: object
+      properties:
+        algorithm:
+          description: Hash algorithm.
+          type: string
+          example: SHA-384
+          enum:
+            - SHA-256
+            - SHA-384
+            - SHA-512
+            - HMAC-SHA-256
+            - HMAC-SHA-384
+            - HMAC-SHA-512
+        value:
+          description: |
+            Hexadecimal hash value. The length must match the algorithm:
+            - SHA-256/HMAC-SHA-256: 64 hexadecimal characters (32 bytes)
+            - SHA-384/HMAC-SHA-384: 96 hexadecimal characters (48 bytes)
+            - SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)
+          type: string
+          example: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$'
+      required:
+        - algorithm
+        - value
+    VoucherHeader:
+      type: object
+      properties:
+        version:
+          description: Header version.
+          type: integer
+          example: 101
+        guid:
+          description: The device GUID (32 hexadecimal characters).
+          type: string
+          example: d21d841a3f54f4e89a60ed9b9779e9e8
+          pattern: '^[a-f0-9]{32}$'
+        rvInfo:
+          $ref: '#/components/schemas/RVInfo'
+        deviceInfo:
+          description: Device information string.
+          type: string
+        manufacturerKey:
+          $ref: '#/components/schemas/PublicKey'
+        certChainHash:
+          description: Hash of the certificate chain (required when certChain is present).
+          allOf:
+            - $ref: '#/components/schemas/Hash'
+          nullable: true
+      required:
+        - version
+        - guid
+        - rvInfo
+        - deviceInfo
+        - manufacturerKey
+    VoucherEntry:
+      type: object
+      properties:
+        previousHash:
+          description: Hash of the previous entry (all zeros for first entry).
+          $ref: '#/components/schemas/Hash'
+        headerHash:
+          description: Hash of the voucher header.
+          $ref: '#/components/schemas/Hash'
+        publicKey:
+          description: Public key of the owner.
+          $ref: '#/components/schemas/PublicKey'
+        extra:
+          description: Additional optional data.
+          type: object
+          additionalProperties: true
+          nullable: true
+      required:
+        - previousHash
+        - headerHash
+        - publicKey
+    OwnershipVoucher:
+      type: object
+      properties:
+        guid:
+          $ref: '#/components/schemas/VoucherGuid'
+        protocolVersion:
+          $ref: '#/components/schemas/VoucherProtocolVersion'
+        deviceInfo:
+          $ref: '#/components/schemas/VoucherDeviceInfo'
+        numEntries:
+          $ref: '#/components/schemas/VoucherNumEntries'
+        header:
+          $ref: '#/components/schemas/VoucherHeader'
+        hmac:
+          $ref: '#/components/schemas/Hash'
+        certChain:
+          description: X.509 certificate chain in PEM format (null for Intel EPID).
+          type: array
+          items:
+            type: string
+            format: pem
+          nullable: true
+        entries:
+          description: Ownership entry chain.
+          type: array
+          items:
+            $ref: '#/components/schemas/VoucherEntry'
+      required:
+        - guid
+        - protocolVersion
+        - deviceInfo
+        - numEntries
+        - header
+        - hmac
+        - entries
+    TrustedDeviceCACert:
+      type: object
+      properties:
+        fingerprint:
+          description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
+          type: string
+          example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+          pattern: '^[a-f0-9]{64}$'
+        pem:
+          description: The full certificate content in PEM format.
+          type: string
+          format: pem
+          maxLength: 32768
+          pattern: '^-----BEGIN CERTIFICATE-----\n[\s\S]+\n-----END CERTIFICATE-----\n?$'
+        subject:
+          description: The subject distinguished name of the certificate.
+          type: string
+        issuer:
+          description: The issuer distinguished name of the certificate.
+          type: string
+        notBefore:
+          description: The start date of the certificate's validity period.
+          type: string
+          format: date-time
+        notAfter:
+          description: The end date of the certificate's validity period.
+          type: string
+          format: date-time
+        createdAt:
+          description: The timestamp when the certificate was added.
+          type: string
+          format: date-time
+      required:
+        - fingerprint
+        - pem
+        - subject
+        - issuer
+        - notBefore
+        - notAfter
+        - createdAt
+    TrustedDeviceCACerts:
+      type: array
+      items:
+        $ref: '#/components/schemas/TrustedDeviceCACert'
+    TrustedDeviceCACertsPaginated:
+      type: object
+      properties:
+        total:
+          description: Total number of trusted device CA certificates available.
+          type: integer
+        limit:
+          description: The number of items returned in this response.
+          type: integer
+        offset:
+          description: The offset from the beginning of the collection.
+          type: integer
+        certs:
+          $ref: '#/components/schemas/TrustedDeviceCACerts'
+      required:
+        - total
+        - limit
+        - offset
+        - certs
+    TrustedDeviceCACertsImportResult:
+      type: object
+      properties:
+        detected:
+          description: Total number of certificate blocks found in the PEM data.
+          type: integer
+          example: 5
+        imported:
+          description: Number of certificates successfully added to the database.
+          type: integer
+          example: 2
+        skipped:
+          description: Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.
+          type: integer
+          example: 2
+        malformed:
+          description: Number of certificate blocks that could not be parsed or validated.
+          type: integer
+          example: 1
+        messages:
+          description: Detailed import result messages for each certificate found in the PEM data.
+          type: array
+          items:
+            type: string
+          example:
+            - the certificate at position 1 is malformed
+            - 'the certificate at position 2 with subject ''CN=Device CA 2,O=Example Inc'' was imported successfully'
+            - 'the certificate at position 3 with subject ''CN=Device CA 3,O=Example Inc'' was skipped because it is expired'
+            - 'the certificate at position 4 with subject ''CN=Device CA 4,O=Example Inc'' was skipped because it already exists'
+            - 'the certificate at position 5 with subject ''CN=Device CA 5,O=Example Inc'' was imported successfully'
+        certs:
+          description: 'Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).'
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedDeviceCACert'
+      required:
+        - detected
+        - imported
+        - skipped
+        - malformed
+        - messages
+        - certs
+    RVTO2AddrEntry:
+      description: |
+        A single owner server address entry. Each entry specifies the protocol,
+        network location (DNS hostname and/or IP address), and port for connecting
+        to the owner server during TO2 protocol.
+
+        Both 'dns' and 'ip' fields are optional and may be provided independently
+        or together. However, at least one addressing method MUST be specified
+        (non-null) as required by FDO specification section 3.3.14. Requests that
+        omit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.
+
+        When both 'dns' and 'ip' are provided, the device MUST attempt to connect
+        using the DNS address first. The device MUST only use the IP address after
+        all DNS connection attempts have failed. This behavior is defined in the
+        FDO specification section 3.3.14.
+      type: object
+      properties:
+        protocol:
+          $ref: '#/components/schemas/ProtocolType'
+        dns:
+          $ref: '#/components/schemas/DNSHostname'
+        ip:
+          $ref: '#/components/schemas/IPv4Address'
+        port:
+          $ref: '#/components/schemas/PortNumber'
+      required:
+        - protocol
+        - port
+    RVTO2Addr:
+      description: |
+        Rendezvous TO2 address configuration. Specifies one or more owner server
+        addresses that devices should use to connect during the TO2 (Transfer of
+        Ownership 2) protocol after completing rendezvous. Multiple entries provide
+        fallback options if the primary address is unreachable.
+      type: array
+      items:
+        $ref: '#/components/schemas/RVTO2AddrEntry'
+  responses:
+    HealthStatus:
+      description: Server health status
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'
+          examples:
+            healthy:
+              summary: Example of a healthy server
+              value:
+                version: 0.0.1
+                status: OK
+                message: the service is up and running
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            serverError:
+              summary: Example of a server error
+              value:
+                message: An unexpected error occurred.
+    BadRequest:
+      description: Bad Request - The request was malformed or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              summary: Example of a bad request error
+              value:
+                message: Invalid Request.
+    Unauthorized:
+      description: 'Unauthorized - Authentication credentials missing, invalid, or expired.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              summary: Example of an unauthorized error
+              value:
+                message: Authentication token is invalid or has expired.
+    Forbidden:
+      description: Forbidden - The authenticated user does not have permission to perform this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            forbidden:
+              summary: Example of a forbidden error
+              value:
+                message: User does not have the right access level.
+    NotFound:
+      description: Not Found - The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              summary: Example of a not found error
+              value:
+                message: Object not found.
+tags:
+  - name: health
+    description: Server's health monitoring
+  - name: device-ca
+    description: Operations related to trusted device CA certificates management
+  - name: rvto2addr
+    description: Operations related to rendezvous TO2 address management
+  - name: voucher
+    description: Operations related to ownership voucher management
