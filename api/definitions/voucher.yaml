@@ -1,0 +1,666 @@
+openapi: 3.0.0
+info:
+  title: Ownership Voucher management API
+  version: 1.0.0
+  description: An API for managing FDO (FIDO Device Onboard) Ownership Vouchers. It supports List, Create, Read, Update and Delete (LCRUD) operations. Ownership vouchers are used to transfer device ownership in the FDO protocol.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: voucher
+    description: |
+      Operations related to ownership voucher management.
+
+      Typical workflow: Import vouchers (POST) → List/filter vouchers (GET) →
+      Retrieve specific voucher (GET /{guid}) → Extend ownership (POST /{guid}/extend) →
+      Delete when no longer needed (DELETE /{guid})
+paths:
+  /v1/vouchers:
+    get:
+      tags:
+        - voucher
+      summary: List all ownership vouchers
+      description: |
+        Retrieves a paginated, filterable, and sortable list of all ownership vouchers.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns voucher metadata as JSON (default)
+        - `application/x-pem-file` - Returns vouchers as concatenated PEM file
+
+        If no Accept header is provided, the response defaults to `application/json`.
+      operationId: ListOwnershipVouchers
+      parameters:
+        - name: limit
+          in: query
+          description: The number of items to return per page.
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result set.
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: guid
+          in: query
+          description: Filters the results by the exact device GUID.
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{32}$'
+            example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+        - name: deviceInfo
+          in: query
+          description: Filters the results by device information (case-insensitive partial match).
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Searches within device info and GUID fields (case-insensitive).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: Sorts the results by the specified field.
+          required: false
+          schema:
+            type: string
+            enum:
+              - createdAt
+              - updatedAt
+              - guid
+              - deviceInfo
+            default: createdAt
+        - name: sortOrder
+          in: query
+          description: Specifies the sorting order.
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+      responses:
+        '200':
+          description: A paginated list of ownership vouchers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnershipVouchersPaginated'
+              examples:
+                success:
+                  summary: Example of a successful response
+                  description: |
+                    Shows page 1 of results (items 0-19 of 2 total).
+                    To navigate pages:
+                    - Next page: GET /vouchers?limit=20&offset=20
+                    - Previous page: GET /vouchers?limit=20&offset=0 (already at first page)
+                    - Total pages: ceil(total / limit) = ceil(2 / 20) = 1
+                  value:
+                    total: 2
+                    limit: 20
+                    offset: 0
+                    vouchers:
+                      - voucher:
+                          guid: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+                          protocolVersion: 101
+                          deviceInfo: 'Intel Device'
+                          numEntries: 1
+                        createdAt: '2025-05-10T10:30:00Z'
+                        updatedAt: '2025-05-10T10:30:00Z'
+                      - voucher:
+                          guid: 'a1b2c3d4e5f6789012345678abcdef01'
+                          protocolVersion: 101
+                          deviceInfo: 'ARM IoT Device'
+                          numEntries: 2
+                        createdAt: '2025-06-20T12:00:00Z'
+                        updatedAt: '2025-06-21T08:15:00Z'
+            application/x-pem-file:
+              schema:
+                type: string
+              examples:
+                getPEMVouchers:
+                  summary: Example of a successful response
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
+                    ...
+                    -----END OWNERSHIP VOUCHER-----
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
+                    GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
+                    ...
+                    -----END OWNERSHIP VOUCHER-----
+        '400':
+          $ref: 'components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    post:
+      tags:
+        - voucher
+      summary: Import ownership voucher(s)
+      description: |
+        Imports one or more ownership vouchers into the system.
+
+        This operation is idempotent:
+        - Valid vouchers that don't exist in the database are imported
+        - Vouchers that already exist (duplicate GUID) are rejected with a 409 error
+        - Malformed or invalid vouchers are rejected with a 400 error
+
+        Ownership vouchers can be provided in PEM or JSON format.
+        You can import a single voucher or an array of vouchers.
+      operationId: ImportOwnershipVouchers
+      requestBody:
+        description: One or more ownership vouchers in PEM or JSON format.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              maxLength: 1048576
+            examples:
+              importFromPEM:
+                summary: Example of importing vouchers from PEM
+                value: |
+                  -----BEGIN OWNERSHIP VOUCHER-----
+                  oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                  AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
+                  ...
+                  -----END OWNERSHIP VOUCHER-----
+                  -----BEGIN OWNERSHIP VOUCHER-----
+                  oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
+                  GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
+                  ...
+                  -----END OWNERSHIP VOUCHER-----
+      responses:
+        '201':
+          description: Ownership voucher(s) imported successfully.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+              examples:
+                success:
+                  summary: Vouchers successfully imported
+                  value:
+                    - voucher:
+                        guid: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+                        protocolVersion: 101
+                        deviceInfo: 'Intel Device'
+                        numEntries: 1
+                      createdAt: '2025-10-27T14:00:00Z'
+                      updatedAt: '2025-10-27T14:00:00Z'
+                    - voucher:
+                        guid: 'a1b2c3d4e5f6789012345678abcdef01'
+                        protocolVersion: 101
+                        deviceInfo: 'ARM IoT Device'
+                        numEntries: 1
+                      createdAt: '2025-10-27T14:00:00Z'
+                      updatedAt: '2025-10-27T14:00:00Z'
+        '400':
+          $ref: 'components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '409':
+          description: Conflict - A voucher with this GUID already exists.
+          content:
+            application/json:
+              schema:
+                $ref: 'components.yaml#/components/schemas/Error'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+  /v1/vouchers/{guid}:
+    get:
+      tags:
+        - voucher
+      summary: Get an ownership voucher by GUID
+      description: |
+        Retrieves a specific ownership voucher by its device GUID.
+
+        Use the Accept header to specify the response format:
+        - `application/json` - Returns voucher metadata as JSON (default)
+        - `application/x-pem-file` - Returns voucher as PEM file
+
+        If no Accept header is provided, the response defaults to `application/json`.
+      operationId: GetOwnershipVoucherByGuid
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          description: The device GUID (32 hexadecimal characters).
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{32}$'
+            example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+      responses:
+        '200':
+          description: The requested ownership voucher.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                description: The voucher content in PEM format.
+              examples:
+                getVoucherPem:
+                  summary: Example PEM voucher response
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
+                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
+                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
+                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXk=
+                    -----END OWNERSHIP VOUCHER-----
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnershipVoucher'
+              examples:
+                getVoucherJson:
+                  summary: Example JSON voucher response
+                  value:
+                    guid: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+                    protocolVersion: 101
+                    deviceInfo: 'Intel Device'
+                    numEntries: 1
+                    header:
+                      version: 101
+                      guid: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+                      rvInfo:
+                        - - dns: 'rendezvous.example.com'
+                          - protocol: 'http'
+                          - owner_port: 8080
+                      deviceInfo: 'Intel Device'
+                      manufacturerKey:
+                        type: 'SECP256R1'
+                        value: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...'
+                      certChainHash:
+                        algorithm: 'SHA-384'
+                        value: 'a1b2c3d4...'
+                    hmac:
+                      algorithm: 'HMAC-SHA-384'
+                      value: 'e5f6a7b8...'
+                    certChain:
+                      - '-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'
+                    entries:
+                      - previousHash:
+                          algorithm: 'SHA-384'
+                          value: '00000000...'
+                        headerHash:
+                          algorithm: 'SHA-384'
+                          value: 'c3d4e5f6...'
+                        publicKey:
+                          type: 'SECP256R1'
+                          value: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: 'components.yaml#/components/responses/NotFound'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - voucher
+      summary: Delete an ownership voucher by GUID
+      description: Deletes a specific ownership voucher by its device GUID.
+      operationId: DeleteOwnershipVoucher
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          description: The device GUID (32 hexadecimal characters).
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{32}$'
+            example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+      responses:
+        '204':
+          description: Ownership voucher deleted successfully.
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: 'components.yaml#/components/responses/NotFound'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+  /v1/vouchers/{guid}/extend:
+    post:
+      tags:
+        - voucher
+      summary: Extend an ownership voucher
+      description: |
+        Extends an ownership voucher by adding a new ownership entry. This operation
+        is used to transfer ownership of a device from one owner to another.
+
+        The request must include the new owner's public key and will be signed
+        with the current owner's private key.
+      operationId: ExtendOwnershipVoucher
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          description: The device GUID (32 hexadecimal characters).
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{32}$'
+            example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+      requestBody:
+        description: New owner's public key or certificate in PEM format.
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+            examples:
+              extendWithPublicKey:
+                summary: Extend voucher with PEM encoded public key
+                value: |
+                  -----BEGIN PUBLIC KEY-----
+                  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaXhXuQUiGqKv5VqJ3VZqDz7XJ8v5
+                  KxMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8Pw==
+                  -----END PUBLIC KEY-----
+              extendWithCertificate:
+                summary: Extend voucher with PEM encoded certificate
+                value: |
+                  -----BEGIN CERTIFICATE-----
+                  MIICljCCAX4CCQDqJ0HQqh0W5jANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV
+                  UzAeFw0yNTEwMjcxNDAwMDBaFw0yNjEwMjcxNDAwMDBaMA0xCzAJBgNVBAYTAlVT
+                  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx2q5VqJ3VZqDz7XJ8v5K
+                  xMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PwIDAQAB
+                  MA0GCSqGSIb3DQEBCwUAA4IBAQBqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3Yq
+                  N8PzGqKJ5vZ3YqN8Pw==
+                  -----END CERTIFICATE-----
+      responses:
+        '200':
+          description: Ownership voucher extended successfully.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                description: The extended voucher in PEM format.
+              examples:
+                extendedVoucher:
+                  summary: Extended voucher in PEM format
+                  value: |
+                    -----BEGIN OWNERSHIP VOUCHER-----
+                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
+                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
+                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
+                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
+                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlY
+                    a6EBAmhta2V5dmFsdWUGaGNlcnRDaGFpbkhhc2ihaEFsZ29yaXRobUhTSEEt
+                    Mzg0aVZhbHVlWDCwkz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNl
+                    IGluZm9ybWF0aW9uBWJtZnJLZXk=
+                    -----END OWNERSHIP VOUCHER-----
+        '400':
+          $ref: 'components.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: 'components.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: 'components.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: 'components.yaml#/components/responses/NotFound'
+        '500':
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - OidcAuth: []
+  - Oauth2Auth: []
+components:
+  securitySchemes:
+    BasicAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
+    BearerAuth:
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
+    ApiKeyAuth:
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
+    OidcAuth:
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
+    Oauth2Auth:
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'
+  schemas:
+    OwnershipVouchersPaginated:
+      type: object
+      required:
+        - total
+        - limit
+        - offset
+        - vouchers
+      properties:
+        total:
+          type: integer
+          description: Total number of ownership vouchers available.
+        limit:
+          type: integer
+          description: The number of items returned in this response.
+        offset:
+          type: integer
+          description: The offset from the beginning of the collection.
+        vouchers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
+    OwnershipVoucherSummary:
+      type: object
+      required:
+        - guid
+        - protocolVersion
+        - deviceInfo
+        - numEntries
+      properties:
+        guid:
+          $ref: '#/components/schemas/VoucherGuid'
+        protocolVersion:
+          $ref: '#/components/schemas/VoucherProtocolVersion'
+        deviceInfo:
+          $ref: '#/components/schemas/VoucherDeviceInfo'
+        numEntries:
+          $ref: '#/components/schemas/VoucherNumEntries'
+    OwnershipVoucherSummaryInfo:
+      type: object
+      required:
+        - voucher
+        - createdAt
+        - updatedAt
+      properties:
+        voucher:
+          $ref: '#/components/schemas/OwnershipVoucherSummary'
+        createdAt:
+          $ref: '#/components/schemas/OwnershipVoucherCreatedAt'
+        updatedAt:
+          $ref: '#/components/schemas/OwnershipVoucherUpdatedAt'
+    OwnershipVoucher:
+      type: object
+      required:
+        - guid
+        - protocolVersion
+        - deviceInfo
+        - numEntries
+        - header
+        - hmac
+        - entries
+      properties:
+        guid:
+          $ref: '#/components/schemas/VoucherGuid'
+        protocolVersion:
+          $ref: '#/components/schemas/VoucherProtocolVersion'
+        deviceInfo:
+          $ref: '#/components/schemas/VoucherDeviceInfo'
+        numEntries:
+          $ref: '#/components/schemas/VoucherNumEntries'
+        header:
+          $ref: '#/components/schemas/VoucherHeader'
+        hmac:
+          $ref: '#/components/schemas/Hash'
+        certChain:
+          type: array
+          nullable: true
+          description: X.509 certificate chain in PEM format (null for Intel EPID).
+          items:
+            type: string
+            format: pem
+        entries:
+          type: array
+          description: Ownership entry chain.
+          items:
+            $ref: '#/components/schemas/VoucherEntry'
+    OwnershipVoucherInfo:
+      type: object
+      required:
+        - voucher
+        - createdAt
+        - updatedAt
+      properties:
+        voucher:
+          $ref: '#/components/schemas/OwnershipVoucher'
+        createdAt:
+          $ref: '#/components/schemas/OwnershipVoucherCreatedAt'
+        updatedAt:
+          $ref: '#/components/schemas/OwnershipVoucherUpdatedAt'
+    OwnershipVoucherCreatedAt:
+      type: string
+      format: date-time
+      description: The timestamp when the voucher was created.
+    OwnershipVoucherUpdatedAt:
+      type: string
+      format: date-time
+      description: The timestamp when the voucher was last updated.
+    VoucherGuid:
+      type: string
+      pattern: '^[a-f0-9]{32}$'
+      description: The device GUID (32 hexadecimal characters).
+      example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+    VoucherProtocolVersion:
+      type: integer
+      description: The FDO protocol version (e.g., 101 for version 1.1).
+      example: 101
+    VoucherDeviceInfo:
+      type: string
+      description: Device information string.
+      maxLength: 256
+      example: 'Intel Device'
+    VoucherNumEntries:
+      type: integer
+      description: Number of ownership entries in the voucher.
+      example: 1
+      minimum: 0
+    VoucherHeader:
+      type: object
+      required:
+        - version
+        - guid
+        - rvInfo
+        - deviceInfo
+        - manufacturerKey
+      properties:
+        version:
+          type: integer
+          description: Header version.
+          example: 101
+        guid:
+          type: string
+          pattern: '^[a-f0-9]{32}$'
+          description: The device GUID (32 hexadecimal characters).
+          example: 'd21d841a3f54f4e89a60ed9b9779e9e8'
+        rvInfo:
+          $ref: 'components.yaml#/components/schemas/RVInfo'
+        deviceInfo:
+          type: string
+          description: Device information string.
+        manufacturerKey:
+          $ref: '#/components/schemas/PublicKey'
+        certChainHash:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Hash'
+          description: Hash of the certificate chain (required when certChain is present).
+    VoucherEntry:
+      type: object
+      required:
+        - previousHash
+        - headerHash
+        - publicKey
+      properties:
+        previousHash:
+          $ref: '#/components/schemas/Hash'
+          description: Hash of the previous entry (all zeros for first entry).
+        headerHash:
+          $ref: '#/components/schemas/Hash'
+          description: Hash of the voucher header.
+        publicKey:
+          $ref: '#/components/schemas/PublicKey'
+          description: Public key of the owner.
+        extra:
+          type: object
+          nullable: true
+          description: Additional optional data.
+          additionalProperties: true
+    PublicKey:
+      type: object
+      required:
+        - type
+        - value
+      properties:
+        type:
+          type: string
+          description: Public key algorithm type.
+          enum:
+            - RSA2048RESTR
+            - RSAPKCS
+            - SECP256R1
+            - SECP384R1
+          example: 'SECP256R1'
+        value:
+          type: string
+          description: Base64-encoded public key.
+          example: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...'
+    Hash:
+      type: object
+      required:
+        - algorithm
+        - value
+      properties:
+        algorithm:
+          type: string
+          description: Hash algorithm.
+          enum:
+            - SHA-256
+            - SHA-384
+            - SHA-512
+            - HMAC-SHA-256
+            - HMAC-SHA-384
+            - HMAC-SHA-512
+          example: 'SHA-384'
+        value:
+          type: string
+          description: |
+            Hexadecimal hash value. The length must match the algorithm:
+            - SHA-256/HMAC-SHA-256: 64 hexadecimal characters (32 bytes)
+            - SHA-384/HMAC-SHA-384: 96 hexadecimal characters (48 bytes)
+            - SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$'
+          example: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01'
