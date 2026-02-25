@@ -149,16 +149,16 @@ type ListTrustedDeviceCACertsParamsSortOrder string
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List all trusted device CA certificates
-	// (GET /device-ca)
+	// (GET /v1/device-ca)
 	ListTrustedDeviceCACerts(w http.ResponseWriter, r *http.Request, params ListTrustedDeviceCACertsParams)
 	// Import one or more trusted device CA certificates
-	// (POST /device-ca)
+	// (POST /v1/device-ca)
 	ImportTrustedDeviceCACerts(w http.ResponseWriter, r *http.Request)
 	// Delete a trusted device CA certificate by fingerprint
-	// (DELETE /device-ca/{fingerprint})
+	// (DELETE /v1/device-ca/{fingerprint})
 	DeleteTrustedDeviceCACert(w http.ResponseWriter, r *http.Request, fingerprint string)
 	// Get a trusted device CA certificate by fingerprint
-	// (GET /device-ca/{fingerprint})
+	// (GET /v1/device-ca/{fingerprint})
 	GetTrustedDeviceCACertByFingerprint(w http.ResponseWriter, r *http.Request, fingerprint string)
 }
 
@@ -494,10 +494,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("GET "+options.BaseURL+"/device-ca", wrapper.ListTrustedDeviceCACerts)
-	m.HandleFunc("POST "+options.BaseURL+"/device-ca", wrapper.ImportTrustedDeviceCACerts)
-	m.HandleFunc("DELETE "+options.BaseURL+"/device-ca/{fingerprint}", wrapper.DeleteTrustedDeviceCACert)
-	m.HandleFunc("GET "+options.BaseURL+"/device-ca/{fingerprint}", wrapper.GetTrustedDeviceCACertByFingerprint)
+	m.HandleFunc("GET "+options.BaseURL+"/v1/device-ca", wrapper.ListTrustedDeviceCACerts)
+	m.HandleFunc("POST "+options.BaseURL+"/v1/device-ca", wrapper.ImportTrustedDeviceCACerts)
+	m.HandleFunc("DELETE "+options.BaseURL+"/v1/device-ca/{fingerprint}", wrapper.DeleteTrustedDeviceCACert)
+	m.HandleFunc("GET "+options.BaseURL+"/v1/device-ca/{fingerprint}", wrapper.GetTrustedDeviceCACertByFingerprint)
 
 	return m
 }
@@ -771,16 +771,16 @@ func (response GetTrustedDeviceCACertByFingerprint500JSONResponse) VisitGetTrust
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// List all trusted device CA certificates
-	// (GET /device-ca)
+	// (GET /v1/device-ca)
 	ListTrustedDeviceCACerts(ctx context.Context, request ListTrustedDeviceCACertsRequestObject) (ListTrustedDeviceCACertsResponseObject, error)
 	// Import one or more trusted device CA certificates
-	// (POST /device-ca)
+	// (POST /v1/device-ca)
 	ImportTrustedDeviceCACerts(ctx context.Context, request ImportTrustedDeviceCACertsRequestObject) (ImportTrustedDeviceCACertsResponseObject, error)
 	// Delete a trusted device CA certificate by fingerprint
-	// (DELETE /device-ca/{fingerprint})
+	// (DELETE /v1/device-ca/{fingerprint})
 	DeleteTrustedDeviceCACert(ctx context.Context, request DeleteTrustedDeviceCACertRequestObject) (DeleteTrustedDeviceCACertResponseObject, error)
 	// Get a trusted device CA certificate by fingerprint
-	// (GET /device-ca/{fingerprint})
+	// (GET /v1/device-ca/{fingerprint})
 	GetTrustedDeviceCACertByFingerprint(ctx context.Context, request GetTrustedDeviceCACertByFingerprintRequestObject) (GetTrustedDeviceCACertByFingerprintResponseObject, error)
 }
 

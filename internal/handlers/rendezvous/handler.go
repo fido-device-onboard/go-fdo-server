@@ -152,7 +152,7 @@ func (s *Rendezvous) Handler() http.Handler {
 			mgmtAPIServeMux,
 		),
 	)
-	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandler))
+	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api", mgmtAPIHandler))
 
 	return rendezvousServeMux
 }

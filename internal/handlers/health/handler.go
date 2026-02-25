@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 )
@@ -26,7 +27,7 @@ var _ StrictServerInterface = (*Server)(nil)
 func (s *Server) GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error) {
 	if err := s.State.Ping(); err != nil {
 		slog.Error("database error", "err", err)
-		return GetHealth500JSONResponse{Version: version.VERSION, Status: "ERROR", Message: "database error"}, nil
+		return GetHealth500JSONResponse{components.InternalServerError{Message: "database error"}}, nil
 	}
 	return GetHealth200JSONResponse{HealthStatusJSONResponse{Version: version.VERSION, Status: "OK", Message: "the service is up and running"}}, nil
 }
