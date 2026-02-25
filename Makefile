@@ -178,3 +178,16 @@ rpm: $(RPMBUILD_RPM_FILE)
 clean:
 	rm -rf $(RPMBUILD_TOP_DIR)
 	rm -rf $(SOURCE_DIR)/go-fdo-server-*.tar.{gz,bz2}
+
+.PHONY: fdo-openapi-ui
+fdo-openapi-ui:
+	container_cmd=`command -v podman`; \
+	[ -n "$${container_cmd}" ] || container_cmd=`command -v docker`; \
+	[ -n "$${container_cmd}" ] || { echo "No container runtime found" ; exit 1; }; \
+	$${container_cmd} rm --force fdo-openapi-ui; \
+	$${container_cmd} run --rm --name fdo-openapi-ui -d -p 9080:8080 -v ./api:/usr/share/nginx/html/api:z -e URLS='[{"url": "/api/manufacturer/openapi.yaml", "name": "Manufacturer API"}, {"url": "/api/rendezvous/openapi.yaml", "name": "Rendezvous API"}, {"url": "/api/owner/openapi.yaml", "name": "Owner API"} ]' docker.swagger.io/swaggerapi/swagger-ui; \
+	until curl -s -o /dev/null http://127.0.0.1:9080; do \
+	  echo "Waiting for swagger-ui to be ready..."; \
+		sleep 1; \
+	done; \
+	open_url_cmd=`command -v xdg-open`; [ -n "$${open_url_cmd}" ] || open_url_cmd=`command -v open`; $${open_url_cmd} http://127.0.0.1:9080
