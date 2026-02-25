@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"net/http"
 
+	externalRef0 "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
 // Health defines model for Health.
 type Health struct {
+	// Message Human-readable status message or error description
 	Message string `json:"message"`
 
 	// Status The server health status
@@ -201,7 +203,9 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetHealth500JSONResponse Health
+type GetHealth500JSONResponse struct {
+	externalRef0.InternalServerError
+}
 
 func (response GetHealth500JSONResponse) VisitGetHealthResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")

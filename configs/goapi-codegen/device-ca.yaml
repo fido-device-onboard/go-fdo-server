@@ -6,7 +6,7 @@ generate:
   models: true
 output: handlers/deviceca/handler.gen.go
 import-mapping:
- ./components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+  components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
 output-options:
   # to make sure that all types are generated
   skip-prune: true

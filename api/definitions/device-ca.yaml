@@ -1,22 +1,24 @@
 openapi: 3.0.0
 info:
   title: Trusted device CA certificates management API
-  version: 0.0.1
+  version: 1.0.0
   description: An API for managing a list of Trusted device CA certificates in PEM format. It supports List, Create, Read and Delete (LCRD) operations.
   contact:
     name: Go FDO Server API Support
     url: https://github.com/fido-device-onboard/go-fdo-server/issues
-servers:
-  - url: https://localhost/api/v1
-    description: Go FDO server
 tags:
-  - name: Trusted device CA certificates
-    description: Operations related to trusted device CA certificates
+  - name: device-ca
+    description: |
+      Operations related to trusted device CA certificates management.
+
+      Typical workflow: Import CA certificates (POST) → List/filter certificates (GET) →
+      Retrieve specific certificate (GET /{fingerprint}) →
+      Delete when expired or no longer trusted (DELETE /{fingerprint})
 paths:
-  /device-ca:
+  /v1/device-ca:
     get:
       tags:
-        - Trusted device CA certificates
+        - device-ca
       summary: List all trusted device CA certificates
       description: |
         Retrieves a paginated, filterable, and sortable list of all registered trusted device CA certificates.
@@ -141,16 +143,16 @@ paths:
                     MIID... (truncated) ...
                     -----END CERTIFICATE-----
         '400':
-          $ref: './components.yaml#/components/responses/BadRequest'
+          $ref: 'components.yaml#/components/responses/BadRequest'
         '401':
-          $ref: './components.yaml#/components/responses/Unauthorized'
+          $ref: 'components.yaml#/components/responses/Unauthorized'
         '403':
-          $ref: './components.yaml#/components/responses/Forbidden'
+          $ref: 'components.yaml#/components/responses/Forbidden'
         '500':
-          $ref: './components.yaml#/components/responses/InternalServerError'
+          $ref: 'components.yaml#/components/responses/InternalServerError'
     post:
       tags:
-        - Trusted device CA certificates
+        - device-ca
       summary: Import one or more trusted device CA certificates
       description: |
         Uploads one or more PEM-encoded certificates for trusted device certificate authorities.
@@ -262,23 +264,23 @@ paths:
                       - "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was skipped because it already exists"
                     certs: []
         '400':
-          $ref: './components.yaml#/components/responses/BadRequest'
+          $ref: 'components.yaml#/components/responses/BadRequest'
         '401':
-          $ref: './components.yaml#/components/responses/Unauthorized'
+          $ref: 'components.yaml#/components/responses/Unauthorized'
         '403':
-          $ref: './components.yaml#/components/responses/Forbidden'
+          $ref: 'components.yaml#/components/responses/Forbidden'
         '413':
           description: Request payload too large (exceeds maximum allowed size).
           content:
             application/json:
               schema:
-                $ref: './components.yaml#/components/schemas/Error'
+                $ref: 'components.yaml#/components/schemas/Error'
         '500':
-          $ref: './components.yaml#/components/responses/InternalServerError'
-  /device-ca/{fingerprint}:
+          $ref: 'components.yaml#/components/responses/InternalServerError'
+  /v1/device-ca/{fingerprint}:
     get:
       tags:
-        - Trusted device CA certificates
+        - device-ca
       summary: Get a trusted device CA certificate by fingerprint
       description: |
         Retrieves a specific trusted device CA certificate by its SHA-256 fingerprint.
@@ -327,16 +329,16 @@ paths:
                     MIIDzTCCArWgAwIBAgIQC+2PL2fUi... (truncated)
                     -----END CERTIFICATE-----
         '401':
-          $ref: './components.yaml#/components/responses/Unauthorized'
+          $ref: 'components.yaml#/components/responses/Unauthorized'
         '403':
-          $ref: './components.yaml#/components/responses/Forbidden'
+          $ref: 'components.yaml#/components/responses/Forbidden'
         '404':
-          $ref: './components.yaml#/components/responses/NotFound'
+          $ref: 'components.yaml#/components/responses/NotFound'
         '500':
-          $ref: './components.yaml#/components/responses/InternalServerError'
+          $ref: 'components.yaml#/components/responses/InternalServerError'
     delete:
       tags:
-        - Trusted device CA certificates
+        - device-ca
       summary: Delete a trusted device CA certificate by fingerprint
       description: Deletes a specific trusted device CA certificate by its SHA-256 fingerprint.
       operationId: DeleteTrustedDeviceCACert
@@ -353,13 +355,13 @@ paths:
         '204':
           description: Trusted device CA certificate deleted successfully.
         '401':
-          $ref: './components.yaml#/components/responses/Unauthorized'
+          $ref: 'components.yaml#/components/responses/Unauthorized'
         '403':
-          $ref: './components.yaml#/components/responses/Forbidden'
+          $ref: 'components.yaml#/components/responses/Forbidden'
         '404':
-          $ref: './components.yaml#/components/responses/NotFound'
+          $ref: 'components.yaml#/components/responses/NotFound'
         '500':
-          $ref: './components.yaml#/components/responses/InternalServerError'
+          $ref: 'components.yaml#/components/responses/InternalServerError'
 security:
   - BasicAuth: []
   - BearerAuth: []
@@ -369,15 +371,15 @@ security:
 components:
   securitySchemes:
     BasicAuth:
-      $ref: './components.yaml#/components/securitySchemes/BasicAuth'
+      $ref: 'components.yaml#/components/securitySchemes/BasicAuth'
     BearerAuth:
-      $ref: './components.yaml#/components/securitySchemes/BearerAuth'
+      $ref: 'components.yaml#/components/securitySchemes/BearerAuth'
     ApiKeyAuth:
-      $ref: './components.yaml#/components/securitySchemes/ApiKeyAuth'
+      $ref: 'components.yaml#/components/securitySchemes/ApiKeyAuth'
     OidcAuth:
-      $ref: './components.yaml#/components/securitySchemes/OidcAuth'
+      $ref: 'components.yaml#/components/securitySchemes/OidcAuth'
     Oauth2Auth:
-      $ref: './components.yaml#/components/securitySchemes/Oauth2Auth'
+      $ref: 'components.yaml#/components/securitySchemes/Oauth2Auth'
   schemas:
     TrustedDeviceCACertsPaginated:
       type: object
@@ -465,7 +467,7 @@ components:
           description: The full certificate content in PEM format.
           format: pem
           pattern: '^-----BEGIN CERTIFICATE-----\n[\s\S]+\n-----END CERTIFICATE-----\n?$'
-          maxLength: 10000
+          maxLength: 32768
         subject:
           type: string
           description: The subject distinguished name of the certificate.
