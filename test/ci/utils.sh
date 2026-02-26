@@ -319,7 +319,8 @@ run_go_fdo_server() {
   shift 5
   mkdir -p "$(dirname "${log}")"
   mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &>"${log}" &
+  GOCOVERDIR="${GOCOVERDIR:-}" nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite \
+    --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &>"${log}" &
   echo -n $! >"${pid_file}"
 }
 
@@ -407,7 +408,13 @@ uninstall_client() {
 
 install_server() {
   mkdir -p "${bin_dir}"
-  make build && install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
+  if [[ -n "${GOCOVERDIR:-}" ]]; then
+    # Build with coverage instrumentation for code coverage measurement
+    go build -cover -covermode=atomic -o go-fdo-server . &&
+      install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
+  else
+    make build && install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
+  fi
 }
 
 uninstall_server() {

@@ -1,0 +1,95 @@
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+name: Go test coverage
+
+jobs:
+  coverage:
+    name: Measure test coverage (unit + integration tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # --- Phase 1: Unit tests ---
+      - name: Run unit tests with coverage
+        run: go test -coverpkg=./... -coverprofile=coverage-unit.out -covermode=atomic ./...
+
+      # --- Phase 2: Integration tests with coverage ---
+      - name: Set up coverage directory
+        run: |
+          GOCOVERDIR="$(pwd)/coverage-integration"
+          echo "GOCOVERDIR=${GOCOVERDIR}" >> "$GITHUB_ENV"
+          rm -rf "$GOCOVERDIR"
+          mkdir -p "$GOCOVERDIR"
+
+      - name: Run integration tests with coverage
+        run: |
+          source test/ci/utils.sh
+          install_server
+
+          passed=0
+          failed=0
+          for t in test/ci/test-*.sh; do
+            echo "=== Running: $t ==="
+            source "$t"
+            if run_test; then
+              passed=$((passed + 1))
+            else
+              failed=$((failed + 1))
+              echo "WARN: $t failed, continuing"
+            fi
+            cleanup || true
+          done
+          echo "=== Integration tests: $passed passed, $failed failed ==="
+
+      # --- Merge coverage profiles ---
+      - name: Merge coverage profiles
+        run: |
+          go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage-integration.out
+          go install github.com/wadey/gocovmerge@latest
+          gocovmerge coverage-unit.out coverage-integration.out > coverage.out
+
+      # --- Evaluate and report ---
+      - name: Download base coverage breakdown
+        id: download-main-breakdown
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          branch: main
+          workflow_conclusion: success
+          name: main.breakdown
+          if_no_artifact_found: warn
+
+      - name: Check coverage thresholds
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: .testcoverage.yml
+          breakdown-file-name: ${{ github.ref_name == 'main' && 'main.breakdown' || '' }}
+          diff-base-breakdown-file-name: ${{ steps.download-main-breakdown.outputs.found_artifact == 'true' && 'main.breakdown' || '' }}
+
+      - name: Upload coverage breakdown
+        uses: actions/upload-artifact@v4
+        if: github.ref_name == 'main'
+        with:
+          name: main.breakdown
+          path: main.breakdown
+          if-no-files-found: error
+
+      - name: Generate HTML report
+        if: always()
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.html
