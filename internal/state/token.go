@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo/protocol"
@@ -26,8 +27,9 @@ type tokenKey struct{}
 
 // Session stores session information
 type Session struct {
-	ID       []byte `gorm:"primaryKey"`
-	Protocol int    `gorm:"type:integer;not null"`
+	ID        []byte    `gorm:"primaryKey"`
+	Protocol  int       `gorm:"type:integer;not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime:milli;not null;index:idx_sessions_created_at"`
 }
 
 // TableName specifies the table name for Session model
@@ -60,6 +62,7 @@ func (s TokenService) NewToken(ctx context.Context, proto protocol.Protocol) (st
 	}
 
 	// Create session record
+	// Note: CreatedAt is automatically set by GORM due to autoCreateTime tag
 	session := Session{
 		ID:       sessionID,
 		Protocol: int(proto),
@@ -130,4 +133,18 @@ func (s TokenService) getSessionID(ctx context.Context) ([]byte, error) {
 	}
 
 	return sessionID, nil
+}
+
+// CleanupExpiredSessions deletes all sessions older than the specified max age
+// Returns the number of deleted sessions and any error encountered
+func (s TokenService) CleanupExpiredSessions(ctx context.Context, maxAge time.Duration) (int64, error) {
+	cutoffTime := time.Now().Add(-maxAge)
+	result := s.DB.WithContext(ctx).Where("created_at < ?", cutoffTime).Delete(&Session{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to cleanup expired sessions: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
+		slog.Debug("Cleaned up expired sessions", "count", result.RowsAffected, "maxAge", maxAge)
+	}
+	return result.RowsAffected, nil
 }

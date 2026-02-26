@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo"
@@ -22,8 +23,9 @@ type TO0SessionState struct {
 
 // TO0Session stores TO0 session state
 type TO0Session struct {
-	Session []byte `gorm:"primaryKey"`
-	Nonce   []byte
+	Session    []byte `gorm:"primaryKey"`
+	Nonce      []byte
+	SessionRef *Session `gorm:"foreignKey:Session;references:ID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName specifies the table name for TO0Session model
@@ -48,6 +50,17 @@ func InitTO0SessionDB(db *gorm.DB) (*TO0SessionState, error) {
 		slog.Error("Failed to migrate database schema", "error", err)
 		return nil, err
 	}
+
+	// Explicitly create the foreign key constraint using GORM's Migrator
+	// This ensures CASCADE DELETE works properly to prevent orphaned sessions
+	if !state.DB.Migrator().HasConstraint(&TO0Session{}, "SessionRef") {
+		if err := state.DB.Migrator().CreateConstraint(&TO0Session{}, "SessionRef"); err != nil {
+			slog.Error("Failed to create foreign key constraint for TO0 sessions", "error", err)
+			return nil, fmt.Errorf("failed to create CASCADE DELETE constraint: %w", err)
+		}
+		slog.Debug("Created foreign key constraint for TO0 sessions")
+	}
+
 	slog.Debug("TO0 Session database initialized successfully")
 	return state, nil
 }
