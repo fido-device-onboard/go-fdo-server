@@ -19,11 +19,9 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      # --- Phase 1: Unit tests ---
       - name: Run unit tests with coverage
         run: go test -coverpkg=./... -coverprofile=coverage-unit.out -covermode=atomic ./...
 
-      # --- Phase 2: Integration tests with coverage ---
       - name: Set up coverage directory
         run: |
           GOCOVERDIR="$(pwd)/coverage-integration"
@@ -51,14 +49,12 @@ jobs:
           done
           echo "=== Integration tests: $passed passed, $failed failed ==="
 
-      # --- Merge coverage profiles ---
       - name: Merge coverage profiles
         run: |
           go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage-integration.out
           go install github.com/wadey/gocovmerge@latest
           gocovmerge coverage-unit.out coverage-integration.out > coverage.out
 
-      # --- Evaluate and report ---
       - name: Download base coverage breakdown
         id: download-main-breakdown
         uses: dawidd6/action-download-artifact@v6
@@ -68,12 +64,38 @@ jobs:
           name: main.breakdown
           if_no_artifact_found: warn
 
+      # continue-on-error: allow workflow to proceed to post PR comment and upload artifacts
       - name: Check coverage thresholds
+        id: coverage
         uses: vladopajic/go-test-coverage@v2
+        continue-on-error: true
         with:
           config: .testcoverage.yml
           breakdown-file-name: ${{ github.ref_name == 'main' && 'main.breakdown' || '' }}
           diff-base-breakdown-file-name: ${{ steps.download-main-breakdown.outputs.found_artifact == 'true' && 'main.breakdown' || '' }}
+
+      - name: Find pull request ID
+        run: |
+          PR_DATA=$(curl -s -H "Authorization: token ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${{ github.head_ref || github.ref_name }}&state=open")
+          PR_ID=$(echo "$PR_DATA" | jq -r '.[0].number')
+          if [ "$PR_ID" != "null" ]; then
+            echo "pull_request_id=$PR_ID" >> "$GITHUB_ENV"
+          else
+            echo "No open pull request found for branch ${{ github.head_ref || github.ref_name }}."
+          fi
+
+      - name: Post coverage report to PR
+        if: env.pull_request_id
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          github-token: ${{ github.token }}
+          comment-tag: coverage-report
+          pr-number: ${{ env.pull_request_id }}
+          message: |
+            `go-test-coverage` report
+            ```
+            ${{ fromJSON(steps.coverage.outputs.report) }}```
 
       - name: Upload coverage breakdown
         uses: actions/upload-artifact@v4
@@ -93,3 +115,9 @@ jobs:
         with:
           name: coverage-report
           path: coverage.html
+
+      # fail the workflow if coverage thresholds are not met, after PR comment and artifacts are posted
+      - name: Fail if coverage thresholds not met
+        if: steps.coverage.outcome == 'failure'
+        shell: bash
+        run: echo "Coverage thresholds are not met." && exit 1
