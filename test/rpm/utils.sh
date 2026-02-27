@@ -134,6 +134,8 @@ log:
 db:
   type: "${rpm_rendezvous_db_type}"
   dsn: "${rpm_rendezvous_db_dsn}"
+device_ca:
+  cert: "${rpm_rendezvous_home_dir}/device_ca.crt"
 http:
   ip: "${rendezvous_dns}"
   port: "${rendezvous_port}"
@@ -154,6 +156,7 @@ configure_service_rendezvous() {
   sudo mkdir -p "${rpm_rendezvous_config_dir}" # creates home dir
   generate_rendezvous_config >"${rendezvous_config_file}"
   sudo cp "${rendezvous_config_file}" "${rpm_rendezvous_config_file}"
+  sudo cp "${device_ca_crt}" "${rpm_rendezvous_home_dir}"
   if [ "${rendezvous_protocol}" = "https" ]; then
     sudo cp "${rendezvous_https_key}" "${rendezvous_https_crt}" "${rpm_rendezvous_home_dir}"
   fi
