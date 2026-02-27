@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo-server/internal/tls"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 )
@@ -21,16 +20,20 @@ type to0Client interface {
 	RegisterBlob(ctx context.Context, transport fdo.Transport, guid protocol.GUID, to2Addrs []protocol.RvTO2Addr) (uint32, error)
 }
 
+// rvto2AddrState is the minimal interface for RVTO2Addr state operations.
+type rvto2AddrState interface {
+	Get(ctx context.Context) ([]protocol.RvTO2Addr, error)
+}
+
 // Allow test-time injection of dependencies.
 var (
 	newTO0Client = func(vouchers fdo.OwnerVoucherPersistentState, keys fdo.OwnerKeyPersistentState, defaultTTL uint32) to0Client {
 		return &fdo.TO0Client{Vouchers: vouchers, OwnerKeys: keys, TTL: defaultTTL}
 	}
-	makeTransport  = tls.TlsTransport
-	fetchOwnerInfo = db.FetchOwnerInfo
+	makeTransport = tls.TlsTransport
 )
 
-func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, insecureTLS bool, defaultTTL uint32) (uint32, error) { // Parse to0-guid flag
+func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherState fdo.OwnerVoucherPersistentState, keyState fdo.OwnerKeyPersistentState, rvto2addrState rvto2AddrState, insecureTLS bool, defaultTTL uint32) (uint32, error) { // Parse to0-guid flag
 	guidBytes, err := hex.DecodeString(to0Guid)
 	if err != nil {
 		return 0, fmt.Errorf("error parsing hex GUID of device to register RV blob: %w", err)
@@ -41,10 +44,13 @@ func RegisterRvBlob(rvInfo [][]protocol.RvInstruction, to0Guid string, voucherSt
 	var guid protocol.GUID
 	copy(guid[:], guidBytes)
 
-	// Retrieve owner info from DB
-	to2Addrs, err := fetchOwnerInfo()
+	// Retrieve owner TO2 address info from state
+	to2Addrs, err := rvto2addrState.Get(context.Background())
 	if err != nil {
-		return 0, fmt.Errorf("error fetching ownerinfo: %w", err)
+		return 0, fmt.Errorf("error fetching RVTO2Addr: %w", err)
+	}
+	if len(to2Addrs) == 0 {
+		return 0, fmt.Errorf("no RVTO2Addr configuration found - please set it using the management API")
 	}
 
 	ownerRvInfo := protocol.ParseOwnerRvInfo(rvInfo)

@@ -24,6 +24,23 @@ func (c *countingClient) RegisterBlob(ctx context.Context, transport fdo.Transpo
 	return 0, errors.New("fail")
 }
 
+type mockRVTO2AddrState struct {
+	addrs []protocol.RvTO2Addr
+	err   error
+}
+
+func (m *mockRVTO2AddrState) Get(ctx context.Context) ([]protocol.RvTO2Addr, error) {
+	return m.addrs, m.err
+}
+
+func (m *mockRVTO2AddrState) Update(ctx context.Context, addrs []protocol.RvTO2Addr) error {
+	return nil
+}
+
+func (m *mockRVTO2AddrState) Delete(ctx context.Context) ([]protocol.RvTO2Addr, error) {
+	return m.addrs, nil
+}
+
 func TestRegisterRvBlob_BreaksAfterFirstSuccess(t *testing.T) {
 	// Arrange: create rvInfo with three RV directives (3 potential attempts).
 	dns1, _ := cbor.Marshal("a1.example.com")
@@ -45,12 +62,10 @@ func TestRegisterRvBlob_BreaksAfterFirstSuccess(t *testing.T) {
 		},
 	}
 
-	// Inject fake owner info
-	oldFetch := fetchOwnerInfo
-	fetchOwnerInfo = func() ([]protocol.RvTO2Addr, error) {
-		return []protocol.RvTO2Addr{{}}, nil
+	// Create mock RVTO2AddrState
+	mockRVTO2Addr := &mockRVTO2AddrState{
+		addrs: []protocol.RvTO2Addr{{}},
 	}
-	defer func() { fetchOwnerInfo = oldFetch }()
 
 	// Inject fake transport maker to avoid real URLs
 	oldMakeTransport := makeTransport
@@ -67,7 +82,7 @@ func TestRegisterRvBlob_BreaksAfterFirstSuccess(t *testing.T) {
 	defer func() { newTO0Client = oldNew }()
 
 	// Act
-	refresh, err := RegisterRvBlob(rvInfo, "00112233445566778899aabbccddeeff", nil, nil, false, 300)
+	refresh, err := RegisterRvBlob(rvInfo, "00112233445566778899aabbccddeeff", nil, nil, mockRVTO2Addr, false, 300)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
