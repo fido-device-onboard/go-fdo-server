@@ -10,17 +10,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fido-device-onboard/go-fdo-server/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // Configuration capture for testing
 type TestFullConfig struct {
-	FDOServerConfig `mapstructure:",squash"`
-	DeviceCA        DeviceCAConfig      `mapstructure:"device_ca"`
-	Manufacturer    ManufacturingConfig `mapstructure:"manufacturing"`
-	Owner           OwnerConfig         `mapstructure:"owner"`
-	Rendezvous      RendezvousConfig    `mapstructure:"rendezvous"`
+	config.ServerConfig `mapstructure:",squash"`
+	DeviceCA            DeviceCAConfig      `mapstructure:"device_ca"`
+	Manufacturer        ManufacturingConfig `mapstructure:"manufacturing"`
+	Owner               config.OwnerConfig  `mapstructure:"owner"`
+	Rendezvous          RendezvousConfig    `mapstructure:"rendezvous"`
 }
 
 var capturedConfig *TestFullConfig
@@ -71,12 +72,12 @@ func stubRunE(t *testing.T, cmd *cobra.Command) {
 		capturedConfig = &fdoConfig
 
 		// Validate the configuration (same as in actual commands)
-		if err := fdoConfig.HTTP.validate(); err != nil {
+		if err := fdoConfig.HTTP.Validate(); err != nil {
 			return err
 		}
 
 		// Validate ServiceInfo to trigger UnmarshalParams()
-		if err := fdoConfig.Owner.ServiceInfo.validate(); err != nil {
+		if err := fdoConfig.Owner.ServiceInfo.Validate(); err != nil {
 			return err
 		}
 
@@ -899,7 +900,7 @@ func TestOwner_FSIMConfigFromTOML(t *testing.T) {
 	// Create temporary files for download test.
 	// These files must exist because the ServiceInfo validation code (triggered by
 	// stubRunE) verifies that fdo.download source files are accessible on the filesystem.
-	// See ServiceInfoConfig.validate() in cmd/config.go for the file existence check.
+	// See ServiceInfoConfig.Validate() in cmd/config.go for the file existence check.
 	dir := t.TempDir()
 	// Create a subdirectory to test relative paths
 	subdir := filepath.Join(dir, "files")
@@ -1124,7 +1125,7 @@ func TestOwner_FSIMConfigFromYAML(t *testing.T) {
 	// Create temporary files for download test.
 	// These files must exist because the ServiceInfo validation code (triggered by
 	// stubRunE) verifies that fdo.download source files are accessible on the filesystem.
-	// See ServiceInfoConfig.validate() in cmd/config.go for the file existence check.
+	// See ServiceInfoConfig.Validate() in cmd/config.go for the file existence check.
 	dir := t.TempDir()
 	// Create a subdirectory to test relative paths
 	subdir := filepath.Join(dir, "data")
