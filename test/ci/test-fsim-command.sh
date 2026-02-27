@@ -87,11 +87,14 @@ run_test() {
   guid=$(run_device_initialization)
   log_info "Device initialized with GUID: ${guid}"
 
-  log_info "Setting or updating Owner Redirect Info (RVTO2Addr)"
-  set_or_update_owner_redirect_info "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
+  log_info "Update rendezvous TO2 address"
+  update_rvto2addr "${owner_url}" "${owner_service_name}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
 
   log_info "Adding Device CA certificate to rendezvous"
   add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
+
+  log_info "Adding Device CA certificate to owner"
+  add_device_ca_cert "${owner_url}" "${device_ca_crt}" | jq -r -M .
 
   log_info "Sending Ownership Voucher to the Owner"
   send_manufacturer_ov_to_owner "${manufacturer_url}" "${guid}" "${owner_url}"

@@ -23,6 +23,7 @@ import (
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/api"
 	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/internal/config"
 	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 	"github.com/fido-device-onboard/go-fdo/custom"
 	transport "github.com/fido-device-onboard/go-fdo/http"
@@ -41,7 +42,7 @@ type ManufacturingServerConfig struct {
 	FDOServerConfig `mapstructure:",squash"`
 	DeviceCA        DeviceCAConfig      `mapstructure:"device_ca"`
 	Manufacturer    ManufacturingConfig `mapstructure:"manufacturing"`
-	Owner           OwnerConfig         `mapstructure:"owner"`
+	Owner           config.OwnerConfig  `mapstructure:"owner"`
 }
 
 // validateCertFile checks that a certificate file exists and returns a helpful error if not
