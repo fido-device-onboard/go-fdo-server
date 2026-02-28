@@ -7,6 +7,8 @@ SOURCE_DIR      := $(CURDIR)/build/package/rpm
 SPEC_FILE_NAME  := $(PROJECT).spec
 SPEC_FILE       := $(SOURCE_DIR)/$(SPEC_FILE_NAME)
 VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}').git$(COMMIT_SHORT)
+GOFLAGS         ?=
+GOCOVERDIR      ?= $(CURDIR)/coverage-integration
 
 
 # Default target
@@ -15,7 +17,7 @@ all: build test
 # Build the Go project
 .PHONY: build
 build: generate tidy fmt vet
-	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
+	go build $(GOFLAGS) -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: oapi-codegen
 oapi-codegen:
@@ -49,6 +51,34 @@ test:
 .PHONY: shfmt
 shfmt:
 	shfmt -i 2 -ci -w .
+
+.PHONY: test-coverage
+test-coverage: SHELL := /bin/bash
+test-coverage:
+	rm -rf "$(GOCOVERDIR)"
+	mkdir -p "$(GOCOVERDIR)"
+	$(MAKE) all GOFLAGS="-cover -covermode=atomic"
+	go test -coverpkg=./... -coverprofile=coverage-unit.out -covermode=atomic ./...
+	export GOCOVERDIR="$(GOCOVERDIR)"; \
+	source test/ci/utils.sh; \
+	mkdir -p "$${bin_dir}"; \
+	install -m 755 go-fdo-server "$${bin_dir}" && rm -f go-fdo-server; \
+	passed=0; failed=0; \
+	for t in test/ci/test-*.sh; do \
+		echo "=== Running: $$t ==="; \
+		source "$$t"; \
+		if run_test; then \
+			passed=$$((passed + 1)); \
+		else \
+			failed=$$((failed + 1)); \
+			echo "WARN: $$t failed, continuing"; \
+		fi; \
+		cleanup || true; \
+	done; \
+	echo "=== Integration tests: $$passed passed, $$failed failed ==="
+	go tool covdata textfmt -i="$(GOCOVERDIR)" -o=coverage-integration.out
+	go install github.com/wadey/gocovmerge@latest
+	gocovmerge coverage-unit.out coverage-integration.out > coverage.out
 
 #
 # Generating sources and vendor tar files
