@@ -7,6 +7,4 @@ go-fdo-server
 go-fdo-server-*.tar.*
 rpmbuild
 test/workdir
-coverage*.out
-coverage*.html
-coverage-integration/
+test/coverage

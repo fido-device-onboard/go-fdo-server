@@ -7,6 +7,9 @@ SOURCE_DIR      := $(CURDIR)/build/package/rpm
 SPEC_FILE_NAME  := $(PROJECT).spec
 SPEC_FILE       := $(SOURCE_DIR)/$(SPEC_FILE_NAME)
 VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}')
+GOFLAGS         ?=
+COVERDIR        ?= $(CURDIR)/test/coverage
+GOCOVERDIR      ?= $(COVERDIR)/integration
 
 
 # Default target
@@ -15,7 +18,7 @@ all: build test
 # Build the Go project
 .PHONY: build
 build: generate tidy fmt vet
-	go build -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
+	go build $(GOFLAGS) -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: oapi-codegen
 oapi-codegen:
@@ -49,6 +52,24 @@ test:
 .PHONY: shfmt
 shfmt:
 	shfmt -i 2 -ci -w .
+
+.PHONY: test-coverage
+test-coverage: SHELL := /usr/bin/env bash
+test-coverage:
+	rm -rf "$(COVERDIR)"
+	mkdir -p "$(GOCOVERDIR)"
+	go test -coverpkg=./... -coverprofile="$(COVERDIR)/unit.out" -covermode=atomic ./...
+	export GOCOVERDIR="$(GOCOVERDIR)"; \
+	export GOFLAGS="-cover -covermode=atomic"; \
+	set -e; \
+	for t in test/ci/test-*.sh; do \
+		echo "=== RUNNING: $$t ==="; \
+		($$t); \
+	done; \
+	go tool covdata textfmt -i="$(GOCOVERDIR)" -o="$(COVERDIR)/integration.out"
+	go install github.com/wadey/gocovmerge@latest
+	gocovmerge "$(COVERDIR)/unit.out" "$(COVERDIR)/integration.out" > "$(COVERDIR)/coverage.out"
+	go tool cover -html="$(COVERDIR)/coverage.out" -o "$(COVERDIR)/coverage.html"
 
 #
 # Generating sources and vendor tar files
