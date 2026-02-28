@@ -1,4 +1,4 @@
-profile: coverage.out
+profile: test/coverage/coverage.out
 threshold:
   file: 0
   package: 0
