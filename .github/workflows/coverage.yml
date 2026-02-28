@@ -19,41 +19,8 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      - name: Run unit tests with coverage
-        run: go test -coverpkg=./... -coverprofile=coverage-unit.out -covermode=atomic ./...
-
-      - name: Set up coverage directory
-        run: |
-          GOCOVERDIR="$(pwd)/coverage-integration"
-          echo "GOCOVERDIR=${GOCOVERDIR}" >> "$GITHUB_ENV"
-          rm -rf "$GOCOVERDIR"
-          mkdir -p "$GOCOVERDIR"
-
-      - name: Run integration tests with coverage
-        run: |
-          source test/ci/utils.sh
-          install_server
-
-          passed=0
-          failed=0
-          for t in test/ci/test-*.sh; do
-            echo "=== Running: $t ==="
-            source "$t"
-            if run_test; then
-              passed=$((passed + 1))
-            else
-              failed=$((failed + 1))
-              echo "WARN: $t failed, continuing"
-            fi
-            cleanup || true
-          done
-          echo "=== Integration tests: $passed passed, $failed failed ==="
-
-      - name: Merge coverage profiles
-        run: |
-          go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage-integration.out
-          go install github.com/wadey/gocovmerge@latest
-          gocovmerge coverage-unit.out coverage-integration.out > coverage.out
+      - name: Run tests with coverage
+        run: make test-coverage
 
       - name: Download base coverage breakdown
         id: download-main-breakdown
