@@ -10,3 +10,12 @@ path = "vendor/gopkg.in/yaml.v3/LICENSE"
 sha256sum = "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b"
 expression = "Apache-2.0 AND MIT"
 
+[[licensing.licenses]]
+path = "vendor/github.com/oasdiff/yaml/LICENSE"
+sha256sum = "24653fd8a39354396da1a265d68316399edc39b1df48c5866d55f9f06484fa9a"
+expression = "MIT AND BSD-3-Clause"
+
+[[licensing.licenses]]
+path = "vendor/github.com/oasdiff/yaml3/LICENSE"
+sha256sum = "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b"
+expression = "Apache-2.0 AND MIT"
