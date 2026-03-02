@@ -6,7 +6,7 @@ COMMIT_SHORT    := $(shell git rev-parse --short HEAD)
 SOURCE_DIR      := $(CURDIR)/build/package/rpm
 SPEC_FILE_NAME  := $(PROJECT).spec
 SPEC_FILE       := $(SOURCE_DIR)/$(SPEC_FILE_NAME)
-VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}').git$(COMMIT_SHORT)
+VERSION         := $(shell grep 'Version:' $(SPEC_FILE) | awk '{printf "%s", $$2}')
 
 
 # Default target
@@ -65,14 +65,22 @@ GO_VENDOR_TOOLS_FILE_NAME  := go-vendor-tools.toml
 GO_VENDOR_TOOLS_FILE       := $(SOURCE_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
 VENDOR_TARBALL_FILENAME    := go-fdo-server-$(VERSION)-vendor.tar.bz2
 VENDOR_TARBALL             := $(SOURCE_DIR)/$(VENDOR_TARBALL_FILENAME)
-$(VENDOR_TARBALL):
+
+.PHONY: install-go-vendor-tools
+install-go-vendor-tools:
+	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit askalono-cli go-rpm-macros
+
+$(VENDOR_TARBALL): install-go-vendor-tools
 	rm -rf vendor; \
-	command -v go_vendor_archive || sudo dnf install -y go-vendor-tools python3-tomlkit askalono-cli; \
 	go_vendor_archive create --config $(GO_VENDOR_TOOLS_FILE) --write-config --output $(VENDOR_TARBALL) .; \
 	rm -rf vendor;
 
 .PHONY: vendor-tarball
 vendor-tarball: $(VENDOR_TARBALL)
+
+.PHONY: update-rpm-licensing
+update-rpm-licensing: install-go-vendor-tools $(SPEC_FILE) $(SOURCE_TARBALL) $(VENDOR_TARBALL)
+	go_vendor_license --config $(GO_VENDOR_TOOLS_FILE) --path $(SPEC_FILE) report --update-spec --autofill=auto
 
 #
 # Building packages
@@ -98,6 +106,7 @@ RENDEZVOUS_USER_FILE                  := $(SOURCE_DIR)/$(RENDEZVOUS_USER_FILE_NA
 OWNER_USER_FILE_NAME                  := go-fdo-server-owner-user.conf
 OWNER_USER_FILE                       := $(SOURCE_DIR)/$(OWNER_USER_FILE_NAME)
 
+RPMBUILD_VERSION                      := $(VERSION).git$(COMMIT_SHORT)
 RPMBUILD_TOP_DIR                      := $(CURDIR)/rpmbuild
 RPMBUILD_BUILD_DIR                    := $(RPMBUILD_TOP_DIR)/build
 RPMBUILD_RPMS_DIR                     := $(RPMBUILD_TOP_DIR)/rpms
@@ -107,9 +116,9 @@ RPMBUILD_SRPMS_DIR                    := $(RPMBUILD_TOP_DIR)/srpms
 RPMBUILD_BUILD_DIR                    := $(RPMBUILD_TOP_DIR)/build
 RPMBUILD_BUILDROOT_DIR                := $(RPMBUILD_TOP_DIR)/buildroot
 RPMBUILD_GOLANG_VENDOR_TOOLS_FILE     := $(RPMBUILD_SOURCES_DIR)/$(GO_VENDOR_TOOLS_FILE_NAME)
-RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/go-fdo-server-$(VERSION).spec
-RPMBUILD_TARBALL                      := $(RPMBUILD_SOURCES_DIR)/$(SOURCE_TARBALL_FILENAME)
-RPMBUILD_VENDOR_TARBALL               := ${RPMBUILD_SOURCES_DIR}/$(VENDOR_TARBALL_FILENAME)
+RPMBUILD_SPECFILE                     := $(RPMBUILD_SPECS_DIR)/go-fdo-server-$(RPMBUILD_VERSION).spec
+RPMBUILD_TARBALL                      := $(RPMBUILD_SOURCES_DIR)/go-fdo-server-$(RPMBUILD_VERSION).tar.gz
+RPMBUILD_VENDOR_TARBALL               := ${RPMBUILD_SOURCES_DIR}/go-fdo-server-$(RPMBUILD_VERSION)-vendor.tar.bz2
 RPMBUILD_GROUP_FILE                   := $(RPMBUILD_SOURCES_DIR)/$(GROUP_FILE_NAME)
 RPMBUILD_MANUFACTURER_USER_FILE       := $(RPMBUILD_SOURCES_DIR)/$(MANUFACTURER_USER_FILE_NAME)
 RPMBUILD_RENDEZVOUS_USER_FILE         := $(RPMBUILD_SOURCES_DIR)/$(RENDEZVOUS_USER_FILE_NAME)
@@ -120,12 +129,12 @@ RPMBUILD_RPM_FILE                     := $(RPMBUILD_RPMS_DIR)/$(ARCH)/$(PROJECT)
 
 $(RPMBUILD_SPECFILE):
 	mkdir -p $(RPMBUILD_SPECS_DIR)
-	sed -e "s/^Version:\(\s*\).*/Version:\1$(VERSION)/;" \
+	sed -e "s/^Version:\(\s*\).*/Version:\1$(RPMBUILD_VERSION)/;" \
 	    $(SPEC_FILE) > $(RPMBUILD_SPECFILE)
 
-$(RPMBUILD_TARBALL): $(SOURCE_TARBALL) $(VENDOR_TARBALL)
+$(RPMBUILD_TARBALL): $(VENDOR_TARBALL)
 	mkdir -p $(RPMBUILD_SOURCES_DIR)
-	cp $(SOURCE_TARBALL) $(RPMBUILD_TARBALL)
+	git archive --prefix=go-fdo-server-$(RPMBUILD_VERSION)/ --format=tar.gz HEAD > $(RPMBUILD_TARBALL)
 	cp $(VENDOR_TARBALL) $(RPMBUILD_VENDOR_TARBALL);
 
 $(RPMBUILD_GOLANG_VENDOR_TOOLS_FILE):
