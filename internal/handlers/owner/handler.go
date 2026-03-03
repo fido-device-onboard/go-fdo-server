@@ -198,8 +198,8 @@ func (o *Owner) Handler() http.Handler {
 	deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtServeMux)
 
 	mgmtHandler := rateLimitMiddleware(
-		rate.NewLimiter(2, 10),
-		bodySizeMiddleware(1<<20, /* 1MB */
+		rate.NewLimiter(10, 10), // 10 req/s, burst of 10
+		bodySizeMiddleware(10<<20, /* 10MB */
 			mgmtServeMux,
 		),
 	)

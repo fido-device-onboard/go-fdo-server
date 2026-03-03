@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sync"
 
 	"github.com/fido-device-onboard/go-fdo-server/internal/config"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
@@ -26,6 +27,7 @@ type ModuleStateMachines struct {
 	OwnerState *state.OwnerState
 	Config     *config.ServiceInfoConfig
 	// current module state machine state for all sessions (indexed by token)
+	mu     sync.RWMutex
 	states map[string]*moduleStateMachineState
 }
 
@@ -52,7 +54,9 @@ func (s *ModuleStateMachines) Module(ctx context.Context) (string, serviceinfo.O
 	if !ok {
 		return "", nil, fmt.Errorf("invalid context: no token")
 	}
+	s.mu.RLock()
 	module, ok := s.states[token]
+	s.mu.RUnlock()
 	if !ok {
 		return "", nil, fmt.Errorf("NextModule not called")
 	}
@@ -65,9 +69,13 @@ func (s *ModuleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("invalid context: no token")
 	}
+
+	s.mu.Lock()
 	module, ok := s.states[token]
 	if !ok {
 		// Create a new module state machine
+		// Unlock while getting devmod (database operation)
+		s.mu.Unlock()
 		_, modules, _, err := s.OwnerState.TO2Session.Devmod(ctx)
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
@@ -89,11 +97,14 @@ func (s *ModuleStateMachines) NextModule(ctx context.Context) (bool, error) {
 			Next: next,
 			Stop: stop,
 		}
+		// Reacquire lock to write to map
+		s.mu.Lock()
 		s.states[token] = module
 	}
 
 	var valid bool
 	module.Name, module.Impl, valid = module.Next()
+	s.mu.Unlock()
 	return valid, nil
 }
 
@@ -103,12 +114,16 @@ func (s *ModuleStateMachines) CleanupModules(ctx context.Context) {
 	if !ok {
 		return
 	}
+	s.mu.Lock()
 	module, ok := s.states[token]
 	if !ok {
+		s.mu.Unlock()
 		return
 	}
-	module.Stop()
 	delete(s.states, token)
+	s.mu.Unlock()
+	// Call Stop outside the lock to avoid holding the lock during cleanup
+	module.Stop()
 }
 
 // ownerModules creates an iterator sequence of owner service info modules

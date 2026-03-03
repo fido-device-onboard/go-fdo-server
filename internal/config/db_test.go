@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+// extractPasswordValue extracts the password value from a DSN fragment
+// that starts right after "password=". Handles both quoted and unquoted values.
+func extractPasswordValue(fragment string) string {
+	if len(fragment) == 0 {
+		return ""
+	}
+
+	// Check if it starts with a quote
+	if fragment[0] == '\'' {
+		// Find the closing quote, handling escaped quotes
+		i := 1
+		for i < len(fragment) {
+			if fragment[i] == '\\' && i+1 < len(fragment) {
+				i += 2
+				continue
+			}
+			if fragment[i] == '\'' {
+				return fragment[1:i]
+			}
+			i++
+		}
+		// No closing quote found, return everything after opening quote
+		return fragment[1:]
+	}
+
+	// Unquoted value - read until space or end
+	i := 0
+	for i < len(fragment) && fragment[i] != ' ' && fragment[i] != '\t' {
+		i++
+	}
+	return fragment[:i]
+}
+
 func TestDatabaseConfig_RedactedDSN(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -31,7 +64,7 @@ func TestDatabaseConfig_RedactedDSN(t *testing.T) {
 			name:     "PostgreSQL URL format with password",
 			dbType:   "postgres",
 			dsn:      "postgres://myuser:mypassword@localhost:5432/mydb",
-			expected: "postgres://myuser:***REDACTED***@localhost:5432/mydb",
+			expected: "postgres://myuser:********@localhost:5432/mydb",
 		},
 		{
 			name:     "PostgreSQL URL format without password",
@@ -43,7 +76,7 @@ func TestDatabaseConfig_RedactedDSN(t *testing.T) {
 			name:     "PostgreSQL key-value format with password",
 			dbType:   "postgres",
 			dsn:      "host=localhost port=5432 user=myuser password=secret dbname=mydb sslmode=disable",
-			expected: "host=localhost port=5432 user=myuser password=***REDACTED*** dbname=mydb sslmode=disable",
+			expected: "host=localhost port=5432 user=myuser password=******** dbname=mydb sslmode=disable",
 		},
 		{
 			name:     "PostgreSQL key-value format without password",
@@ -56,6 +89,42 @@ func TestDatabaseConfig_RedactedDSN(t *testing.T) {
 			dbType:   "postgres",
 			dsn:      "",
 			expected: "",
+		},
+		{
+			name:     "PostgreSQL key-value format with password containing spaces",
+			dbType:   "postgres",
+			dsn:      "host=localhost password='my secret password' dbname=mydb",
+			expected: "host=localhost password='********' dbname=mydb",
+		},
+		{
+			name:     "PostgreSQL key-value format with multiple quoted values",
+			dbType:   "postgres",
+			dsn:      "host='my host' password='my password' dbname='my db'",
+			expected: "host='my host' password='********' dbname='my db'",
+		},
+		{
+			name:     "PostgreSQL key-value format with password containing escaped quotes",
+			dbType:   "postgres",
+			dsn:      "host=localhost password='it\\'s a secret' dbname=mydb",
+			expected: "host=localhost password='********' dbname=mydb",
+		},
+		{
+			name:     "PostgreSQL key-value format with mixed quoted and unquoted",
+			dbType:   "postgres",
+			dsn:      "host=localhost port=5432 password='secret pass' user=admin dbname=test",
+			expected: "host=localhost port=5432 password='********' user=admin dbname=test",
+		},
+		{
+			name:     "PostgreSQL key-value format with password at end",
+			dbType:   "postgres",
+			dsn:      "host=localhost dbname=mydb password='my secret'",
+			expected: "host=localhost dbname=mydb password='********'",
+		},
+		{
+			name:     "PostgreSQL key-value format with password at beginning",
+			dbType:   "postgres",
+			dsn:      "password='my secret' host=localhost dbname=mydb",
+			expected: "password='********' host=localhost dbname=mydb",
 		},
 	}
 
@@ -73,24 +142,23 @@ func TestDatabaseConfig_RedactedDSN(t *testing.T) {
 
 			// Verify that the original password is NOT in the redacted output
 			if tt.dsn != "" && strings.Contains(tt.dsn, "password") {
-				// Extract password value from original DSN
+				// For key=value format, extract the actual password value
 				if strings.Contains(tt.dsn, "password=") {
+					// Extract password value (handling both quoted and unquoted)
 					parts := strings.Split(tt.dsn, "password=")
 					if len(parts) > 1 {
-						passwordPart := strings.Fields(parts[1])[0]
-						if passwordPart != "" && passwordPart != "***REDACTED***" {
-							if strings.Contains(got, passwordPart) {
-								t.Errorf("RedactedDSN() still contains password: %q", got)
+						passwordValue := extractPasswordValue(parts[1])
+						// Verify the actual password is not in the output
+						if passwordValue != "" && passwordValue != "********" {
+							if strings.Contains(got, passwordValue) {
+								t.Errorf("RedactedDSN() still contains password %q in output: %q", passwordValue, got)
 							}
 						}
 					}
 				} else if strings.Contains(tt.dsn, ":") && strings.Contains(tt.dsn, "@") {
-					// URL format - check password is redacted
-					if strings.Contains(got, tt.dsn) && tt.dsn != got {
-						// Password should have been redacted
-						if !strings.Contains(got, "***REDACTED***") {
-							t.Errorf("RedactedDSN() should contain ***REDACTED***: %q", got)
-						}
+					// URL format - verify password is redacted
+					if tt.dsn != got && !strings.Contains(got, "********") {
+						t.Errorf("RedactedDSN() should contain ******** for URL with password: %q", got)
 					}
 				}
 			}
@@ -117,7 +185,7 @@ func TestDatabaseConfig_String(t *testing.T) {
 	}
 
 	// Should contain the redaction marker
-	if !strings.Contains(str, "***REDACTED***") {
+	if !strings.Contains(str, "********") {
 		t.Errorf("String() should contain redaction marker, got: %s", str)
 	}
 }

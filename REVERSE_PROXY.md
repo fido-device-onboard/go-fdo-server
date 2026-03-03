@@ -398,7 +398,7 @@ curl -i https://fdo-mfg.example.com/api/v1/rvinfo
 curl -i -u admin:password https://fdo-mfg.example.com/api/v1/rvinfo
 # Expected: 200 OK with RV info data
 
-curl -i -u admin:password https://fdo-owner.example.com/api/v1/owner/redirect
+curl -i -u admin:password https://fdo-owner.example.com/api/v1/rvto2addr
 # Expected: 200 OK with redirect data
 ```
 
@@ -427,7 +427,7 @@ curl -i -k -u admin:password https://fdo-mfg.example.com/api/v1/rvinfo
 curl -i -k https://fdo-mfg.example.com/health
 
 # Test Owner service endpoints
-curl -i -k -u admin:password https://fdo-owner.example.com/api/v1/owner/redirect
+curl -i -k -u admin:password https://fdo-owner.example.com/api/v1/rvto2addr
 curl -i -k https://fdo-owner.example.com/health
 ```
 

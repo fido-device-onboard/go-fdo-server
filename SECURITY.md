@@ -33,6 +33,30 @@ Deploy nginx or Apache as a reverse proxy with HTTP Basic Authentication. See [R
 
 The FDO protocol endpoints (`/fdo/101/msg/`) must remain accessible for legitimate device communication and should not be protected by authentication. Only the management APIs require access control.
 
+## Database Credential Protection
+
+### Automatic Redaction in Logs
+
+The FDO server automatically redacts sensitive database credentials from all log output to prevent accidental exposure of passwords:
+
+- **PostgreSQL Connections**: Passwords in connection strings are automatically masked
+  - URL format: `postgres://user:password@host/db` → `postgres://user:***REDACTED***@host/db`
+  - Key-value format: `password=secret` → `password=***REDACTED***`
+- **Debug Logging**: Configuration logging uses `slog.Debug` level and includes redaction
+- **SQLite Connections**: File paths are logged as-is (no sensitive data)
+
+### Best Practices
+
+1. **Use Environment Variables**: Store database DSN in environment variables rather than configuration files when possible
+2. **File Permissions**: Ensure configuration files with database credentials have restricted permissions (0600)
+3. **Separate Credentials**: Use different database credentials for each FDO server role
+4. **Secure Transmission**: Always use encrypted connections (SSL/TLS) for PostgreSQL connections
+
+Example secure PostgreSQL DSN:
+```
+postgres://fdo_owner:strongpassword@localhost/fdo_owner?sslmode=require
+```
+
 ## Reporting a Vulnerability
 
 Instructions for reporting a vulnerability can be found on the [FDO Reporting Issues page](https://wiki.lfedge.org/display/FDO/Reporting+Issues).

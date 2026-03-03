@@ -162,9 +162,9 @@ func TO0(ctx context.Context, config *config.OwnerServerConfig, ownerState *stat
 func (s *OwnerServer) Start() error {
 	srv := &http.Server{
 		Handler:           s.handler.Handler(),
-		ReadTimeout:       10 * time.Second,
+		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 3 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 

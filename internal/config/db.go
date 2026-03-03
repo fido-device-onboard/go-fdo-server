@@ -50,7 +50,7 @@ func (dc *DatabaseConfig) RedactedDSN() string {
 				_, hasPassword := u.User.Password()
 				if hasPassword {
 					// Build redacted URL manually to avoid URL encoding of asterisks
-					userInfo := username + ":***REDACTED***"
+					userInfo := username + ":********"
 					redactedURL := u.Scheme + "://" + userInfo + "@" + u.Host + u.Path
 					if u.RawQuery != "" {
 						redactedURL += "?" + u.RawQuery
@@ -70,17 +70,7 @@ func (dc *DatabaseConfig) RedactedDSN() string {
 
 	// Handle key=value format (libpq connection string)
 	if strings.Contains(dsn, "password=") {
-		// Redact password value
-		parts := strings.Fields(dsn)
-		var redacted []string
-		for _, part := range parts {
-			if strings.HasPrefix(part, "password=") {
-				redacted = append(redacted, "password=***REDACTED***")
-			} else {
-				redacted = append(redacted, part)
-			}
-		}
-		return strings.Join(redacted, " ")
+		return redactLibpqPassword(dsn)
 	}
 
 	// If it's key=value format without password, return as-is
@@ -89,7 +79,90 @@ func (dc *DatabaseConfig) RedactedDSN() string {
 	}
 
 	// If we can't parse it, redact the entire DSN to be safe
-	return "***REDACTED***"
+	return "********"
+}
+
+// redactLibpqPassword redacts the password from a libpq-style connection string
+// Handles quoted values properly, including passwords with spaces
+func redactLibpqPassword(dsn string) string {
+	var result strings.Builder
+	i := 0
+
+	for i < len(dsn) {
+		// Skip whitespace
+		for i < len(dsn) && (dsn[i] == ' ' || dsn[i] == '\t') {
+			result.WriteByte(dsn[i])
+			i++
+		}
+
+		if i >= len(dsn) {
+			break
+		}
+
+		// Read key
+		keyStart := i
+		for i < len(dsn) && dsn[i] != '=' && dsn[i] != ' ' && dsn[i] != '\t' {
+			i++
+		}
+
+		if i >= len(dsn) || dsn[i] != '=' {
+			// No equals sign, just copy rest and break
+			result.WriteString(dsn[keyStart:])
+			break
+		}
+
+		key := dsn[keyStart:i]
+		result.WriteString(key)
+		result.WriteByte('=') // Write the '='
+		i++                   // Skip the '='
+
+		// Read value (handling quotes)
+		if i < len(dsn) && dsn[i] == '\'' {
+			// Quoted value
+			i++ // Skip opening quote
+			valueStart := i
+
+			// Find closing quote, handling escaped quotes
+			for i < len(dsn) {
+				if dsn[i] == '\\' && i+1 < len(dsn) {
+					// Skip escaped character
+					i += 2
+					continue
+				}
+				if dsn[i] == '\'' {
+					break
+				}
+				i++
+			}
+
+			if key == "password" {
+				result.WriteString("'********'")
+			} else {
+				// Copy the quoted value
+				result.WriteByte('\'')
+				result.WriteString(dsn[valueStart:i])
+				result.WriteByte('\'')
+			}
+
+			if i < len(dsn) {
+				i++ // Skip closing quote
+			}
+		} else {
+			// Unquoted value
+			valueStart := i
+			for i < len(dsn) && dsn[i] != ' ' && dsn[i] != '\t' {
+				i++
+			}
+
+			if key == "password" {
+				result.WriteString("********")
+			} else {
+				result.WriteString(dsn[valueStart:i])
+			}
+		}
+	}
+
+	return result.String()
 }
 
 func (dc *DatabaseConfig) GetDB() (*gorm.DB, error) {
