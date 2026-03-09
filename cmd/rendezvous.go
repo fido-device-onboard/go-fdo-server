@@ -4,76 +4,14 @@
 package cmd
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/rendezvous"
+	"github.com/fido-device-onboard/go-fdo-server/internal/config"
+	"github.com/fido-device-onboard/go-fdo-server/internal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-const (
-	// defaultMinWaitSecs Default minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected)
-	// Default: 0 (no minimum)
-	defaultMinWaitSecs uint32 = 0
-	// defaultMaxWaitSecs Default maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped)
-	// Default: 86400 (24h)
-	defaultMaxWaitSecs uint32 = 86400
-)
-
-// RendezvousConfig server configuration
-type RendezvousConfig struct {
-	// MinWaitSecs is the minimum time in seconds the rendezvous server will accept
-	// to maintain a rendezvous blob registered in the database.
-	// If an owner server requests a wait time lower than this value during TO0,
-	// the request will be rejected.
-	// Default: 0 (no minimum)
-	MinWaitSecs uint32 `mapstructure:"to0_min_wait"`
-
-	// MaxWaitSecs is the maximum time in seconds the rendezvous server will accept
-	// to maintain a rendezvous blob registered in the database.
-	// If an owner server requests a wait time higher than this value during TO0,
-	// the request will be accepted but capped at this maximum value.
-	// Default: 86400 (24h)
-	MaxWaitSecs uint32 `mapstructure:"to0_max_wait"`
-}
-
-func (rv *RendezvousConfig) validate() error {
-	if rv.MinWaitSecs > rv.MaxWaitSecs {
-		return fmt.Errorf("'to0_max_wait' (%d) must be greater or equal than 'to0_min_wait' (%d)", rv.MaxWaitSecs, rv.MinWaitSecs)
-	}
-	return nil
-}
-
-// RendezvousServerConfig server configuration file structure
-type RendezvousServerConfig struct {
-	FDOServerConfig `mapstructure:",squash"`
-	Rendezvous      RendezvousConfig `mapstructure:"rendezvous"`
-}
-
-// validate checks that required configuration is present
-func (rv *RendezvousServerConfig) validate() error {
-	slog.Debug("Validating rendezvous server configuration")
-	if err := rv.HTTP.validate(); err != nil {
-		slog.Error("HTTP configuration validation failed", "err", err)
-		return err
-	}
-	if err := rv.Rendezvous.validate(); err != nil {
-		slog.Error("rendezvous configuration validation failed", "err", err)
-		return err
-	}
-	slog.Debug("Rendezvous server configuration validated successfully")
-
-	return nil
-}
 
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
@@ -96,118 +34,29 @@ var rendezvousCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var rvConfig RendezvousServerConfig
+		var rvConfig config.RendezvousServerConfig
 		if err := viper.Unmarshal(&rvConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal rendezvous config: %w", err)
 		}
-		if err := rvConfig.validate(); err != nil {
+		slog.Debug("Configuration loaded", "config", rvConfig)
+		if err := rvConfig.Validate(); err != nil {
 			return err
 		}
-		return serveRendezvous(&rvConfig)
+		srv, err := server.NewRendezvousServer(rvConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create rendezvous server: %w", err)
+		}
+		return srv.Start()
 	},
-}
-
-// RendezvousServer represents the HTTP server
-type RendezvousServer struct {
-	handler http.Handler
-	config  HTTPConfig
-}
-
-// NewRendezvousServer creates a new Server
-func NewRendezvousServer(config HTTPConfig, handler http.Handler) *RendezvousServer {
-	return &RendezvousServer{handler: handler, config: config}
-}
-
-// Start starts the HTTP server
-func (s *RendezvousServer) Start() error {
-	srv := &http.Server{
-		Handler:           s.handler,
-		ReadHeaderTimeout: 3 * time.Second,
-	}
-
-	// Channel to listen for interrupt or terminate signals
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	// Goroutine to listen for signals and gracefully shut down the server
-	go func() {
-		<-stop
-		slog.Debug("Shutting down server...")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := srv.Shutdown(ctx); err != nil {
-			slog.Debug("Server forced to shutdown:", "err", err)
-		}
-	}()
-
-	// Listen and serve
-	lis, err := net.Listen("tcp", s.config.ListenAddress())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = lis.Close() }()
-	slog.Info("Listening", "local", lis.Addr().String())
-
-	if s.config.UseTLS() {
-		preferredCipherSuites := []uint16{
-			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, // TLS v1.2
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // TLS v1.2
-		}
-		srv.TLSConfig = &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			CipherSuites: preferredCipherSuites,
-		}
-		err = srv.ServeTLS(lis, s.config.CertPath, s.config.KeyPath)
-		if err != nil && err != http.ErrServerClosed {
-			return err
-		}
-		return nil
-	}
-	err = srv.Serve(lis)
-	if err != nil && err != http.ErrServerClosed {
-		return err
-	}
-	return nil
-}
-
-func serveRendezvous(config *RendezvousServerConfig) error {
-	slog.Info("Initializing rendezvous server")
-
-	db, err := config.DB.getDB()
-	if err != nil {
-		slog.Error("Failed to get a database connection", "err", err)
-		return fmt.Errorf("failed to get a database connection: %w", err)
-	}
-
-	maxWaitSecs := config.Rendezvous.MaxWaitSecs
-	minWaitSecs := config.Rendezvous.MinWaitSecs
-	slog.Info("TO0 wait time limits configured", "minWaitSecs", minWaitSecs, "maxWaitSecs", maxWaitSecs)
-
-	rendezvous := rendezvous.NewRendezvous(db, minWaitSecs, maxWaitSecs)
-	if err = rendezvous.InitDB(); err != nil {
-		slog.Error("failed to initialize rendezvous database", "err", err)
-		return fmt.Errorf("failed to initialize rendezvous database: %w", err)
-	}
-	slog.Info("Database initialized successfully", "type", config.DB.Type)
-	handler := rendezvous.Handler()
-	// Listen and serve
-	server := NewRendezvousServer(config.HTTP, handler)
-
-	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
-	return server.Start()
 }
 
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
-	rendezvousCmd.Flags().Uint32("to0-min-wait", defaultMinWaitSecs, "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)")
-	rendezvousCmd.Flags().Uint32("to0-max-wait", defaultMaxWaitSecs, fmt.Sprintf("Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)", defaultMaxWaitSecs))
-	viper.SetDefault("rendezvous.to0_min_wait", defaultMinWaitSecs)
-	viper.SetDefault("rendezvous.to0_max_wait", defaultMaxWaitSecs)
+	rendezvousCmd.Flags().Uint32("to0-min-wait", config.DefaultMinWaitSecs, "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)")
+	rendezvousCmd.Flags().Uint32("to0-max-wait", config.DefaultMaxWaitSecs, fmt.Sprintf("Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)", config.DefaultMaxWaitSecs))
+	viper.SetDefault("rendezvous.to0_min_wait", config.DefaultMinWaitSecs)
+	viper.SetDefault("rendezvous.to0_max_wait", config.DefaultMaxWaitSecs)
 }
 
 func init() {
