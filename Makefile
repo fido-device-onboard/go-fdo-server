@@ -211,13 +211,19 @@ clean:
 
 .PHONY: fdo-openapi-ui
 fdo-openapi-ui:
+	set -x ; \
+	major_version=`echo $(VERSION)| cut -f 1 -d .`; \
+	api_version="v$${major_version}"; \
+	container_name="fdo-openapi-ui-$${api_version}"; \
+	host_port="908$${major_version}"; \
+	URLS="[{\"url\":\"/api/$${api_version}/manufacturer/openapi.json\",\"name\":\"Manufacturer\"},{\"url\":\"/api/$${api_version}/rendezvous/openapi.json\",\"name\":\"Rendezvous\"},{\"url\":\"/api/$${api_version}/owner/openapi.json\",\"name\":\"Owner\"}]"; \
 	container_cmd=`command -v podman`; \
 	[ -n "$${container_cmd}" ] || container_cmd=`command -v docker`; \
 	[ -n "$${container_cmd}" ] || { echo "No container runtime found" ; exit 1; }; \
-	$${container_cmd} rm --force fdo-openapi-ui; \
-	$${container_cmd} run --rm --name fdo-openapi-ui -d -p 9080:8080 -v ./api:/usr/share/nginx/html/api:z -e URLS='[{"url": "/api/manufacturer/openapi.yaml", "name": "Manufacturer API"}, {"url": "/api/rendezvous/openapi.yaml", "name": "Rendezvous API"}, {"url": "/api/owner/openapi.yaml", "name": "Owner API"} ]' docker.swagger.io/swaggerapi/swagger-ui; \
-	until curl -s -o /dev/null http://127.0.0.1:9080; do \
+	$${container_cmd} rm --force "$${container_name}" || true; \
+	$${container_cmd} run --rm --name "$${container_name}" -d -p "$${host_port}:8080" -v ./api:/usr/share/nginx/html/api:z -e URLS="$$URLS" docker.swagger.io/swaggerapi/swagger-ui; \
+	until curl -s -o /dev/null http://127.0.0.1:$${host_port}; do \
 	  echo "Waiting for swagger-ui to be ready..."; \
 		sleep 1; \
 	done; \
-	open_url_cmd=`command -v xdg-open`; [ -n "$${open_url_cmd}" ] || open_url_cmd=`command -v open`; $${open_url_cmd} http://127.0.0.1:9080
+	open_url_cmd=`command -v xdg-open`; [ -n "$${open_url_cmd}" ] || open_url_cmd=`command -v open`; $${open_url_cmd} http://127.0.0.1:$${host_port}
