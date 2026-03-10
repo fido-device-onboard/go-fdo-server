@@ -41,28 +41,21 @@ jobs:
           breakdown-file-name: ${{ github.ref_name == 'main' && 'main.breakdown' || '' }}
           diff-base-breakdown-file-name: ${{ steps.download-main-breakdown.outputs.found_artifact == 'true' && 'main.breakdown' || '' }}
 
-      - name: Find pull request ID
+      - name: Save PR metadata
+        if: github.event_name == 'pull_request'
+        env:
+          COVERAGE_REPORT: ${{ steps.coverage.outputs.report }}
         run: |
-          PR_DATA=$(curl -s -H "Authorization: token ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${{ github.head_ref || github.ref_name }}&state=open")
-          PR_ID=$(echo "$PR_DATA" | jq -r '.[0].number')
-          if [ "$PR_ID" != "null" ]; then
-            echo "pull_request_id=$PR_ID" >> "$GITHUB_ENV"
-          else
-            echo "No open pull request found for branch ${{ github.head_ref || github.ref_name }}."
-          fi
+          mkdir -p pr-metadata
+          echo "${{ github.event.pull_request.number }}" > pr-metadata/pr-number
+          printf '%s' "$COVERAGE_REPORT" > pr-metadata/coverage-report.json
 
-      - name: Post coverage report to PR
-        if: env.pull_request_id
-        uses: thollander/actions-comment-pull-request@v3
+      - name: Upload PR metadata
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
-          github-token: ${{ github.token }}
-          comment-tag: coverage-report
-          pr-number: ${{ env.pull_request_id }}
-          message: |
-            `go-test-coverage` report
-            ```
-            ${{ fromJSON(steps.coverage.outputs.report) }}```
+          name: pr-metadata
+          path: pr-metadata/
 
       - name: Upload coverage breakdown
         uses: actions/upload-artifact@v4
