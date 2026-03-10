@@ -1,0 +1,46 @@
+on:
+  workflow_run:
+    workflows: ["Go test coverage"]
+    types:
+      - completed
+
+name: Post coverage report to PR
+
+jobs:
+  comment:
+    name: Post coverage report
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Download PR metadata
+        id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pr-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Read PR metadata
+        if: steps.download.outcome == 'success'
+        id: metadata
+        run: |
+          echo "pr-number=$(cat pr-number)" >> "$GITHUB_OUTPUT"
+          {
+            echo "coverage-report<<GHEOF"
+            cat coverage-report.json
+            echo "GHEOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post coverage report to PR
+        if: steps.download.outcome == 'success'
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          comment-tag: coverage-report
+          pr-number: ${{ steps.metadata.outputs.pr-number }}
+          message: |
+            `go-test-coverage` report
+            ```
+            ${{ fromJSON(steps.metadata.outputs.coverage-report) }}```
