@@ -5,9 +5,13 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/cert-utils.sh"
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-utils.sh"
 
+
 base_dir="${PWD}/test/workdir"
 bin_dir="${base_dir}/bin"
+configs_dir="${base_dir}/config"
+databases_dir="${base_dir}/db"
 pid_dir="${base_dir}/run"
+log_level=debug
 logs_dir="${base_dir}/logs"
 certs_dir="${base_dir}/certs"
 credentials_dir="${base_dir}/device-credentials"
@@ -22,8 +26,12 @@ manufacturer_dns=manufacturer
 #shellcheck disable=SC2034
 manufacturer_ip=127.0.0.1
 manufacturer_port=8038
+manufacturer_database_type="sqlite"
+manufacturer_database_dsn="file:${databases_dir}/manufacturer.db"
+manufacturer_config_file="${configs_dir}/manufacturing.yaml"
 manufacturer_pid_file="${pid_dir}/manufacturer.pid"
-manufacturer_log="${logs_dir}/${manufacturer_dns}.log"
+manufacturer_log_level="${log_level}"
+manufacturer_log_file="${logs_dir}/${manufacturer_dns}.log"
 # key crt pub and subj variables are required to generate certificates
 manufacturer_key="${certs_dir}/manufacturer.key"
 #shellcheck disable=SC2034
@@ -44,8 +52,12 @@ rendezvous_dns=rendezvous
 # needed for 'start_services' do not remove
 rendezvous_ip=127.0.0.1
 rendezvous_port=8041
+rendezvous_database_type="sqlite"
+rendezvous_database_dsn="file:${databases_dir}/rendezvous.db"
+rendezvous_config_file="${configs_dir}/rendezvous.yaml"
 rendezvous_pid_file="${pid_dir}/rendezvous.pid"
-rendezvous_log="${logs_dir}/${rendezvous_dns}.log"
+rendezvous_log_level="${log_level}"
+rendezvous_log_file="${logs_dir}/${rendezvous_dns}.log"
 rendezvous_service="${rendezvous_dns}:${rendezvous_port}"
 # Default per-service protocol; caller may override
 rendezvous_protocol=http
@@ -63,8 +75,12 @@ owner_dns=owner
 # needed for 'start_services' do not remove
 owner_ip=127.0.0.1
 owner_port=8043
+owner_database_type="sqlite"
+owner_database_dsn="file:${databases_dir}/owner.db"
+owner_config_file="${configs_dir}/owner.yaml"
 owner_pid_file="${pid_dir}/owner.pid"
-owner_log="${logs_dir}/${owner_dns}.log"
+owner_log_level="${log_level}"
+owner_log_file="${logs_dir}/${owner_dns}.log"
 # key crt pub and subj variables are required to generate certificates
 owner_key="${certs_dir}/owner.key"
 owner_crt="${owner_key/\.key/.crt}"
@@ -97,7 +113,7 @@ client_timeout="300s"
 to0_wait_seconds=10
 
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
-declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
+declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}" "${configs_dir}" "${databases_dir}")
 
 # Colors for output
 RED='\033[0;31m'
@@ -151,6 +167,16 @@ create_directories() {
   done
 }
 
+set_hostnames() {
+  for service in "${services[@]}"; do
+    service_ip=${service}_ip
+    service_dns=${service}_dns
+    log "  ⚙ ${!service_ip} ${!service_dns} "
+    set_hostname "${!service_dns}" "${!service_ip}"
+    log_success
+  done
+}
+
 set_hostname() {
   local dns=$1
   local ip=$2
@@ -164,27 +190,6 @@ set_hostname() {
   fi
 }
 
-unset_hostname() {
-  local dns=$1
-  local ip=$2
-  if grep -q " ${dns}" /etc/hosts; then
-    tmp_hosts=$(mktemp)
-    sed "/.* ${dns}/d" /etc/hosts >"${tmp_hosts}"
-    sudo cp "${tmp_hosts}" /etc/hosts
-    rm -f "${tmp_hosts}"
-  fi
-}
-
-set_hostnames() {
-  for service in "${services[@]}"; do
-    service_ip=${service}_ip
-    service_dns=${service}_dns
-    log "  ⚙ ${!service_ip} ${!service_dns} "
-    set_hostname "${!service_dns}" "${!service_ip}"
-    log_success
-  done
-}
-
 unset_hostnames() {
   log_info "Removing hostnames from '/etc/hosts'"
   for service in "${services[@]}"; do
@@ -196,12 +201,46 @@ unset_hostnames() {
   done
 }
 
+unset_hostname() {
+  local dns=$1
+  local ip=$2
+  if grep -q " ${dns}" /etc/hosts; then
+    tmp_hosts=$(mktemp)
+    sed "/.* ${dns}/d" /etc/hosts >"${tmp_hosts}"
+    sudo cp "${tmp_hosts}" /etc/hosts
+    rm -f "${tmp_hosts}"
+  fi
+}
+
+install_services() {
+  log_info "Installing service"
+  for service in "${services[@]}"; do
+    log "  ⚙ Installing '${service}' "
+    install_service ${service}
+    log_success
+  done
+}
+
+install_service() {
+  local service=$1
+  local install_service="install_service_${service}"
+  ! declare -F "${install_service}" >/dev/null || ${install_service}
+}
+
+install_client() {
+  go install github.com/fido-device-onboard/go-fdo-client@main
+}
+
+install_server() {
+  mkdir -p "${bin_dir}"
+  make build && install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
+}
+
 configure_services() {
   generate_https_certs
   for service in "${services[@]}"; do
-    log "  ⚙ Configuring service ${service} "
+    log "⚙ Configuring service ${service}\n"
     configure_service "${service}"
-    log_success
   done
 }
 
@@ -209,6 +248,190 @@ configure_service() {
   local service=$1
   local configure_service="configure_service_${service}"
   ! declare -F "${configure_service}" >/dev/null || ${configure_service}
+}
+
+configure_service_manufacturer() {
+  tee "${manufacturer_config_file}" <<EOF
+log:
+  level: "${manufacturer_log_level}"
+db:
+  type: "${manufacturer_database_type}"
+  dsn: "${manufacturer_database_dsn}"
+http:
+  ip: "${manufacturer_dns}"
+  port: ${manufacturer_port}
+manufacturing:
+  key: "${manufacturer_key}"
+device_ca:
+  cert: "${device_ca_crt}"
+  key: "${device_ca_key}"
+owner:
+  cert: "${owner_crt}"
+EOF
+}
+
+configure_service_rendezvous() {
+  tee "${rendezvous_config_file}" <<EOF
+log:
+  level: "${rendezvous_log_level}"
+db:
+  type: "${rendezvous_database_type}"
+  dsn: "${rendezvous_database_dsn}"
+http:
+  ip: "${rendezvous_dns}"
+  port: ${rendezvous_port}
+EOF
+}
+
+configure_service_owner() {
+  tee "${owner_config_file}" <<EOF
+log:
+  level: "${owner_log_level}"
+db:
+  type: "${owner_database_type}"
+  dsn: "${owner_database_dsn}"
+http:
+  ip: "${owner_dns}"
+  port: ${owner_port}
+device_ca:
+  cert: "${device_ca_crt}"
+owner:
+  key: "${owner_key}"
+  to0_insecure_tls: true
+EOF
+}
+
+start_services() {
+  log_info "Adding hostnames to '/etc/hosts'"
+  set_hostnames
+  log_info "Starting Services"
+  for service in "${services[@]}"; do
+    log "  ⚙ Starting service ${service} "
+    start_service ${service}
+    log_success
+  done
+}
+
+start_service() {
+  local service=$1
+  local start_service="start_service_${service}"
+  ! declare -F "${start_service}" >/dev/null || ${start_service}
+}
+
+start_service_manufacturer() {
+  local extra_opts=()
+  if [ "${manufacturer_protocol}" = "https" ]; then
+    extra_opts+=(--http-cert "${manufacturer_https_crt}" --http-key "${manufacturer_https_key}")
+  fi
+  run_go_fdo_server manufacturing \
+    "${manufacturer_service}" \
+    "${manufacturer_pid_file}" \
+    "${manufacturer_log_level}" \
+    "${manufacturer_log_file}" \
+    "${manufacturer_database_type}" \
+    "${manufacturer_database_dsn}" \
+    --manufacturing-key="${manufacturer_key}" \
+    --owner-cert="${owner_crt}" \
+    --device-ca-cert="${device_ca_crt}" \
+    --device-ca-key="${device_ca_key}" \
+    "${extra_opts[@]}"
+}
+
+start_service_rendezvous() {
+  local extra_opts=()
+  if [ "${rendezvous_protocol}" = "https" ]; then
+    extra_opts+=(--http-cert "${rendezvous_https_crt}" --http-key "${rendezvous_https_key}")
+  fi
+  run_go_fdo_server rendezvous \
+    "${rendezvous_service}" \
+    "${rendezvous_pid_file}" \
+    "${rendezvous_log_level}" \
+    "${rendezvous_log_file}" \
+    "${rendezvous_database_type}" \
+    "${rendezvous_database_dsn}"\
+    "${extra_opts[@]}"
+}
+
+start_service_owner() {
+  local extra_opts=()
+  if [ "${owner_protocol}" = "https" ]; then
+    extra_opts+=(--http-cert "${owner_https_crt}" --http-key "${owner_https_key}")
+  fi
+  if [ "${rendezvous_protocol}" = "https" ]; then
+    # skip verify of rendezvous cert (self signed)
+    extra_opts+=(--to0-insecure-tls)
+  fi
+  run_go_fdo_server owner \
+    "${owner_service}" \
+    "${owner_pid_file}" \
+    "${owner_log_level}" \
+    "${owner_log_file}" \
+    "${owner_database_type}" \
+    "${owner_database_dsn}" \
+    --owner-key="${owner_key}" \
+    --device-ca-cert="${device_ca_crt}" \
+    "${extra_opts[@]}"
+}
+
+run_go_fdo_server() {
+  local role=$1
+  local address_port=$2
+  local pid_file=$3
+  local log_level=$4
+  local log_file=$5
+  local database_type=$6
+  local database_dsn=$7
+  shift 7
+  mkdir -p "$(dirname "${log_file}")"
+  mkdir -p "$(dirname "${pid_file}")"
+  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type "${database_type}" --db-dsn "${database_dsn}" --log-level="${log_level}" "${@}" &>"${log_file}" &
+  echo -n $! >"${pid_file}"
+}
+
+
+stop_services() {
+  log_info "Stopping services"
+  for service in "${services[@]}"; do
+    log "  ⚙ Stopping service ${service} "
+    stop_service "${service}"
+    log_success
+  done
+}
+
+stop_service() {
+  local service=$1
+  local service_pid_file="${service}_pid_file"
+  if [[ -v "${service_pid_file}" ]] && [[ -f "${!service_pid_file}" ]]; then
+    if pkill -F "${!service_pid_file}"; then
+      wait "$(cat "${!service_pid_file}")" 2>/dev/null || :
+    fi
+  fi
+}
+
+uninstall_services() {
+  log_info "Uninstalling service"
+  for service in "${services[@]}"; do
+    log "  ⚙ uninstalling service '${service}' "
+    uninstall_service "${service}"
+    log_success
+  done
+}
+
+uninstall_service() {
+  local service=$1
+  local install_service="uninstall_service_${service}"
+  ! declare -F "${install_service}" >/dev/null || ${install_service}
+}
+
+uninstall_client() {
+  log_info "Uninstalling client"
+  rm -vf "$(go env GOPATH)/bin/go-fdo-client"
+}
+
+
+uninstall_server() {
+  log_info "Uninstalling server"
+  rm -vf "${bin_dir}/go-fdo-server"
 }
 
 get_real_ip() {
@@ -310,111 +533,6 @@ run_fido_device_onboard() {
   find_in_log "${log_file}" 'FIDO Device Onboard Complete' || return $?
 }
 
-run_go_fdo_server() {
-  local role=$1
-  local address_port=$2
-  local name=$3
-  local pid_file=$4
-  local log=$5
-  shift 5
-  mkdir -p "$(dirname "${log}")"
-  mkdir -p "$(dirname "${pid_file}")"
-  nohup "${bin_dir}/go-fdo-server" "${role}" "${address_port}" --db-type sqlite --db-dsn "file:${base_dir}/${name}.db" --log-level=debug "${@}" &>"${log}" &
-  echo -n $! >"${pid_file}"
-}
-
-start_service_manufacturer() {
-  local extra_opts=()
-  if [ "${manufacturer_protocol}" = "https" ]; then
-    extra_opts+=(--http-cert "${manufacturer_https_crt}" --http-key "${manufacturer_https_key}")
-  fi
-  run_go_fdo_server manufacturing ${manufacturer_service} manufacturer ${manufacturer_pid_file} ${manufacturer_log} \
-    --manufacturing-key="${manufacturer_key}" \
-    --owner-cert="${owner_crt}" \
-    --device-ca-cert="${device_ca_crt}" \
-    --device-ca-key="${device_ca_key}" \
-    "${extra_opts[@]}"
-}
-
-start_service_rendezvous() {
-  local extra_opts=()
-  if [ "${rendezvous_protocol}" = "https" ]; then
-    extra_opts+=(--http-cert "${rendezvous_https_crt}" --http-key "${rendezvous_https_key}")
-  fi
-  run_go_fdo_server rendezvous ${rendezvous_service} rendezvous ${rendezvous_pid_file} ${rendezvous_log} \
-    "${extra_opts[@]}"
-}
-
-start_service_owner() {
-  local extra_opts=()
-  if [ "${owner_protocol}" = "https" ]; then
-    extra_opts+=(--http-cert "${owner_https_crt}" --http-key "${owner_https_key}")
-  fi
-  if [ "${rendezvous_protocol}" = "https" ]; then
-    # skip verify of rendezvous cert (self signed)
-    extra_opts+=(--to0-insecure-tls)
-  fi
-  run_go_fdo_server owner ${owner_service} owner ${owner_pid_file} ${owner_log} \
-    --owner-key="${owner_key}" \
-    --device-ca-cert="${device_ca_crt}" \
-    "${extra_opts[@]}"
-}
-
-start_service() {
-  local service=$1
-  local start_service="start_service_${service}"
-  ! declare -F "${start_service}" >/dev/null || ${start_service}
-}
-
-start_services() {
-  log_info "Adding hostnames to '/etc/hosts'"
-  set_hostnames
-  log_info "Starting Services"
-  for service in "${services[@]}"; do
-    log "  ⚙ Starting service ${service} "
-    start_service ${service}
-    log_success
-  done
-}
-
-stop_service() {
-  local service=$1
-  local service_pid_file="${service}_pid_file"
-  if [[ -v "${service_pid_file}" ]] && [[ -f "${!service_pid_file}" ]]; then
-    if pkill -F "${!service_pid_file}"; then
-      wait "$(cat "${!service_pid_file}")" 2>/dev/null || :
-    fi
-  fi
-}
-
-stop_services() {
-  log_info "Stopping services"
-  for service in "${services[@]}"; do
-    log "  ⚙ Stopping service ${service} "
-    stop_service "${service}"
-    log_success
-  done
-}
-
-install_client() {
-  go install github.com/fido-device-onboard/go-fdo-client@main
-}
-
-uninstall_client() {
-  log_info "Uninstalling client"
-  rm -vf "$(go env GOPATH)/bin/go-fdo-client"
-}
-
-install_server() {
-  mkdir -p "${bin_dir}"
-  make build && install -m 755 go-fdo-server "${bin_dir}" && rm -f go-fdo-server
-}
-
-uninstall_server() {
-  log_info "Uninstalling server"
-  rm -vf "${bin_dir}/go-fdo-server"
-}
-
 generate_service_certs() {
   for service in "${services[@]}"; do
     local service_key="${service}_key"
@@ -493,7 +611,7 @@ set_or_update_owner_redirect_info() {
 
 get_service_logs() {
   local service=$1
-  local service_log_var="${service}_log"
+  local service_log_var="${service}_log_file"
   if [[ -v "${service_log_var}" ]]; then
     [ ! -f "${!service_log_var}" ] || cat "${!service_log_var}"
   fi
@@ -545,7 +663,6 @@ remove_files() {
 cleanup() {
   stop_services
   unset_hostnames
-  uninstall_server
-  uninstall_client
+  uninstall_services
   remove_files
 }

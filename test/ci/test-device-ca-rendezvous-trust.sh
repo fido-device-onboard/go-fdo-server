@@ -4,8 +4,6 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
-certs_file="${logs_dir}/certs.json"
-
 run_test() {
 
   log_info "Setting the error trap handler"
