@@ -48,7 +48,7 @@ jobs:
         run: |
           mkdir -p pr-metadata
           echo "${{ github.event.pull_request.number }}" > pr-metadata/pr-number
-          printf '%s' "$COVERAGE_REPORT" > pr-metadata/coverage-report.json
+          printf '%s\n' "$COVERAGE_REPORT" > pr-metadata/coverage-report.json
 
       - name: Upload PR metadata
         if: github.event_name == 'pull_request'
