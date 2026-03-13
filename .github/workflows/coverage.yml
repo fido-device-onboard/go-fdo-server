@@ -12,19 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install golang
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.25"
 
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run tests with coverage
         run: make test-coverage
 
       - name: Download base coverage breakdown
         id: download-main-breakdown
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v17
         with:
           branch: main
           workflow_conclusion: success
@@ -52,13 +52,13 @@ jobs:
 
       - name: Upload PR metadata
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-metadata
           path: pr-metadata/
 
       - name: Upload coverage breakdown
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.ref_name == 'main'
         with:
           name: main.breakdown
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: test/coverage/coverage.html
