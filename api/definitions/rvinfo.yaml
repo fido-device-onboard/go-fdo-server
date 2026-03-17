@@ -15,7 +15,7 @@ tags:
       Update configuration (PUT) → Delete when no longer needed (DELETE).
       The configuration is embedded in ownership vouchers during device manufacturing.
 paths:
-  /v1/rvinfo:
+  /rvinfo:
     get:
       tags:
         - rvinfo
