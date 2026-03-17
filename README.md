@@ -84,6 +84,9 @@ curl -fsS http://127.0.0.1:8043/health
 ```
 
 ## Managing RV Info Data
+
+> **Note:** The V2 API (`/api/v2/rvinfo`) is recommended for new deployments. It uses OpenAPI specification format with strict typing (integer ports). The V1 API (`/api/v1/rvinfo`) is deprecated and will be removed in a future release, but is still supported for backward compatibility.
+
 ### Create New RV Info Data
 Send a `POST` request to create new RV info data, which is stored in the Manufacturer’s database:
 ```
@@ -109,6 +112,26 @@ Send a `PUT` request to update the existing RV info data:
 curl --location --request PUT 'http://localhost:8038/api/v1/rvinfo' \
 --header 'Content-Type: text/plain' \
 --data-raw '[{"dns":"fdo.example.com","device_port":"8041","rv_bypass": false, "owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
+```
+
+### RV Info V2 API Examples (Recommended)
+
+```bash
+# Create or update RV info (V2 format: array of arrays with single-key objects, integer ports)
+curl -X PUT 'http://localhost:8038/api/v2/rvinfo' \
+  -H 'Content-Type: application/json' \
+  -d '[[{"dns":"fdo.example.com"},{"device_port":8041},{"owner_port":8041},{"protocol":"http"},{"ip":"127.0.0.1"}]]'
+
+# Create or update with RV bypass (skip rendezvous, connect directly to owner)
+curl -X PUT 'http://localhost:8038/api/v2/rvinfo' \
+  -H 'Content-Type: application/json' \
+  -d '[[{"dns":"fdo.example.com"},{"device_port":8043},{"owner_port":8043},{"protocol":"http"},{"ip":"127.0.0.1"},{"rv_bypass":true}]]'
+
+# Fetch RV info
+curl -X GET 'http://localhost:8038/api/v2/rvinfo'
+
+# Delete RV info
+curl -X DELETE 'http://localhost:8038/api/v2/rvinfo'
 ```
 
 ## Managing Owner Redirect Data
