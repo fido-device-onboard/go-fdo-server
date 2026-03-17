@@ -319,7 +319,7 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 	rvInfoServer := rvinfo.NewServer(rvInfoState)
 	rvInfoStrictHandler := rvinfo.NewStrictHandler(&rvInfoServer, nil)
 	rvinfo.HandlerFromMux(rvInfoStrictHandler, mgmtAPIServeMuxV2)
-	// Future: voucher.HandlerFromMux(..., mgmtAPIServeMuxV2)  // Miguel's PR #193
+	// TODO: Add voucher V2 API handlers here following the same pattern (tracked in PR #193)
 	mgmtAPIHandlerV2 := rateLimitMiddleware(rate.NewLimiter(2, 10),
 		bodySizeMiddleware(1<<20, mgmtAPIServeMuxV2))
 	rootMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))
