@@ -352,6 +352,35 @@ jobs:
           source test/ci/test-device-ca-api.sh
           cleanup
 
+  test-device-ca-owner-trust:
+    name: Test Device CA owner trust verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test Device CA owner trust verification
+        run: |
+          source test/ci/test-device-ca-owner-trust.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
+        run: |
+          source test/ci/test-device-ca-owner-trust.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-device-ca-owner-trust.sh
+          cleanup
+
   test-device-ca-rendezvous-trust:
     name: Test Device CA rendezvous trust verification
     runs-on: ubuntu-latest
