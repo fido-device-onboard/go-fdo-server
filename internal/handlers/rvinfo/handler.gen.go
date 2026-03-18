@@ -29,13 +29,13 @@ type UpdateRendezvousInfoJSONRequestBody = externalRef0.RVInfo
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Delete the RendezvousInfo
-	// (DELETE /v1/rvinfo)
+	// (DELETE /rvinfo)
 	DeleteRendezvousInfo(w http.ResponseWriter, r *http.Request)
 	// Get the current RendezvousInfo
-	// (GET /v1/rvinfo)
+	// (GET /rvinfo)
 	GetRendezvousInfo(w http.ResponseWriter, r *http.Request)
 	// Update the RendezvousInfo
-	// (PUT /v1/rvinfo)
+	// (PUT /rvinfo)
 	UpdateRendezvousInfo(w http.ResponseWriter, r *http.Request)
 }
 
@@ -252,9 +252,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("DELETE "+options.BaseURL+"/v1/rvinfo", wrapper.DeleteRendezvousInfo)
-	m.HandleFunc("GET "+options.BaseURL+"/v1/rvinfo", wrapper.GetRendezvousInfo)
-	m.HandleFunc("PUT "+options.BaseURL+"/v1/rvinfo", wrapper.UpdateRendezvousInfo)
+	m.HandleFunc("DELETE "+options.BaseURL+"/rvinfo", wrapper.DeleteRendezvousInfo)
+	m.HandleFunc("GET "+options.BaseURL+"/rvinfo", wrapper.GetRendezvousInfo)
+	m.HandleFunc("PUT "+options.BaseURL+"/rvinfo", wrapper.UpdateRendezvousInfo)
 
 	return m
 }
@@ -407,13 +407,13 @@ func (response UpdateRendezvousInfo500JSONResponse) VisitUpdateRendezvousInfoRes
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Delete the RendezvousInfo
-	// (DELETE /v1/rvinfo)
+	// (DELETE /rvinfo)
 	DeleteRendezvousInfo(ctx context.Context, request DeleteRendezvousInfoRequestObject) (DeleteRendezvousInfoResponseObject, error)
 	// Get the current RendezvousInfo
-	// (GET /v1/rvinfo)
+	// (GET /rvinfo)
 	GetRendezvousInfo(ctx context.Context, request GetRendezvousInfoRequestObject) (GetRendezvousInfoResponseObject, error)
 	// Update the RendezvousInfo
-	// (PUT /v1/rvinfo)
+	// (PUT /rvinfo)
 	UpdateRendezvousInfo(ctx context.Context, request UpdateRendezvousInfoRequestObject) (UpdateRendezvousInfoResponseObject, error)
 }
 
