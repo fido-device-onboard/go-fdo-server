@@ -1,0 +1,874 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "FDO Manufacturer Server API (Deprecated)",
+    "version": "1.1.0",
+    "description": "API for the FDO Manufacturer Server role. The Manufacturer Server is responsible\nfor device initialization, creating ownership vouchers, and configuring rendezvous\ninformation for newly manufactured devices.\n\nThis specification aggregates the following management APIs:\n- Ownership Voucher Management (/api/v1/vouchers) (Deprecated)\n- Rendezvous Info Configuration (/api/v1/rvinfo) (Deprecated)\n\n## API Versioning\nThis API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major\nversion in the URL path (e.g., `/api/v1/vouchers`).\n\n- **MAJOR version** changes indicate breaking changes (incompatible API changes)\n- **MINOR version** changes add functionality in a backward-compatible manner\n- **PATCH version** changes are backward-compatible bug fixes\n\n### Version Support Policy\n- The current major version (v1) is fully supported\n- When a new major version is released, the previous major version will be\n  supported for a minimum of 12 months\n- Deprecated endpoints or fields will be marked in the documentation and\n  supported for at least 6 months before removal\n- Deprecation notices will include the deprecation date, removal date, and\n  migration guidance\n\n### Breaking Changes\nBreaking changes that trigger a major version increment include:\n- Removing or renaming endpoints\n- Removing or renaming request/response fields\n- Changing field types or validation rules\n- Changing authentication mechanisms\n\n## Pagination\nList operations support pagination using `offset` and `limit` query parameters:\n- `offset`: Number of items to skip (default: 0, minimum: 0)\n- `limit`: Maximum number of items to return (default: 100, minimum: 1, maximum: 1000)\n\n## Rate Limiting\nAPI requests may be subject to rate limiting to ensure service stability.\nRate limit information is provided in response headers when applicable:\n- `X-RateLimit-Limit`: Maximum requests allowed in the time window\n- `X-RateLimit-Remaining`: Remaining requests in the current window\n- `X-RateLimit-Reset`: Time when the rate limit resets (Unix timestamp)\n\nWhen rate limits are exceeded, the API returns a 429 Too Many Requests status code.\n",
+    "contact": {
+      "name": "Go FDO Server API Support",
+      "url": "https://github.com/fido-device-onboard/go-fdo-server/issues"
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "GetHealth",
+        "summary": "Get server health status",
+        "description": "Returns the server version and health status.\n\nNote: This endpoint does not require authentication and is intended\nfor health checks by monitoring systems and load balancers.\n",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthStatus"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError",
+            "examples": {
+              "error": {
+                "summary": "Example of an unhealthy server",
+                "value": {
+                  "message": "database error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/vouchers": {
+      "get": {
+        "operationId": "ListVouchers",
+        "summary": "Query ownership vouchers (Deprecated)",
+        "description": "Returns a list of ownership vouchers matching optional filter criteria.\n\nResults are ordered by updated_at timestamp in descending order.\nThe CBOR field is omitted from results (use GET /vouchers/{guid} to retrieve full voucher).\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "query",
+            "description": "Filter by device GUID (hex-encoded)",
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          },
+          {
+            "name": "device_info",
+            "in": "query",
+            "description": "Filter by device info string",
+            "schema": {
+              "type": "string",
+              "example": "MyDevice"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved voucher list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoucherMetadata"
+                  }
+                },
+                "examples": {
+                  "emptyList": {
+                    "summary": "No vouchers found",
+                    "value": []
+                  },
+                  "voucherList": {
+                    "summary": "List of vouchers",
+                    "value": [
+                      {
+                        "guid": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+                        "device_info": "Device 1",
+                        "created_at": "2024-01-15T10:30:00Z",
+                        "updated_at": "2024-01-15T10:30:00Z"
+                      },
+                      {
+                        "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                        "device_info": "Device 2",
+                        "created_at": "2024-01-14T09:20:00Z",
+                        "updated_at": "2024-01-14T09:20:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid GUID: xyz"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while querying vouchers",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      },
+      "post": {
+        "operationId": "InsertVoucher",
+        "summary": "Insert ownership voucher(s) (Deprecated)",
+        "description": "Inserts one or more ownership vouchers into the database.\n\nThe request body should contain PEM-encoded ownership voucher(s).\nEach voucher is verified for:\n- Ownership (voucher owner key matches server's configured keys)\n- Cryptographic integrity (signature chain, certificate chains, etc.)\n- Protocol version and header field validity\n\nDuplicate vouchers (same GUID with same CBOR data) are silently skipped.\nExisting vouchers (same GUID with different CBOR data) are not overwritten and are silently skipped.\n\nThe operation succeeds (200 OK) even if all vouchers were duplicates/skipped.\n",
+        "requestBody": {
+          "description": "PEM-encoded ownership voucher(s)",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "example": "-----BEGIN OWNERSHIP VOUCHER-----\n[base64-encoded CBOR data]\n-----END OWNERSHIP VOUCHER-----\n"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Voucher(s) successfully inserted or were duplicates",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": ""
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid voucher data or verification failed",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "decodeCborError": {
+                    "summary": "Unable to decode CBOR",
+                    "value": "Unable to decode cbor"
+                  },
+                  "invalidVoucher": {
+                    "summary": "Voucher verification failed",
+                    "value": "Invalid ownership voucher"
+                  },
+                  "decodePemError": {
+                    "summary": "Unable to decode PEM",
+                    "value": "Unable to decode PEM content"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while inserting voucher",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readBodyError": {
+                    "summary": "Error reading request body",
+                    "value": "Failure to read the request body"
+                  },
+                  "insertError": {
+                    "summary": "Error inserting into database",
+                    "value": "Internal server error"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      }
+    },
+    "/api/v1/vouchers/{guid}": {
+      "get": {
+        "operationId": "GetVoucherByGUID",
+        "summary": "Get ownership voucher by GUID (Deprecated)",
+        "description": "Retrieves a specific ownership voucher by its device GUID.\n\nReturns the voucher in PEM format with full CBOR data.\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "Device GUID (hex-encoded, 32 characters)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the ownership voucher",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "-----BEGIN OWNERSHIP VOUCHER-----\n[base64-encoded CBOR data]\n-----END OWNERSHIP VOUCHER-----\n"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid GUID format",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "invalidGuid": {
+                    "summary": "Invalid GUID",
+                    "value": "Invalid GUID"
+                  },
+                  "invalidFormat": {
+                    "summary": "Invalid GUID format",
+                    "value": "Invalid GUID format"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Voucher not found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Voucher not found"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      }
+    },
+    "/api/v1/rvinfo": {
+      "get": {
+        "operationId": "GetRendezvousInfo",
+        "summary": "Get the current RendezvousInfo (Deprecated)",
+        "description": "Retrieves the current rendezvous information configuration that devices will use to connect to the rendezvous server.",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the RendezvousInfo configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVInfo"
+                },
+                "examples": {
+                  "simpleHttpRendezvous": {
+                    "summary": "Simple HTTP rendezvous configuration",
+                    "value": [
+                      {
+                        "dns": "rendezvous.example.com",
+                        "protocol": "http",
+                        "owner_port": "8080"
+                      }
+                    ]
+                  },
+                  "httpsRendezvousWithCertHash": {
+                    "summary": "HTTPS rendezvous with certificate hash validation",
+                    "value": [
+                      {
+                        "dns": "rv.example.com",
+                        "protocol": "https",
+                        "owner_port": "8443",
+                        "sv_cert_hash": "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01"
+                      }
+                    ]
+                  },
+                  "multipleRendezvousServers": {
+                    "summary": "Multiple rendezvous servers with fallback",
+                    "value": [
+                      {
+                        "dns": "rv-primary.example.com",
+                        "protocol": "https",
+                        "owner_port": "8443"
+                      },
+                      {
+                        "dns": "rv-fallback.example.com",
+                        "protocol": "https",
+                        "owner_port": "8443",
+                        "delay_seconds": 30
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No RendezvousInfo configuration has been created yet.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "No rvInfo found"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while fetching the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Error fetching rvInfo"
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvinfo"
+        ]
+      },
+      "post": {
+        "operationId": "CreateRendezvousInfo",
+        "summary": "Create the RendezvousInfo configuration (Deprecated)",
+        "description": "Creates the rendezvous information configuration.\n\nThis operation will fail if a configuration already exists. Use PUT to update an existing configuration.\n",
+        "requestBody": {
+          "description": "The new RendezvousInfo configuration",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RVInfo"
+              },
+              "examples": {
+                "createHttps": {
+                  "summary": "Create HTTPS rendezvous",
+                  "value": [
+                    {
+                      "dns": "rv-new.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443"
+                    }
+                  ]
+                },
+                "createMultipleServers": {
+                  "summary": "Create with primary and fallback servers",
+                  "value": [
+                    {
+                      "dns": "rv-primary.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443"
+                    },
+                    {
+                      "dns": "rv-fallback.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443",
+                      "delay_seconds": 60
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successfully created the RendezvousInfo configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVInfo"
+                },
+                "examples": {
+                  "createdHttpsConfiguration": {
+                    "summary": "Successfully created HTTPS configuration",
+                    "value": [
+                      {
+                        "dns": "rv-new.example.com",
+                        "protocol": "https",
+                        "owner_port": "8443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid RendezvousInfo configuration provided in the request body.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid rvInfo"
+              }
+            }
+          },
+          "409": {
+            "description": "RendezvousInfo configuration already exists. Use PUT to update instead.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "rvInfo already exists"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while creating the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readError": {
+                    "summary": "Error reading request body",
+                    "value": "Error reading body"
+                  },
+                  "insertError": {
+                    "summary": "Error inserting into database",
+                    "value": "Error inserting rvInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvinfo"
+        ]
+      },
+      "put": {
+        "operationId": "UpdateRendezvousInfo",
+        "summary": "Update the RendezvousInfo configuration (Deprecated)",
+        "description": "Updates the rendezvous information configuration.\n\nThis operation will fail if no configuration exists. Use POST to create a new configuration.\nThe new configuration will be used by newly manufactured or initialized devices.\nExisting devices will continue using their current rendezvous information.\n",
+        "requestBody": {
+          "description": "The updated RendezvousInfo configuration",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RVInfo"
+              },
+              "examples": {
+                "updateToHttps": {
+                  "summary": "Update to HTTPS rendezvous",
+                  "value": [
+                    {
+                      "dns": "rv-secure.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443"
+                    }
+                  ]
+                },
+                "updateWithMultipleServers": {
+                  "summary": "Update with primary and fallback servers",
+                  "value": [
+                    {
+                      "dns": "rv-primary.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443"
+                    },
+                    {
+                      "dns": "rv-fallback.example.com",
+                      "protocol": "https",
+                      "owner_port": "8443",
+                      "delay_seconds": 60
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully updated the RendezvousInfo configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVInfo"
+                },
+                "examples": {
+                  "updatedHttpsConfiguration": {
+                    "summary": "Successfully updated to HTTPS configuration",
+                    "value": [
+                      {
+                        "dns": "rv-secure.example.com",
+                        "protocol": "https",
+                        "owner_port": "8443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid RendezvousInfo configuration provided in the request body.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid rvInfo"
+              }
+            }
+          },
+          "404": {
+            "description": "RendezvousInfo configuration does not exist. Use POST to create it first.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "rvInfo does not exist"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while updating the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readError": {
+                    "summary": "Error reading request body",
+                    "value": "Error reading body"
+                  },
+                  "updateError": {
+                    "summary": "Error updating in database",
+                    "value": "Error updating rvInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvinfo"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "description": "The server version",
+            "type": "string",
+            "example": "1.1.0"
+          },
+          "status": {
+            "description": "The server health status",
+            "type": "string",
+            "example": "OK"
+          },
+          "message": {
+            "description": "Human-readable status message or error description",
+            "type": "string",
+            "example": "the service is up and running"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "message"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "A human-readable error message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "VoucherMetadata": {
+        "description": "Ownership voucher metadata (excludes CBOR data)",
+        "type": "object",
+        "properties": {
+          "guid": {
+            "description": "Device GUID (hex-encoded)",
+            "type": "string",
+            "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+          },
+          "device_info": {
+            "description": "Device information string",
+            "type": "string",
+            "example": "Intel NUC Model XYZ"
+          },
+          "created_at": {
+            "description": "Timestamp when voucher was first inserted",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "updated_at": {
+            "description": "Timestamp when voucher was last updated",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          }
+        },
+        "required": [
+          "guid",
+          "device_info",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "ErrorString": {
+        "description": "A human-readable error message.",
+        "type": "string"
+      },
+      "DNSHostname": {
+        "type": "string",
+        "format": "hostname",
+        "example": "rendezvous.example.com"
+      },
+      "IPv4Address": {
+        "type": "string",
+        "format": "ipv4",
+        "example": "192.168.1.100"
+      },
+      "ProtocolType": {
+        "description": "Protocol to use for communication:\n- `rest` - RESTful HTTP/HTTPS\n- `http` - HTTP protocol\n- `https` - HTTPS protocol (recommended for production)\n- `tcp` - Raw TCP connection\n- `tls` - TLS-secured TCP connection\n- `coap+tcp` - CoAP over TCP\n- `coap` - Constrained Application Protocol\n",
+        "type": "string",
+        "example": "https",
+        "enum": [
+          "rest",
+          "http",
+          "https",
+          "tcp",
+          "tls",
+          "coap+tcp",
+          "coap"
+        ]
+      },
+      "PortString": {
+        "type": "string",
+        "example": "8443"
+      },
+      "RVDirective": {
+        "description": "A single rendezvous directive containing connection parameters.\nAt least one of `dns` or `ip` must be specified.\n",
+        "type": "object",
+        "properties": {
+          "dns": {
+            "description": "DNS hostname for the server",
+            "$ref": "#/components/schemas/DNSHostname"
+          },
+          "ip": {
+            "description": "IPv4 address for the server",
+            "$ref": "#/components/schemas/IPv4Address"
+          },
+          "protocol": {
+            "description": "Communication protocol specification",
+            "$ref": "#/components/schemas/ProtocolType"
+          },
+          "medium": {
+            "description": "Network medium/interface to use for communication.\nOptions: eth_all, wifi_all\n",
+            "type": "string",
+            "example": "wifi_all",
+            "enum": [
+              "eth_all",
+              "wifi_all"
+            ]
+          },
+          "device_port": {
+            "description": "Port number on the device side",
+            "$ref": "#/components/schemas/PortString"
+          },
+          "owner_port": {
+            "description": "Port number on the owner/server side",
+            "$ref": "#/components/schemas/PortString"
+          },
+          "wifi_ssid": {
+            "description": "WiFi network SSID (Service Set Identifier)",
+            "type": "string",
+            "example": "FDO-Network",
+            "maxLength": 32,
+            "minLength": 1
+          },
+          "wifi_pw": {
+            "description": "WiFi network password",
+            "type": "string",
+            "format": "password",
+            "example": "SecurePassword123"
+          },
+          "dev_only": {
+            "description": "Instruction applies to device only (not owner)",
+            "type": "boolean",
+            "example": true
+          },
+          "owner_only": {
+            "description": "Instruction applies to owner only (not device)",
+            "type": "boolean",
+            "example": true
+          },
+          "rv_bypass": {
+            "description": "Bypass rendezvous server and connect directly to owner",
+            "type": "boolean",
+            "example": true
+          },
+          "delay_seconds": {
+            "description": "Delay in seconds before attempting connection (with up to 25% randomization)",
+            "type": "integer",
+            "format": "uint32",
+            "example": 30,
+            "minimum": 0
+          },
+          "sv_cert_hash": {
+            "description": "Server certificate hash for validation (SHA-256 or SHA-384 hex string)",
+            "type": "string",
+            "example": "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01",
+            "pattern": "^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$"
+          },
+          "cl_cert_hash": {
+            "description": "Client certificate hash for validation (SHA-256 or SHA-384 hex string)",
+            "type": "string",
+            "example": "b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1",
+            "pattern": "^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$"
+          },
+          "user_input": {
+            "description": "User input configuration",
+            "type": "string",
+            "example": "prompt"
+          },
+          "ext_rv": {
+            "description": "Extended rendezvous information for custom device-specific instructions",
+            "type": "string",
+            "example": "custom-data"
+          }
+        },
+        "example": {
+          "dns": "rendezvous.example.com",
+          "protocol": "https",
+          "owner_port": "8443",
+          "device_port": "8041"
+        }
+      },
+      "RVInfo": {
+        "description": "Rendezvous information array containing one or more rendezvous directive objects.\nEach object contains fields that guide devices and owners on how to connect to\nthe rendezvous server, including network configuration, protocols, and connection parameters.\n\nProcessing behavior (FDO specification section 3.7):\n- Directives are processed in order (index 0 first, then 1, etc.)\n- The first successful connection to a rendezvous server MAY be used\n- Multiple directives provide fallback options for device connectivity\n- At least one of `dns` or `ip` must be specified for each directive\n\nFormat: Array of objects with flat key-value pairs (legacy v1 format for backward compatibility).\n",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RVDirective"
+        },
+        "example": [
+          {
+            "dns": "rendezvous.example.com",
+            "protocol": "https",
+            "owner_port": "8443"
+          },
+          {
+            "dns": "rv-fallback.example.com",
+            "protocol": "https",
+            "owner_port": "8443",
+            "delay_seconds": 30
+          }
+        ]
+      }
+    },
+    "responses": {
+      "HealthStatus": {
+        "description": "Server health status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Health"
+            },
+            "examples": {
+              "healthy": {
+                "summary": "Example of a healthy server",
+                "value": {
+                  "version": "1.1.0",
+                  "status": "OK",
+                  "message": "the service is up and running"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "serverError": {
+                "summary": "Example of a server error",
+                "value": {
+                  "message": "An unexpected error occurred."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Server's health monitoring"
+    },
+    {
+      "name": "rvinfo",
+      "description": "Operations related to rendezvous info management"
+    },
+    {
+      "name": "voucher",
+      "description": "Operations related to ownership voucher management"
+    }
+  ]
+}
