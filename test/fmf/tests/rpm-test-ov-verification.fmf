@@ -1,0 +1,21 @@
+summary: Ownership voucher verification testing
+description: |
+    Tests ownership voucher verification covering:
+    - Voucher chain validation
+    - Signature verification
+    - Trust chain integrity
+    - Invalid voucher rejection
+    - Resale protocol verification
+
+test: ../../rpm/test-ov-verification.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - voucher
+  - verification
+  - security
+  - rpm

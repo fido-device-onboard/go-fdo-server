@@ -96,8 +96,13 @@ client_timeout="300s"
 # seconds to wait for TO0 to complete
 to0_wait_seconds=10
 
+configs_dir="${base_dir}/config"
+manufacturer_config_file="${configs_dir}/manufacturing.yaml"
+rendezvous_config_file="${configs_dir}/rendezvous.yaml"
+owner_config_file="${configs_dir}/owner.yaml"
+
 declare -a services=("${manufacturer_service_name}" "${rendezvous_service_name}" "${owner_service_name}")
-declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}")
+declare -a directories=("${base_dir}" "${certs_dir}" "${credentials_dir}" "${logs_dir}" "${configs_dir}")
 
 # Colors for output
 RED='\033[0;31m'
@@ -210,6 +215,60 @@ configure_service() {
   local configure_service="configure_service_${service}"
   ! declare -F "${configure_service}" >/dev/null || ${configure_service}
 }
+
+
+configure_service_manufacturer() {
+  cat >"${manufacturer_config_file}" <<EOF
+log:
+  level: "debug"
+db:
+  type: "sqlite"
+  dsn: "file:${base_dir}/manufacturer.db"
+http:
+  ip: "${manufacturer_dns}"
+  port: ${manufacturer_port}
+manufacturing:
+  key: "${manufacturer_key}"
+device_ca:
+  cert: "${device_ca_crt}"
+  key: "${device_ca_key}"
+owner:
+  cert: "${owner_crt}"
+EOF
+}
+
+configure_service_rendezvous() {
+  cat >"${rendezvous_config_file}" <<EOF
+log:
+  level: "debug"
+db:
+  type: "sqlite"
+  dsn: "file:${base_dir}/rendezvous.db"
+http:
+  ip: "${rendezvous_dns}"
+  port: ${rendezvous_port}
+EOF
+}
+
+configure_service_owner() {
+  cat >"${owner_config_file}" <<EOF
+log:
+  level: "debug"
+db:
+  type: "sqlite"
+  dsn: "file:${base_dir}/owner.db"
+http:
+  ip: "${owner_dns}"
+  port: ${owner_port}
+device_ca:
+  cert: "${device_ca_crt}"
+owner:
+  key: "${owner_key}"
+  to0_insecure_tls: true
+EOF
+}
+
+
 
 get_real_ip() {
   local service=$1

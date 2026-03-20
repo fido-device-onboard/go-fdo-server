@@ -4,64 +4,6 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-onboarding.sh"
 
-configs_dir="${base_dir}/configs"
-manufacturer_config_file="${configs_dir}/manufacturing.yaml"
-rendezvous_config_file="${configs_dir}/rendezvous.yaml"
-owner_config_file="${configs_dir}/owner.yaml"
-
-directories+=("${configs_dir}")
-
-configure_service_manufacturer() {
-  cat >"${manufacturer_config_file}" <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/manufacturer.db"
-http:
-  ip: "${manufacturer_dns}"
-  port: ${manufacturer_port}
-manufacturing:
-  key: "${manufacturer_key}"
-device_ca:
-  cert: "${device_ca_crt}"
-  key: "${device_ca_key}"
-owner:
-  cert: "${owner_crt}"
-EOF
-}
-
-configure_service_rendezvous() {
-  cat >"${rendezvous_config_file}" <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/rendezvous.db"
-http:
-  ip: "${rendezvous_dns}"
-  port: ${rendezvous_port}
-EOF
-}
-
-configure_service_owner() {
-  cat >"${owner_config_file}" <<EOF
-log:
-  level: "debug"
-db:
-  type: "sqlite"
-  dsn: "file:${base_dir}/owner.db"
-http:
-  ip: "${owner_dns}"
-  port: ${owner_port}
-device_ca:
-  cert: "${device_ca_crt}"
-owner:
-  key: "${owner_key}"
-  to0_insecure_tls: true
-EOF
-}
-
 # override to remove use of CLI flags
 run_go_fdo_server() {
   local role=$1
