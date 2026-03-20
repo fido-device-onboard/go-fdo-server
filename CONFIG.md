@@ -322,6 +322,11 @@ The rendezvous server configuration is under the `[rendezvous]` section:
 |-----|------|-------------|---------|
 | `to0_min_wait` | integer | Minimum wait time in seconds for TO0 rendezvous entries. Requests below this value are rejected. Set to 0 for no minimum. | 0 |
 | `to0_max_wait` | integer | Maximum wait time in seconds for TO0 rendezvous entries. Requests above this value are accepted but capped at this maximum. This prevents owner servers from registering rendezvous blobs for excessively long periods. | 86400 (24 hours) |
+| `cleanup_interval` | integer | Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions. The cleanup task runs periodically in the background, removing rendezvous blobs that have exceeded their expiration time and sessions older than `session_timeout` to prevent database bloat. Set to 0 to disable automatic cleanup (not recommended for production). | 3600 (1 hour) |
+| `session_timeout` | integer | Maximum age in seconds for protocol sessions (TO0/TO1) before cleanup. Sessions older than this age will be deleted during periodic cleanup, along with their associated session data. This prevents accumulation of orphaned sessions from interrupted or failed protocol exchanges. | 3600 (1 hour) |
+| `initial_cleanup_delay` | integer | Delay in seconds before the first cleanup runs after server startup. This prevents startup spikes when restarting servers with large amounts of expired data, allowing the server to start serving requests before running potentially heavy cleanup operations. | 300 (5 minutes) |
+
+**Note**: The rendezvous server performs periodic background cleanup to prevent database bloat. Expired rendezvous blobs and old sessions are automatically removed based on the configured intervals.
 
 ## Configuration File Examples
 
@@ -430,6 +435,11 @@ dsn = "file:rendezvous.db"
 # TO0 wait time limits
 to0_min_wait = 0        # No minimum (default)
 to0_max_wait = 86400    # 24 hours (default)
+
+# Database cleanup configuration
+cleanup_interval = 3600         # Run cleanup every hour (default)
+session_timeout = 3600          # Delete sessions older than 1 hour (default)
+initial_cleanup_delay = 300     # Wait 5 minutes before first cleanup (default)
 ```
 
 ### YAML Configuration Example
@@ -531,6 +541,11 @@ rendezvous:
   # TO0 wait time limits
   to0_min_wait: 0        # No minimum (default)
   to0_max_wait: 86400    # 24 hours (default)
+
+  # Database cleanup configuration
+  cleanup_interval: 3600         # Run cleanup every hour (default)
+  session_timeout: 3600          # Delete sessions older than 1 hour (default)
+  initial_cleanup_delay: 300     # Wait 5 minutes before first cleanup (default)
 ```
 
 ## Notes
