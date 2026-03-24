@@ -1,0 +1,68 @@
+openapi: 3.0.0
+info:
+  title: Health API (Deprecated)
+  version: 1.1.0
+  description: An API to check server's health
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: health
+    description: Server's health monitoring
+paths:
+  /health:
+    get:
+      summary: Get server health status
+      description: |
+        Returns the server version and health status.
+
+        Note: This endpoint does not require authentication and is intended
+        for health checks by monitoring systems and load balancers.
+      operationId: GetHealth
+      tags:
+        - health
+      responses:
+        '200':
+          $ref: "#/components/responses/HealthStatus"
+        '500':
+          $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
+          examples:
+            error:
+              summary: Example of an unhealthy server
+              value:
+                message: "database error"
+components:
+  schemas:
+    Health:
+      type: object
+      required:
+        - version
+        - status
+        - message
+      properties:
+        version:
+          type: string
+          description: The server version
+          example: "1.1.0"
+        status:
+          type: string
+          description: The server health status
+          example: "OK"
+        message:
+          type: string
+          description: Human-readable status message or error description
+          example: "the service is up and running"
+  responses:
+    HealthStatus:
+      description: Server health status
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'
+          examples:
+            healthy:
+              summary: Example of a healthy server
+              value:
+                version: "1.1.0"
+                status: "OK"
+                message: "the service is up and running"
