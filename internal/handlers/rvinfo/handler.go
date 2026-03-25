@@ -74,6 +74,14 @@ func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezv
 		}, nil
 	}
 
+	// Validate the RV info can be parsed (before storing)
+	if _, err := ParseOpenAPIRvJSON(rvInfoJSON); err != nil {
+		slog.Warn("invalid RV info format", "error", err)
+		return UpdateRendezvousInfo400JSONResponse{
+			components.BadRequest{Message: "invalid rendezvous info: " + err.Error()},
+		}, nil
+	}
+
 	// Try to update first
 	err = s.RvInfo.UpdateRvInfo(ctx, rvInfoJSON)
 	if errors.Is(err, state.ErrRvInfoNotFound) {
