@@ -99,19 +99,9 @@ func (m *Manufacturing) Handler() http.Handler {
 				return nil
 			},
 			RvInfo: func(ctx context.Context, _ *fdo_lib.Voucher) ([][]protocol.RvInstruction, error) {
-				// Try V1 table first (backward compatibility for existing users)
-				rvInfo, err := db.FetchRvInfo()
-				if err == nil {
-					return rvInfo, nil
-				}
-				slog.Debug("RvInfo not found in legacy table 'rvinfo', checking V2 table 'rv_info'")
-
-				// Fallback to V2 table (new V2 API users)
-				rvInfoJSON, err := m.RvInfoState.FetchRvInfoJSON(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return rvinfo.ParseOpenAPIRvJSON(rvInfoJSON)
+				// Use unified rvinfo table (supports both V1 and V2 APIs)
+				// Handles automatic migration from JSON to CBOR format
+				return db.FetchRvInfo()
 			},
 		},
 	}
