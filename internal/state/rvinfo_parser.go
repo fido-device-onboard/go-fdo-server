@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2024 Intel Corporation
 // SPDX-License-Identifier: Apache 2.0
 
-package rvinfo
+package state
 
 import (
 	"encoding/hex"
@@ -402,5 +402,39 @@ func parseMediumValue(v any) (uint8, error) {
 		}
 	default:
 		return 0, fmt.Errorf("unsupported medium type %T", v)
+	}
+}
+
+// ProtocolStringFromCode converts protocol code to string (inverse of protocolCodeFromString)
+func ProtocolStringFromCode(code uint8) string {
+	switch code {
+	case uint8(protocol.RVProtRest):
+		return "rest"
+	case uint8(protocol.RVProtHTTP):
+		return "http"
+	case uint8(protocol.RVProtHTTPS):
+		return "https"
+	case uint8(protocol.RVProtTCP):
+		return "tcp"
+	case uint8(protocol.RVProtTLS):
+		return "tls"
+	case uint8(protocol.RVProtCoapTCP):
+		return "coap+tcp"
+	case uint8(protocol.RVProtCoapUDP):
+		return "coap"
+	default:
+		return fmt.Sprintf("%d", code)
+	}
+}
+
+// MediumStringFromCode converts medium code to string
+func MediumStringFromCode(medium uint8) string {
+	switch medium {
+	case protocol.RVMedEthAll:
+		return "eth_all"
+	case protocol.RVMedWifiAll:
+		return "wifi_all"
+	default:
+		return fmt.Sprintf("%d", medium)
 	}
 }

@@ -202,7 +202,7 @@ func (OwnerInfo) TableName() string {
 
 type RvInfo struct {
 	ID    int    `gorm:"primaryKey;check:id = 1"`
-	Value []byte `gorm:"type:text;not null"`
+	Value []byte `gorm:"not null"` // CBOR-encoded [][]protocol.RvInstruction
 }
 
 // TableName specifies the table name for RvInfo model
