@@ -4,17 +4,7 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
-
-# V2 API function (local override)
-set_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  local rv_info_v2=$2
-  curl --fail --verbose --silent --insecure \
-    --request PUT \
-    --header 'Content-Type: application/json' \
-    --data-raw "${rv_info_v2}" \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-api-v2.sh"
 
 run_test() {
   # Override services array to exclude rendezvous (not needed with RV bypass)
@@ -47,8 +37,8 @@ run_test() {
 
   log_info "Setting Rendezvous Info with RV BYPASS flag using V2 API"
   # V2 format: array of arrays with integer ports, rv_bypass flag
-  rv_info_v2="[[{\"dns\": \"${owner_dns}\"}, {\"device_port\": ${owner_port}}, {\"protocol\": \"${owner_protocol}\"}, {\"ip\": \"${owner_ip}\"}, {\"owner_port\": ${owner_port}}, {\"rv_bypass\": true}]]"
-  set_rendezvous_info_v2 "${manufacturer_url}" "${rv_info_v2}" | jq -r -M .
+  rv_info="[[{\"dns\":\"${owner_dns}\"},{\"device_port\":${owner_port}},{\"protocol\":\"${owner_protocol}\"},{\"ip\":\"${owner_ip}\"},{\"owner_port\":${owner_port}},{\"rv_bypass\":true}]]"
+  set_rendezvous_info "${manufacturer_url}" "${rv_info}" | jq -r -M .
 
   log_info "Run Device Initialization"
   guid=$(run_device_initialization)

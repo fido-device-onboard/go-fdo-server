@@ -3,41 +3,7 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
-
-# V2 API functions (local overrides)
-get_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  curl --fail --verbose --silent --insecure \
-    --request GET \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
-
-set_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  local rv_info_v2=$2
-  curl --fail --verbose --silent --insecure \
-    --request PUT \
-    --header 'Content-Type: application/json' \
-    --data-raw "${rv_info_v2}" \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
-
-update_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  local rv_info_v2=$2
-  curl --fail --verbose --silent --insecure \
-    --request PUT \
-    --header 'Content-Type: application/json' \
-    --data-raw "${rv_info_v2}" \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
-
-delete_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  curl --fail --verbose --silent --insecure \
-    --request DELETE \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-api-v2.sh"
 
 run_test() {
   log_info "Setting the error trap handler"
@@ -68,7 +34,7 @@ run_test() {
 
   # Step 1: Verify empty state (baseline)
   log_info "Step 1: GET /api/v2/rvinfo - Verify empty state"
-  response=$(get_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(get_rendezvous_info "${manufacturer_url}")
   log_info "Response: ${response}"
 
   if [ "${response}" != "[]" ]; then
@@ -84,7 +50,7 @@ run_test() {
     {"owner_port": 8080}
   ]]'
 
-  if update_rendezvous_info_v2 "${manufacturer_url}" "${invalid_rvinfo}" 2>/dev/null; then
+  if update_rendezvous_info "${manufacturer_url}" "${invalid_rvinfo}" 2>/dev/null; then
     log_error "Invalid data should have been rejected"
     return 1
   fi
@@ -98,7 +64,7 @@ run_test() {
     {"owner_port": 8443}
   ]]'
 
-  response=$(update_rendezvous_info_v2 "${manufacturer_url}" "${initial_rvinfo}")
+  response=$(update_rendezvous_info "${manufacturer_url}" "${initial_rvinfo}")
   log_info "Response: ${response}"
 
   if ! echo "${response}" | jq -e '.[0] | type == "array"' >/dev/null; then
@@ -109,7 +75,7 @@ run_test() {
 
   # Step 4: Verify creation
   log_info "Step 4: GET /api/v2/rvinfo - Verify creation"
-  response=$(get_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(get_rendezvous_info "${manufacturer_url}")
   log_info "Response: ${response}"
 
   directive_count=$(echo "${response}" | jq '. | length')
@@ -133,13 +99,13 @@ run_test() {
     {"rv_bypass": true}
   ]]'
 
-  response=$(update_rendezvous_info_v2 "${manufacturer_url}" "${bypass_rvinfo}")
+  response=$(update_rendezvous_info "${manufacturer_url}" "${bypass_rvinfo}")
   log_info "Response: ${response}"
   log_info "✅ RVInfo updated with RV bypass"
 
   # Step 6: Verify RV bypass configuration
   log_info "Step 6: GET /api/v2/rvinfo - Verify RV bypass"
-  response=$(get_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(get_rendezvous_info "${manufacturer_url}")
 
   if ! echo "${response}" | jq -e '.[0][3] | has("rv_bypass")' >/dev/null; then
     log_error "Fourth instruction doesn't have 'rv_bypass' key"
@@ -168,13 +134,13 @@ run_test() {
     ]
   ]'
 
-  response=$(update_rendezvous_info_v2 "${manufacturer_url}" "${multi_rvinfo}")
+  response=$(update_rendezvous_info "${manufacturer_url}" "${multi_rvinfo}")
   log_info "Response: ${response}"
   log_info "✅ RVInfo updated with multiple directives"
 
   # Step 8: Verify multi-directive configuration
   log_info "Step 8: GET /api/v2/rvinfo - Verify multiple directives"
-  response=$(get_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(get_rendezvous_info "${manufacturer_url}")
 
   directive_count=$(echo "${response}" | jq '. | length')
   if [ "${directive_count}" != "2" ]; then
@@ -197,7 +163,7 @@ run_test() {
 
   # Step 9: Delete RVInfo configuration
   log_info "Step 9: DELETE /api/v2/rvinfo - Delete configuration"
-  response=$(delete_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(delete_rendezvous_info "${manufacturer_url}")
   log_info "Response (deleted config): ${response}"
 
   # Verify response contains the deleted configuration
@@ -209,7 +175,7 @@ run_test() {
 
   # Step 10: Verify deletion (back to empty state)
   log_info "Step 10: GET /api/v2/rvinfo - Verify deletion"
-  response=$(get_rendezvous_info_v2 "${manufacturer_url}")
+  response=$(get_rendezvous_info "${manufacturer_url}")
   log_info "Response after deletion: ${response}"
 
   if [ "${response}" != "[]" ]; then

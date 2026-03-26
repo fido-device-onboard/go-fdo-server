@@ -3,17 +3,7 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
-
-# V2 API function (local override)
-set_rendezvous_info_v2() {
-  local manufacturer_url=$1
-  local rv_info_v2=$2
-  curl --fail --verbose --silent --insecure \
-    --request PUT \
-    --header 'Content-Type: application/json' \
-    --data-raw "${rv_info_v2}" \
-    "${manufacturer_url}/api/v2/rvinfo"
-}
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../scripts/fdo-api-v2.sh"
 
 run_test() {
 
@@ -46,8 +36,8 @@ run_test() {
 
   log_info "Setting Rendezvous Info using V2 API (RendezvousInfo)"
   # V2 format: array of arrays with integer ports
-  rv_info_v2="[[{\"dns\":\"${rendezvous_dns}\"},{\"device_port\":${rendezvous_port}},{\"protocol\":\"${rendezvous_protocol}\"},{\"ip\":\"${rendezvous_ip}\"},{\"owner_port\":${rendezvous_port}}]]"
-  set_rendezvous_info_v2 "${manufacturer_url}" "${rv_info_v2}" | jq -r -M .
+  rv_info="[[{\"dns\":\"${rendezvous_dns}\"},{\"device_port\":${rendezvous_port}},{\"protocol\":\"${rendezvous_protocol}\"},{\"ip\":\"${rendezvous_ip}\"},{\"owner_port\":${rendezvous_port}}]]"
+  set_rendezvous_info "${manufacturer_url}" "${rv_info}" | jq -r -M .
 
   log_info "Adding Device CA certificate to rendezvous"
   add_device_ca_cert "${rendezvous_url}" "${device_ca_crt}" | jq -r -M .
