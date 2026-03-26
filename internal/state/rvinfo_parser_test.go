@@ -1,4 +1,4 @@
-package manufacturing
+package state
 
 import (
 	"strings"
