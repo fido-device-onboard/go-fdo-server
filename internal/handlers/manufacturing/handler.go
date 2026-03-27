@@ -26,25 +26,25 @@ import (
 
 // Manufacturing handles HTTP requests for the manufacturing server
 type Manufacturing struct {
-	DBState            *db.State
-	RvInfoState        *state.RvInfoState
-	HealthState        *state.HealthState
-	DeviceKey          crypto.Signer
-	DeviceCAChain      []*x509.Certificate
-	MfgKey             crypto.Signer
-	OwnerCert          *x509.Certificate
-	EncodePublicKeyFn  func(protocol.KeyType, protocol.KeyEncoding, crypto.PublicKey, []*x509.Certificate) (*protocol.PublicKey, error)
+	DBState           *db.State
+	RvInfoState       *state.RvInfoState
+	HealthState       *state.HealthState
+	DeviceKey         crypto.Signer
+	DeviceCAChain     []*x509.Certificate
+	MfgKey            crypto.Signer
+	OwnerCert         *x509.Certificate
+	EncodePublicKeyFn func(protocol.KeyType, protocol.KeyEncoding, crypto.PublicKey, []*x509.Certificate) (*protocol.PublicKey, error)
 }
 
 // NewManufacturing creates a new Manufacturing handler
 func NewManufacturing(dbState *db.State, deviceKey crypto.Signer, deviceCAChain []*x509.Certificate, mfgKey crypto.Signer, ownerCert *x509.Certificate, encodePublicKeyFn func(protocol.KeyType, protocol.KeyEncoding, crypto.PublicKey, []*x509.Certificate) (*protocol.PublicKey, error)) *Manufacturing {
 	return &Manufacturing{
-		DBState:            dbState,
-		DeviceKey:          deviceKey,
-		DeviceCAChain:      deviceCAChain,
-		MfgKey:             mfgKey,
-		OwnerCert:          ownerCert,
-		EncodePublicKeyFn:  encodePublicKeyFn,
+		DBState:           dbState,
+		DeviceKey:         deviceKey,
+		DeviceCAChain:     deviceCAChain,
+		MfgKey:            mfgKey,
+		OwnerCert:         ownerCert,
+		EncodePublicKeyFn: encodePublicKeyFn,
 	}
 }
 
