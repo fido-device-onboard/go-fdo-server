@@ -4,6 +4,7 @@ package handlersTest
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func TestRvInfo_PostConflictOnDuplicate(t *testing.T) {
 	}
 }
 
-func TestRvInfo_Put404ThenCreateThenUpdateAndGet(t *testing.T) {
+func TestRvInfo_CRUDLifecycle(t *testing.T) {
 	setupTestDB(t)
 
 	get := func() *httptest.ResponseRecorder {
@@ -79,7 +80,17 @@ func TestRvInfo_Put404ThenCreateThenUpdateAndGet(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on GET, got %d", rec.Code)
 	}
-	if got := rec.Body.String(); got != string(updateBody) {
-		t.Fatalf("expected body %q, got %q", string(updateBody), got)
+	// Compare JSON content semantically (field order may vary after CBOR conversion)
+	var expected, got interface{}
+	if err := json.Unmarshal(updateBody, &expected); err != nil {
+		t.Fatalf("failed to unmarshal expected body: %v", err)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to unmarshal response body: %v", err)
+	}
+	expectedJSON, _ := json.Marshal(expected)
+	gotJSON, _ := json.Marshal(got)
+	if string(expectedJSON) != string(gotJSON) {
+		t.Fatalf("expected body %s, got %s", string(expectedJSON), string(gotJSON))
 	}
 }
