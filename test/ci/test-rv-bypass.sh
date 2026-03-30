@@ -5,6 +5,9 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
+# Override rv_info to point to owner with rv_bypass flag
+rv_info="[{\"dns\": \"${owner_dns}\", \"device_port\": \"${owner_port}\", \"protocol\": \"${owner_protocol}\", \"ip\": \"${owner_ip}\", \"owner_port\": \"${owner_port}\", \"rv_bypass\": true}]"
+
 run_test() {
   # Override services array to exclude rendezvous (not needed with RV bypass)
   services=("${manufacturer_service_name}" "${owner_service_name}")
@@ -35,8 +38,6 @@ run_test() {
   wait_for_services_ready
 
   log_info "Setting Rendezvous Info with RV BYPASS flag"
-  # Override rv_info to point to owner with rv_bypass flag
-  rv_info="[{\"dns\": \"${owner_dns}\", \"device_port\": \"${owner_port}\", \"protocol\": \"${owner_protocol}\", \"ip\": \"${owner_ip}\", \"owner_port\": \"${owner_port}\", \"rv_bypass\": true}]"
   set_or_update_rendezvous_info "${manufacturer_url}" "${rv_info}"
 
   log_info "Run Device Initialization"
