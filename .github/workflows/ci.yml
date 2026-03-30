@@ -409,3 +409,90 @@ jobs:
         run: |
           source test/ci/test-rv-bypass.sh
           cleanup
+
+  test-onboarding-v2:
+    name: Test FIDO device onboarding (V2 API)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test FIDO device onboarding V2
+        run: |
+          source test/ci/test-onboarding-v2.sh
+          run_test
+
+      - name: Get manufacturer, rendezvous and owner server logs
+        if: always()
+        run: |
+          source test/ci/test-onboarding-v2.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-onboarding-v2.sh
+          cleanup
+
+  test-rv-bypass-v2:
+    name: Test RV bypass (V2 API)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test RV bypass V2
+        run: |
+          source test/ci/test-rv-bypass-v2.sh
+          run_test
+
+      - name: Get manufacturer and owner server logs
+        if: always()
+        run: |
+          source test/ci/test-rv-bypass-v2.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-rv-bypass-v2.sh
+          cleanup
+
+  test-rvinfo-apis-v2:
+    name: Test RVInfo API Lifecycle (V2 API)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test RVInfo API V2 Lifecycle
+        run: |
+          source test/ci/test-rvinfo-apis-v2.sh
+          run_test
+
+      - name: Get manufacturer server logs
+        if: always()
+        run: |
+          source test/ci/test-rvinfo-apis-v2.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-rvinfo-apis-v2.sh
+          cleanup
