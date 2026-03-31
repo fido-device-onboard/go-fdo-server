@@ -14,6 +14,9 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 // setupTestDB creates a temporary SQLite database for testing
@@ -95,25 +98,19 @@ func TestInsertRvInfo_StoresCBOR_V2(t *testing.T) {
 	}
 }
 
-// TestFetchRvInfoJSON_AutoMigration_V2 tests automatic migration from V2 JSON to CBOR
-func TestFetchRvInfoJSON_AutoMigration_V2(t *testing.T) {
+// TestFetchRvInfoJSON_AutoMigration_V1 tests automatic migration from V1 JSON to CBOR
+func TestFetchRvInfoJSON_AutoMigration_V1(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Simulate old database: Insert V2 OpenAPI JSON directly (bypassing CBOR encoding)
-	// Use format that matches existing parser tests
-	v2JSON := `[
-		[
-			{"dns":"rv.example.com"},
-			{"protocol":"https"},
-			{"owner_port":8443}
-		]
-	]`
+	// Simulate old database: Insert V1 JSON directly (bypassing CBOR encoding)
+	// Old databases would have V1 format (flat array, string ports, multi-key objects)
+	v1JSON := `[{"dns":"rv.example.com","protocol":"https","owner_port":"8443"}]`
 	oldRvInfo := RvInfo{
 		ID:    1,
-		Value: []byte(v2JSON),
+		Value: []byte(v1JSON),
 	}
 	if err := state.DB.Create(&oldRvInfo).Error; err != nil {
 		t.Fatalf("failed to create old JSON record: %v", err)
@@ -436,9 +433,9 @@ func TestProtocolStringFromCode_V2(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := ProtocolStringFromCode(tt.code)
+		got := utils.ProtocolStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("ProtocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.ProtocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }
@@ -455,16 +452,16 @@ func TestMediumStringFromCode_V2(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := MediumStringFromCode(tt.code)
+		got := utils.MediumStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("MediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.MediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }
 
 // TestCrossAPI_V1InsertV2Read tests inserting via V1 API and reading via V2 API
 func TestCrossAPI_V1InsertV2Read(t *testing.T) {
-	// This test verifies that V2 API can read CBOR stored by any source
+	// This test verifies that V2 API can read CBOR stored by V1 API
 	// Both V1 and V2 APIs use the same CBOR storage format
 
 	state, cleanup := setupCBORTestDB(t)
@@ -472,32 +469,43 @@ func TestCrossAPI_V1InsertV2Read(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Insert via V2 format and verify cross-compatibility
-	// (Both V1 and V2 APIs store the same CBOR internally)
-	v2JSON := []byte(`[[ {"dns":"rv.example.com"}, {"protocol":"https"}, {"owner_port":8443} ]]`)
+	// Insert via V1 API (flat array, string ports, multi-key objects)
+	v1JSON := []byte(`[{"dns":"rv.example.com", "protocol":"https", "owner_port":"8443"}]`)
 
-	if err := state.InsertRvInfo(ctx, v2JSON); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	// V1 API uses global db variable - temporarily set it for this test
+	// Parse V1 JSON and insert using V1 parser
+	rvInstructions, err := db.ParseHumanReadableRvJSON(v1JSON)
+	if err != nil {
+		t.Fatalf("V1 parser failed: %v", err)
 	}
 
-	// Read it back
+	// Use the shared CBOR storage function (which both V1 and V2 use)
+	if err := db.InsertRvInfoCBOR(state.DB, rvInstructions); err != nil {
+		t.Fatalf("V1 InsertRvInfo failed: %v", err)
+	}
+
+	// Read via V2 API - should get V2 format back (array of arrays, integer ports)
 	outputJSON, err := state.FetchRvInfoJSON(ctx)
 	if err != nil {
 		t.Fatalf("FetchRvInfoJSON failed: %v", err)
 	}
 
-	// Should get V2 format with integer ports
+	// V2 API should return V2 format (array of arrays, integer ports)
+	// even though data was inserted via V1 API
 	var output [][]map[string]interface{}
 	if err := json.Unmarshal(outputJSON, &output); err != nil {
-		t.Fatalf("failed to parse output: %v", err)
+		t.Fatalf("failed to parse V2 output: %v", err)
 	}
 
-	// Verify V2 format (array of arrays of single-key objects)
-	if len(output) != 1 || len(output[0]) != 3 {
-		t.Fatalf("Expected 1 directive with 3 instructions, got %d directives", len(output))
+	// Verify V2 format structure (array of arrays of single-key objects)
+	if len(output) != 1 {
+		t.Fatalf("Expected 1 directive, got %d", len(output))
+	}
+	if len(output[0]) != 3 {
+		t.Errorf("Expected 3 instructions in directive, got %d", len(output[0]))
 	}
 
-	// Verify port is integer
+	// Flatten the single-key objects to verify content
 	directive := make(map[string]interface{})
 	for _, instr := range output[0] {
 		for k, v := range instr {
@@ -505,8 +513,15 @@ func TestCrossAPI_V1InsertV2Read(t *testing.T) {
 		}
 	}
 
+	// Verify V2 format uses integer ports (not string like V1)
 	if port, ok := directive["owner_port"].(float64); !ok || int(port) != 8443 {
 		t.Errorf("Expected owner_port 8443 (int), got %v (type %T)", directive["owner_port"], directive["owner_port"])
+	}
+	if dns, ok := directive["dns"].(string); !ok || dns != "rv.example.com" {
+		t.Errorf("Expected dns 'rv.example.com', got %v", directive["dns"])
+	}
+	if protocol, ok := directive["protocol"].(string); !ok || protocol != "https" {
+		t.Errorf("Expected protocol 'https', got %v", directive["protocol"])
 	}
 }
 

@@ -13,10 +13,12 @@ import (
 	"net"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 // Sentinel errors for RV info operations
@@ -90,14 +92,14 @@ func convertRvInstructionsToV2JSON(rvInstructions [][]protocol.RvInstruction) ([
 				if err := cbor.Unmarshal(instr.Value, &code); err != nil {
 					return nil, fmt.Errorf("failed to unmarshal protocol: %w", err)
 				}
-				item["protocol"] = ProtocolStringFromCode(code)
+				item["protocol"] = utils.ProtocolStringFromCode(code)
 
 			case protocol.RVMedium:
 				var medium uint8
 				if err := cbor.Unmarshal(instr.Value, &medium); err != nil {
 					return nil, fmt.Errorf("failed to unmarshal medium: %w", err)
 				}
-				item["medium"] = MediumStringFromCode(medium)
+				item["medium"] = utils.MediumStringFromCode(medium)
 
 			case protocol.RVDevPort:
 				var port uint16
@@ -192,12 +194,12 @@ func (s *RvInfoState) FetchRvInfoJSON(ctx context.Context) ([]byte, error) {
 
 	// Try to unmarshal as CBOR first (new format)
 	if err := cbor.Unmarshal(rvInfoRow.Value, &rvInfo); err != nil {
-		// CBOR failed, try to parse as V2 OpenAPI JSON (old format)
-		// This handles migration if database still has JSON from before CBOR implementation
+		// CBOR failed, try to parse as V1 JSON (old format from pre-CBOR databases)
+		// This handles migration if database still has V1 JSON from before CBOR implementation
 		var parseErr error
-		rvInfo, parseErr = ParseOpenAPIRvJSON(rvInfoRow.Value)
+		rvInfo, parseErr = db.ParseHumanReadableRvJSON(rvInfoRow.Value)
 		if parseErr != nil {
-			return nil, fmt.Errorf("%w: failed to parse as CBOR or V2 JSON: cbor error: %v, json error: %v",
+			return nil, fmt.Errorf("%w: failed to parse as CBOR or V1 JSON: cbor error: %v, json error: %v",
 				ErrInvalidRvInfo, err, parseErr)
 		}
 
@@ -217,7 +219,7 @@ func (s *RvInfoState) FetchRvInfoJSON(ctx context.Context) ([]byte, error) {
 			} else if tx.RowsAffected == 0 {
 				slog.Warn("No rows updated during CBOR migration (row may have been deleted)")
 			} else {
-				slog.Info("Successfully migrated RvInfo from V2 JSON to CBOR format")
+				slog.Info("Successfully migrated RvInfo from V1 JSON to CBOR format")
 			}
 		}
 	}
@@ -234,25 +236,7 @@ func (s *RvInfoState) InsertRvInfo(ctx context.Context, data []byte) error {
 		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
 	}
 
-	// Marshal to CBOR for storage
-	cborData, err := cbor.Marshal(rvInstructions)
-	if err != nil {
-		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
-	}
-
-	rvInfo := RvInfo{
-		ID:    1,
-		Value: cborData,
-	}
-
-	tx := s.DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return gorm.ErrDuplicatedKey
-	}
-	return nil
+	return db.InsertRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
 }
 
 // UpdateRvInfo updates existing rendezvous information configuration
@@ -263,20 +247,12 @@ func (s *RvInfoState) UpdateRvInfo(ctx context.Context, data []byte) error {
 		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
 	}
 
-	// Marshal to CBOR for storage
-	cborData, err := cbor.Marshal(rvInstructions)
-	if err != nil {
-		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
-	}
-
-	tx := s.DB.WithContext(ctx).Model(&RvInfo{}).Where("id = ?", 1).Update("value", cborData)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
+	err = db.UpdateRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
+	// Map gorm.ErrRecordNotFound to our custom error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrRvInfoNotFound
 	}
-	return nil
+	return err
 }
 
 // DeleteRvInfo removes the rendezvous information configuration

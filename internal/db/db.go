@@ -16,6 +16,8 @@ import (
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 var db *gorm.DB
@@ -182,14 +184,9 @@ func FetchOwnerInfo() ([]protocol.RvTO2Addr, error) {
 	return parseHumanToTO2AddrsJSON(ownerInfoData)
 }
 
-func InsertRvInfo(data []byte) error {
-	// Parse V1 JSON into [][]protocol.RvInstruction
-	rvInstructions, err := parseHumanReadableRvJSON(data)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
-	}
-
-	// Marshal to CBOR for storage
+// InsertRvInfoCBOR is a common helper that marshals RV instructions to CBOR and inserts into database
+// Used by both V1 (InsertRvInfo) and V2 (state.InsertRvInfo) APIs
+func InsertRvInfoCBOR(database *gorm.DB, rvInstructions [][]protocol.RvInstruction) error {
 	cborData, err := cbor.Marshal(rvInstructions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
@@ -199,7 +196,7 @@ func InsertRvInfo(data []byte) error {
 		ID:    1,
 		Value: cborData,
 	}
-	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
+	tx := database.Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -209,20 +206,15 @@ func InsertRvInfo(data []byte) error {
 	return nil
 }
 
-func UpdateRvInfo(data []byte) error {
-	// Parse V1 JSON into [][]protocol.RvInstruction
-	rvInstructions, err := parseHumanReadableRvJSON(data)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
-	}
-
-	// Marshal to CBOR for storage
+// UpdateRvInfoCBOR is a common helper that marshals RV instructions to CBOR and updates database
+// Used by both V1 (UpdateRvInfo) and V2 (state.UpdateRvInfo) APIs
+func UpdateRvInfoCBOR(database *gorm.DB, rvInstructions [][]protocol.RvInstruction) error {
 	cborData, err := cbor.Marshal(rvInstructions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
 	}
 
-	tx := db.Model(&RvInfo{}).Where("id = ?", 1).Update("value", cborData)
+	tx := database.Model(&RvInfo{}).Where("id = ?", 1).Update("value", cborData)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -232,8 +224,28 @@ func UpdateRvInfo(data []byte) error {
 	return nil
 }
 
-// convertRvInstructionsToV1JSON converts [][]protocol.RvInstruction to V1 JSON format
-func convertRvInstructionsToV1JSON(rvInstructions [][]protocol.RvInstruction) ([]byte, error) {
+func InsertRvInfo(data []byte) error {
+	// Parse V1 JSON into [][]protocol.RvInstruction
+	rvInstructions, err := ParseHumanReadableRvJSON(data)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
+	}
+
+	return InsertRvInfoCBOR(db, rvInstructions)
+}
+
+func UpdateRvInfo(data []byte) error {
+	// Parse V1 JSON into [][]protocol.RvInstruction
+	rvInstructions, err := ParseHumanReadableRvJSON(data)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRvInfo, err)
+	}
+
+	return UpdateRvInfoCBOR(db, rvInstructions)
+}
+
+// ConvertRvInstructionsToV1JSON converts protocol RV instructions to V1 JSON format
+func ConvertRvInstructionsToV1JSON(rvInstructions [][]protocol.RvInstruction) ([]byte, error) {
 	type rvHuman struct {
 		DNS          string  `json:"dns,omitempty"`
 		IP           string  `json:"ip,omitempty"`
@@ -279,14 +291,14 @@ func convertRvInstructionsToV1JSON(rvInstructions [][]protocol.RvInstruction) ([
 				if err := cbor.Unmarshal(instr.Value, &code); err != nil {
 					return nil, fmt.Errorf("failed to unmarshal protocol: %w", err)
 				}
-				item.Protocol = protocolStringFromCode(code)
+				item.Protocol = utils.ProtocolStringFromCode(code)
 
 			case protocol.RVMedium:
 				var medium uint8
 				if err := cbor.Unmarshal(instr.Value, &medium); err != nil {
 					return nil, fmt.Errorf("failed to unmarshal medium: %w", err)
 				}
-				item.Medium = mediumStringFromCode(medium)
+				item.Medium = utils.MediumStringFromCode(medium)
 
 			case protocol.RVDevPort:
 				var port uint16
@@ -369,80 +381,6 @@ func convertRvInstructionsToV1JSON(rvInstructions [][]protocol.RvInstruction) ([
 	return json.Marshal(out)
 }
 
-// protocolStringFromCode converts protocol code to string
-// Note: Duplicated in internal/state/rvinfo_parser.go as ProtocolStringFromCode
-// Cannot import state package here to avoid import cycle
-func protocolStringFromCode(code uint8) string {
-	switch code {
-	case uint8(protocol.RVProtRest):
-		return "rest"
-	case uint8(protocol.RVProtHTTP):
-		return "http"
-	case uint8(protocol.RVProtHTTPS):
-		return "https"
-	case uint8(protocol.RVProtTCP):
-		return "tcp"
-	case uint8(protocol.RVProtTLS):
-		return "tls"
-	case uint8(protocol.RVProtCoapTCP):
-		return "coap+tcp"
-	case uint8(protocol.RVProtCoapUDP):
-		return "coap"
-	default:
-		return fmt.Sprintf("%d", code)
-	}
-}
-
-// mediumStringFromCode converts medium code to string
-// Note: Duplicated in internal/state/rvinfo_parser.go as MediumStringFromCode
-// Cannot import state package here to avoid import cycle
-func mediumStringFromCode(medium uint8) string {
-	switch medium {
-	case protocol.RVMedEthAll:
-		return "eth_all"
-	case protocol.RVMedWifiAll:
-		return "wifi_all"
-	default:
-		return fmt.Sprintf("%d", medium)
-	}
-}
-
-func FetchRvInfoJSON() ([]byte, error) {
-	var rvInfoRow RvInfo
-	if err := db.Where("id = ?", 1).First(&rvInfoRow).Error; err != nil {
-		return nil, err
-	}
-
-	var rvInfo [][]protocol.RvInstruction
-
-	// Try to decode as CBOR first (new format)
-	if err := cbor.Unmarshal(rvInfoRow.Value, &rvInfo); err != nil {
-		// Fallback: try to decode as JSON (old format)
-		rvInfo, err = parseHumanReadableRvJSON(rvInfoRow.Value)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to parse as CBOR or JSON", ErrInvalidRvInfo)
-		}
-
-		// Migrate: Convert JSON to CBOR and update database
-		rvInfoCBOR, err := cbor.Marshal(rvInfo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal rvinfo to CBOR during migration: %w", err)
-		}
-
-		tx := db.Model(&RvInfo{}).Where("id = ?", 1).Update("value", rvInfoCBOR)
-		if tx.Error != nil {
-			return nil, tx.Error
-		}
-		// This shouldn't happen as rvInfoRow was retrieved above
-		if tx.RowsAffected == 0 {
-			return nil, gorm.ErrRecordNotFound
-		}
-	}
-
-	// Convert [][]protocol.RvInstruction to V1 JSON format
-	return convertRvInstructionsToV1JSON(rvInfo)
-}
-
 // ListDevices returns devices known to the owner service, combining voucher
 // metadata with TO2 onboarding state (if any) from device_onboarding.
 // Devices are ordered by most recently updated voucher first.
@@ -482,7 +420,7 @@ func FetchRvInfo() ([][]protocol.RvInstruction, error) {
 	// Try to decode as CBOR first (new format)
 	if err := cbor.Unmarshal(rvInfoRow.Value, &rvInfo); err != nil {
 		// Fallback: try to decode as JSON (old format)
-		rvInfo, err = parseHumanReadableRvJSON(rvInfoRow.Value)
+		rvInfo, err = ParseHumanReadableRvJSON(rvInfoRow.Value)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to parse as CBOR or JSON", ErrInvalidRvInfo)
 		}
@@ -540,11 +478,13 @@ func encodeRvValue(rvVar protocol.RvVar, val any) ([]byte, error) {
 	}
 }
 
-// parseHumanReadableRvJSON parses a JSON like
+// ParseHumanReadableRvJSON parses a JSON like
 // [{"dns":"fdo.example.com","device_port":"8082","owner_port":"8082","protocol":"http","ip":"127.0.0.1"}]
 // into [][]protocol.RvInstruction. It maps human-readable keys to RV variables
 // and converts protocol strings to the appropriate numeric code.
-func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error) {
+// This is the V1 API format parser.
+// TODO: Remove this public export once #196 merges (V2 state layer migration complete)
+func ParseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error) {
 	type rvHuman struct {
 		DNS          string  `json:"dns"`
 		IP           string  `json:"ip"`
@@ -592,7 +532,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			group = append(group, protocol.RvInstruction{Variable: protocol.RVIPAddress, Value: enc})
 		}
 		if item.Protocol != "" {
-			code, err := protocolCodeFromString(item.Protocol)
+			code, err := utils.ProtocolCodeFromString(item.Protocol)
 			if err != nil {
 				return nil, err
 			}
@@ -603,7 +543,7 @@ func parseHumanReadableRvJSON(rawJSON []byte) ([][]protocol.RvInstruction, error
 			group = append(group, protocol.RvInstruction{Variable: protocol.RVProtocol, Value: enc})
 		}
 		if item.Medium != "" {
-			m, err := parseMediumValue(item.Medium)
+			m, err := utils.MediumCodeFromString(item.Medium)
 			if err != nil {
 				return nil, fmt.Errorf("medium: %w", err)
 			}
@@ -732,45 +672,6 @@ func parsePortValue(v any) (uint16, error) {
 		return uint16(i), nil
 	default:
 		return 0, fmt.Errorf("unsupported type %T", v)
-	}
-}
-
-func protocolCodeFromString(s string) (uint8, error) {
-	switch s {
-	case "rest":
-		return uint8(protocol.RVProtRest), nil
-	case "http":
-		return uint8(protocol.RVProtHTTP), nil
-	case "https":
-		return uint8(protocol.RVProtHTTPS), nil
-	case "tcp":
-		return uint8(protocol.RVProtTCP), nil
-	case "tls":
-		return uint8(protocol.RVProtTLS), nil
-	case "coap+tcp":
-		return uint8(protocol.RVProtCoapTCP), nil
-	case "coap":
-		return uint8(protocol.RVProtCoapUDP), nil
-	default:
-		return 0, fmt.Errorf("unsupported protocol %q", s)
-	}
-}
-
-func parseMediumValue(v any) (uint8, error) {
-	switch t := v.(type) {
-	case float64:
-		return uint8(t), nil
-	case string:
-		switch t {
-		case "eth_all":
-			return protocol.RVMedEthAll, nil
-		case "wifi_all":
-			return protocol.RVMedWifiAll, nil
-		default:
-			return 0, fmt.Errorf("unsupported medium %q", t)
-		}
-	default:
-		return 0, fmt.Errorf("unsupported medium type %T", v)
 	}
 }
 

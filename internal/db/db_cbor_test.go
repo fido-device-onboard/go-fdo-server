@@ -9,6 +9,8 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 // TestInsertRvInfo_StoresCBOR verifies that RvInfo is stored as CBOR, not JSON
@@ -154,10 +156,16 @@ func TestFetchRvInfoJSON_AutoMigration(t *testing.T) {
 		t.Fatalf("failed to create old JSON record: %v", err)
 	}
 
-	// Call FetchRvInfoJSON() - should trigger migration and return V1 JSON
-	outputJSON, err := FetchRvInfoJSON()
+	// Call FetchRvInfo() - should trigger migration
+	rvInfo, err := FetchRvInfo()
 	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	// Convert to V1 JSON
+	outputJSON, err := ConvertRvInstructionsToV1JSON(rvInfo)
+	if err != nil {
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	// Parse output to verify V1 format
@@ -237,9 +245,14 @@ func TestV1_RoundTrip(t *testing.T) {
 	}
 
 	// Retrieve via V1 API
-	outputJSON, err := FetchRvInfoJSON()
+	rvInfo, err := FetchRvInfo()
 	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	outputJSON, err := ConvertRvInstructionsToV1JSON(rvInfo)
+	if err != nil {
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	// Parse input and output
@@ -330,9 +343,9 @@ func TestConvertRvInstructionsToV1JSON_AllFields(t *testing.T) {
 	}}
 
 	// Convert to V1 JSON
-	result, err := convertRvInstructionsToV1JSON(instructions)
+	result, err := ConvertRvInstructionsToV1JSON(instructions)
 	if err != nil {
-		t.Fatalf("convertRvInstructionsToV1JSON failed: %v", err)
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	// Parse result
@@ -435,9 +448,9 @@ func TestConvertRvInstructionsToV1JSON_MultipleDirectives(t *testing.T) {
 		},
 	}
 
-	result, err := convertRvInstructionsToV1JSON(instructions)
+	result, err := ConvertRvInstructionsToV1JSON(instructions)
 	if err != nil {
-		t.Fatalf("convertRvInstructionsToV1JSON failed: %v", err)
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	var output []rvHuman
@@ -474,9 +487,9 @@ func TestProtocolStringFromCode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := protocolStringFromCode(tt.code)
+		got := utils.ProtocolStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("protocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.ProtocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }
@@ -493,9 +506,9 @@ func TestMediumStringFromCode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := mediumStringFromCode(tt.code)
+		got := utils.MediumStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("mediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.MediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }

@@ -12,6 +12,8 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 // ParseOpenAPIRvJSON parses OpenAPI-formatted RvInfo JSON into [][]protocol.RvInstruction.
@@ -118,7 +120,7 @@ func parseRvInstruction(key string, value interface{}, portParser func(any) (uin
 		if !ok {
 			return nil, fmt.Errorf("protocol must be a string, got %T", value)
 		}
-		code, err := protocolCodeFromString(str)
+		code, err := utils.ProtocolCodeFromString(str)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +135,7 @@ func parseRvInstruction(key string, value interface{}, portParser func(any) (uin
 		if !ok {
 			return nil, fmt.Errorf("medium must be a string, got %T", value)
 		}
-		m, err := parseMediumValue(str)
+		m, err := utils.MediumCodeFromString(str)
 		if err != nil {
 			return nil, err
 		}
@@ -362,79 +364,4 @@ func parsePortValue(v any) (uint16, error) {
 	}
 
 	return uint16(f), nil
-}
-
-// protocolCodeFromString converts protocol string to protocol code
-func protocolCodeFromString(s string) (uint8, error) {
-	switch s {
-	case "rest":
-		return uint8(protocol.RVProtRest), nil
-	case "http":
-		return uint8(protocol.RVProtHTTP), nil
-	case "https":
-		return uint8(protocol.RVProtHTTPS), nil
-	case "tcp":
-		return uint8(protocol.RVProtTCP), nil
-	case "tls":
-		return uint8(protocol.RVProtTLS), nil
-	case "coap+tcp":
-		return uint8(protocol.RVProtCoapTCP), nil
-	case "coap":
-		return uint8(protocol.RVProtCoapUDP), nil
-	default:
-		return 0, fmt.Errorf("unsupported protocol %q", s)
-	}
-}
-
-// parseMediumValue parses the medium value (network interface type)
-func parseMediumValue(v any) (uint8, error) {
-	switch t := v.(type) {
-	case float64:
-		return uint8(t), nil
-	case string:
-		switch t {
-		case "eth_all":
-			return protocol.RVMedEthAll, nil
-		case "wifi_all":
-			return protocol.RVMedWifiAll, nil
-		default:
-			return 0, fmt.Errorf("unsupported medium %q", t)
-		}
-	default:
-		return 0, fmt.Errorf("unsupported medium type %T", v)
-	}
-}
-
-// ProtocolStringFromCode converts protocol code to string (inverse of protocolCodeFromString)
-func ProtocolStringFromCode(code uint8) string {
-	switch code {
-	case uint8(protocol.RVProtRest):
-		return "rest"
-	case uint8(protocol.RVProtHTTP):
-		return "http"
-	case uint8(protocol.RVProtHTTPS):
-		return "https"
-	case uint8(protocol.RVProtTCP):
-		return "tcp"
-	case uint8(protocol.RVProtTLS):
-		return "tls"
-	case uint8(protocol.RVProtCoapTCP):
-		return "coap+tcp"
-	case uint8(protocol.RVProtCoapUDP):
-		return "coap"
-	default:
-		return fmt.Sprintf("%d", code)
-	}
-}
-
-// MediumStringFromCode converts medium code to string
-func MediumStringFromCode(medium uint8) string {
-	switch medium {
-	case protocol.RVMedEthAll:
-		return "eth_all"
-	case protocol.RVMedWifiAll:
-		return "wifi_all"
-	default:
-		return fmt.Sprintf("%d", medium)
-	}
 }
