@@ -52,7 +52,7 @@ func validateCertFile(path, name, contextLine string) error {
 		}
 		return fmt.Errorf("%s is required%s\n%s"+
 			"run 'generate-go-fdo-server-certs.sh' for single-host setup\n"+
-			"see CERTIFICATE_SETUP.md for multi-host deployment", name, detail, context)
+			"see docs/user-guide/certificates.md for multi-host deployment", name, detail, context)
 	}
 	return nil
 }

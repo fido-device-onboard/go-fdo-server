@@ -77,16 +77,14 @@ provided under the `[http]` section:
 
 **Note**: HTTPS (TLS) is automatically enabled when both `cert` and `key` are provided.
 
-## Device CA Configuration
+## Device Certificate Authority (CA) Configuration
 
-The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both Manufacturing and Owner servers:
+The Device CA configuration is under the `[device_ca]` section. This section is required for both Manufacturing and Owner servers:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `cert` | string | Device CA certificate file path | Yes |
 | `key` | string | Device CA private key file path | Yes (for Manufacturing server) |
-
-**Note**: For the Owner server, only the `cert` field is required. The `key` field is only needed for the Manufacturing server.
 
 ## Manufacturing Server Configuration
 
@@ -108,8 +106,8 @@ The Owner server configuration is under the `[owner]` section:
 |-----|------|-------------|----------|
 | `cert` | string | Owner certificate file path | Yes (for Manufacturing server) |
 | `key` | string | Owner private key file path | Yes (for Owner server) |
-| `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
-| `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
+| `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: `false`) |
+| `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: `false`) |
 | `service_info` | map | ServiceInfo Modules to execute on device onboarding (See below) | No |
 
 The Owner server also requires:
@@ -119,16 +117,16 @@ The Owner server also requires:
 
 ### Service Info Configuration (FSIM Operations)
 
-The owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. FSIM operations are defined as an ordered list `fsims` under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
+The Owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. See the [FSIM Guide](fsim-guide.md) for a description of each supported FSIM module. FSIM operations are defined as an ordered list `fsims` under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM operations may be listed in any order but will be executed on the device in the order they appear in the list.
 
 ### Supported FSIM Modules
 
 The following FSIM modules are supported:
 
-1. **fdo.command** - Execute commands on the device
-2. **fdo.download** - Download files from the owner server to the device
-3. **fdo.upload** - Upload files from the device to the owner server
-4. **fdo.wget** - Instruct the device to download files from specified URLs
+1. `fdo.command` - Execute commands on the device
+2. `fdo.download` - Download files from the Owner server to the device
+3. `fdo.upload` - Upload files from the device to the Owner server
+4. `fdo.wget` - Instruct the device to download files from specified URLs
 
 ### Service Info Operation Structure
 
@@ -136,7 +134,7 @@ Each operation in the `service_info.fsims` list has the following structure:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `fsim` | string | The FSIM module type (one of: "fdo.command", "fdo.download", "fdo.upload", "fdo.wget") | Yes |
+| `fsim` | string | The FSIM module type (one of: `fdo.command`, `fdo.download`, `fdo.upload`, `fdo.wget`) | Yes |
 | `params` | object | Parameters for the FSIM module (structure depends on the fsim type) | Yes |
 
 ### Service Info Defaults
@@ -147,13 +145,13 @@ The `defaults` field is a list of default entries with the following structure:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `fsim` | string | The FSIM module type (one of: "fdo.download", "fdo.upload", "fdo.wget") | Yes |
+| `fsim` | string | The FSIM module type (one of: `fdo.download`, `fdo.upload`, `fdo.wget`) | Yes |
 | `dir` | string | Default directory path (must be absolute) | Yes |
 
-**Important notes:**
+**IMPORTANT**:
 - Each `fsim` value can appear only once in the defaults list (maximum of 3 entries)
 - The `dir` path must be absolute
-- For `fdo.download` and `fdo.upload`, the directory must exist on the owner server at startup
+- For `fdo.download` and `fdo.upload`, the directory must exist on the Owner server at startup
 - For `fdo.wget`, the directory is on the device (existence is not checked at startup)
 - Defaults can be overridden by specifying `params.dir` in individual FSIM operations
 - If neither a default nor `params.dir` is specified, the current working directory is used
@@ -184,19 +182,19 @@ service_info:
             dst: "device-syslog.log"
 ```
 
-### fdo.command Parameters
+### `fdo.command` Parameters
 
 Execute commands on the device.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `cmd` | string | The command processor to execute (e.g., "sh", "bash", "cmd"). | Yes |
+| `cmd` | string | The command to execute (e.g., `chmod`, `mkdir`, `bash`, etc.). If `cmd` is set to a pathname of an executable file, the `go-fdo-client` runs it directly. Otherwise, the `go-fdo-client` will search for `cmd` in the directories given in its `PATH` environment variable. | Yes |
 | `args` | array of strings | Command arguments | No |
-| `may_fail` | boolean | If true, allow the command to fail without aborting onboarding | No (default: false) |
-| `return_stdout` | boolean | If true, the device's stdout stream from the command will be sent to the owner server and written to the logs | No (default: false) |
-| `return_stderr` | boolean | If true, the device's stderr stream from the command will be sent to the owner server and written to the logs | No (default: false) |
+| `may_fail` | boolean | If true, allow the command to fail without aborting onboarding | No (default: `false`) |
+| `return_stdout` | boolean | If true, the device's stdout stream from the command will be sent to the Owner server and written to the logs | No (default: `false`) |
+| `return_stderr` | boolean | If true, the device's stderr stream from the command will be sent to the Owner server and written to the logs | No (default: `false`) |
 
-### fdo.command Example
+### `fdo.command` Example
 
 ```yaml
 fsim: "fdo.command"
@@ -214,24 +212,24 @@ params:
       dmidecode --quiet --dump-bin /var/lib/fdo/upload/dmidecode
 ```
 
-### fdo.download Parameters
+### `fdo.download` Parameters
 
-Download files from the owner server to the device.
+Download files from the Owner server to the device.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Base directory path on the owner server where source files are located (used when `files.src` is relative). If not specified, uses the default from `service_info.defaults` or the owner server's current working directory. | No |
+| `dir` | string | Base directory path on the Owner server where source files are located (used when `files.src` is relative). If not specified, uses the default from `service_info.defaults` or the Owner server's current working directory. | No |
 | `files` | array of objects | List of files to download | Yes |
 
 Each file object in the `files` array has:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `src` | string | Path to the file on the owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). | Yes |
+| `src` | string | Path to the file on the Owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). | Yes |
 | `dst` | string | Destination path on the device. Can be absolute or relative (to device working directory). | Yes |
-| `may_fail` | boolean | If true, allow the download to fail without aborting onboarding | No (default: false) |
+| `may_fail` | boolean | If true, allow the download to fail without aborting onboarding | No (default: `false`) |
 
-### fdo.download Example
+### `fdo.download` Example
 
 ```yaml
 fsim: "fdo.download"
@@ -245,13 +243,13 @@ params:
       may_fail: true  # this file download is optional
 ```
 
-### fdo.upload Parameters
+### `fdo.upload` Parameters
 
-Upload files from the device to the owner server. Files are uploaded to a per-device directory on the owner server. The name of the directory is the device's replacement GUID (the GUID that is set after onboarding completes). This prevents files with the same name from being overwritten as devices are onboarded.
+Upload files from the device to the Owner server. Files are uploaded to a per-device directory on the Owner server. The name of the directory is the device's replacement GUID (the GUID that is set after onboarding completes). This prevents files with the same name from being overwritten as devices are onboarded.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Absolute path to a directory on the owner server where uploaded files will be stored. A per-device subdirectory is created in this directory for each device that uploads files during onboarding. If not set the directory from the `fdo.upload` entry in `service_info.defaults` is used. | No |
+| `dir` | string | Absolute path to a directory on the Owner server where uploaded files will be stored. A per-device subdirectory is created in this directory for each device that uploads files during onboarding. If not set, the directory from the `fdo.upload` entry in `service_info.defaults` is used. | No |
 | `files` | array of objects | List of files to request from the device | Yes |
 
 Each file object in the `files` array has:
@@ -259,9 +257,9 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `src` | string | Path to the file on the device to upload. Can be absolute or relative (to device working directory). | Yes |
-| `dst` | string | Destination path on the owner server. If omitted the basename of `src` will be used. Must be a relative path (appended to `params.dir`/$GUID/). | No |
+| `dst` | string | Destination filename (optionally with parent sub-directories) in the per-device directory on the Owner server. If omitted, the basename of `src` will be used. Must be a relative path. | No |
 
-### fdo.upload Example
+### `fdo.upload` Example
 
 ```yaml
 fsim: "fdo.upload"
@@ -278,7 +276,7 @@ params:
       # dst omitted - saved to /var/lib/fdo/uploads/$GUID/machine-id
 ```
 
-### fdo.wget Parameters
+### `fdo.wget` Parameters
 
 Instruct the device to download content from an HTTP server.
 
@@ -296,7 +294,7 @@ Each file object in the `files` array has:
 | `length` | integer | For validation: expected size of downloaded content in bytes | No |
 | `checksum` | string | For validation: Expected SHA-384 checksum of the file (96 hexadecimal characters) | No |
 
-### fdo.wget Example
+### `fdo.wget` Example
 
 ```yaml
 fsim: "fdo.wget"
@@ -330,7 +328,34 @@ The Rendezvous server configuration is under the `[rendezvous]` section:
 
 ## Configuration File Examples
 
-### Manufacturing Server Configuration
+### Manufacturing Server Configuration (YAML)
+
+```yaml
+log:
+  level: "debug"
+
+http:
+  ip: "127.0.0.1"
+  port: "8038"
+  cert: "/path/to/manufacturing.crt"
+  key: "/path/to/manufacturing.key"
+
+db:
+  type: "sqlite"
+  dsn: "file:manufacturing.db"
+
+manufacturing:
+  key: "/path/to/manufacturing.key"
+
+device_ca:
+  cert: "/path/to/device.ca"
+  key: "/path/to/device.key"
+
+owner:
+  cert: "/path/to/owner.crt"
+```
+
+### Manufacturing Server Configuration (TOML)
 
 ```toml
 [log]
@@ -357,7 +382,59 @@ key = "/path/to/device.key"
 cert = "/path/to/owner.crt"
 ```
 
-### Owner Server Configuration
+### Owner Server with FSIM Configuration (YAML)
+
+```yaml
+log:
+  level: "debug"
+
+http:
+  ip: "127.0.0.1"
+  port: "8043"
+
+db:
+  type: "sqlite"
+  dsn: "file:owner.db"
+
+device_ca:
+  cert: "/path/to/device.ca"
+
+owner:
+  key: "/path/to/owner.key"
+  reuse_credentials: true
+  service_info:
+    fsims:
+      - fsim: "fdo.command"
+        params:
+          cmd: "sh"
+          args: ["-c", "echo Current date: ; date"]
+          return_stdout: true
+
+      - fsim: "fdo.download"
+        params:
+          dir: "/var/lib/fdo/downloads"
+          files:
+            - src: "/path/to/file1.txt"
+              dst: "config.txt"
+              may_fail: false
+            - src: "/path/to/file2.txt"
+              dst: "data.txt"
+
+      - fsim: "fdo.upload"
+        params:
+          dir: "/var/lib/fdo/uploads"
+          files:
+            - src: "/etc/device-info.txt"
+              dst: "info/device-info.txt"
+
+      - fsim: "fdo.wget"
+        params:
+          files:
+            - url: "https://example.com/package.tar.gz"
+              dst: "package.tar.gz"
+```
+
+### Owner Server Configuration (TOML)
 
 ```toml
 [log]
@@ -415,112 +492,6 @@ dst = "package.tar.gz"
 checksum = "abc123..."
 ```
 
-### Rendezvous Server Configuration
-
-```toml
-[log]
-level = "debug"
-
-[http]
-ip = "127.0.0.1"
-port = "8041"
-cert = "/path/to/rendezvous.crt"
-key = "/path/to/rendezvous.key"
-
-[db]
-type = "sqlite"
-dsn = "file:rendezvous.db"
-
-[rendezvous]
-# TO0 wait time limits
-to0_min_wait = 0        # No minimum (default)
-to0_max_wait = 86400    # 24 hours (default)
-
-# Database cleanup configuration
-cleanup_interval = 3600         # Run cleanup every hour (default)
-session_timeout = 3600          # Delete sessions older than 1 hour (default)
-initial_cleanup_delay = 300     # Wait 5 minutes before first cleanup (default)
-```
-
-### YAML Configuration Example
-
-```yaml
-log:
-  level: "debug"
-
-http:
-  ip: "127.0.0.1"
-  port: "8038"
-  cert: "/path/to/manufacturing.crt"
-  key: "/path/to/manufacturing.key"
-
-db:
-  type: "sqlite"
-  dsn: "file:manufacturing.db"
-
-manufacturing:
-  key: "/path/to/manufacturing.key"
-
-device_ca:
-  cert: "/path/to/device.ca"
-  key: "/path/to/device.key"
-
-owner:
-  cert: "/path/to/owner.crt"
-```
-
-### Owner Server with FSIM Configuration (YAML)
-
-```yaml
-log:
-  level: "debug"
-
-http:
-  ip: "127.0.0.1"
-  port: "8043"
-
-db:
-  type: "sqlite"
-  dsn: "file:owner.db"
-
-device_ca:
-  cert: "/path/to/device.ca"
-
-owner:
-  key: "/path/to/owner.key"
-  reuse_credentials: true
-  service_info:
-    fsims:
-      - fsim: "fdo.command"
-        params:
-          cmd: "sh"
-          args: ["-c", "echo Current date: ; date"]
-          return_stdout: true
-
-      - fsim: "fdo.download"
-        params:
-          dir: "/var/lib/fdo/downloads"
-          files:
-            - src: "/path/to/file1.txt"
-              dst: "config.txt"
-              may_fail: false
-            - src: "/path/to/file2.txt"
-              dst: "data.txt"
-
-      - fsim: "fdo.upload"
-        params:
-          dir: "/var/lib/fdo/uploads"
-          files:
-            - src: "/etc/device-info.txt"
-              dst: "info/device-info.txt"
-
-      - fsim: "fdo.wget"
-        params:
-          files:
-            - url: "https://example.com/package.tar.gz"
-              dst: "package.tar.gz"
-```
-
 ### Rendezvous Server Configuration (YAML)
 
 ```yaml
@@ -546,6 +517,33 @@ rendezvous:
   cleanup_interval: 3600         # Run cleanup every hour (default)
   session_timeout: 3600          # Delete sessions older than 1 hour (default)
   initial_cleanup_delay: 300     # Wait 5 minutes before first cleanup (default)
+```
+
+### Rendezvous Server Configuration (TOML)
+
+```toml
+[log]
+level = "debug"
+
+[http]
+ip = "127.0.0.1"
+port = "8041"
+cert = "/path/to/rendezvous.crt"
+key = "/path/to/rendezvous.key"
+
+[db]
+type = "sqlite"
+dsn = "file:rendezvous.db"
+
+[rendezvous]
+# TO0 wait time limits
+to0_min_wait = 0        # No minimum (default)
+to0_max_wait = 86400    # 24 hours (default)
+
+# Database cleanup configuration
+cleanup_interval = 3600         # Run cleanup every hour (default)
+session_timeout = 3600          # Delete sessions older than 1 hour (default)
+initial_cleanup_delay = 300     # Wait 5 minutes before first cleanup (default)
 ```
 
 ## Notes

@@ -60,7 +60,7 @@ podman images | grep go-fdo-server
 
 Before running containers, prepare the necessary certificates and directories.
 
-**Important**: This guide uses `/tmp/fdo` for simplicity in testing. For production deployments, use a persistent directory outside of `/tmp` (e.g., `/var/lib/fdo` or `/opt/fdo`) to ensure data is not lost on system reboot.
+**IMPORTANT**: This guide uses `/tmp/fdo` for simplicity in testing. For production deployments, use a persistent directory outside of `/tmp` (e.g., `/var/lib/fdo` or `/opt/fdo`) to ensure data is not lost on system reboot.
 
 ### Create Directory Structure
 
@@ -137,7 +137,7 @@ podman network create fdo-network
 
 ### Running Individual Services
 
-**Important**: The examples below use `P@ssw0rd1!` as the database password for demonstration purposes. **Always use a strong, unique password in production environments.**
+**IMPORTANT**: The examples below use `P@ssw0rd1!` as the database password for demonstration purposes. **Always use a strong, unique password in production environments.**
 
 #### Rendezvous Server
 
@@ -316,10 +316,3 @@ If containers fail with SQLite errors like "unable to open database file", this 
    sudo chown -R 65532:65532 /tmp/fdo
    chmod -R u+rwX /tmp/fdo
    ```
-
-## Additional Resources
-
-- **FDO Specification**: [FIDO Device Onboard](https://fidoalliance.org/specs/FDO/)
-- **Main README**: See [README.md](README.md) for non-containerized usage
-- **FSIM Guide**: See [FSIM_USAGE.md](FSIM_USAGE.md) for Service Info Module details
-- **Client Usage**: See go-fdo-client repository for device-side container usage

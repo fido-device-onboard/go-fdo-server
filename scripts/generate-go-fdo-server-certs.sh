@@ -39,7 +39,7 @@ if [ ${#missing_packages[@]} -ne 0 ]; then
   echo "" >&2
   echo "This script is intended for single-host testing where all FDO services" >&2
   echo "run on the same machine. For production multi-host deployments, see" >&2
-  echo "CERTIFICATE_SETUP.md" >&2
+  echo "docs/user-guide/certificates.md" >&2
   exit 1
 fi
 
