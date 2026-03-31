@@ -735,6 +735,6 @@ The compiler will tell you exactly which methods are missing or have wrong signa
 
 ## See Also
 
-- [CONFIG.md](../CONFIG.md) - Server configuration
+- [Server Configuration](user-guide/server-config.md) - Server configuration
 - [README.md](../README.md) - General project documentation
-- [CERTIFICATE_SETUP.md](../CERTIFICATE_SETUP.md) - Certificate setup guide
+- [Certificate Setup](user-guide/certificates.md) - Certificate setup guide
