@@ -32,7 +32,7 @@ func RvInfoHandler() http.HandlerFunc {
 
 func getRvInfo(w http.ResponseWriter, _ *http.Request) {
 	slog.Debug("Fetching rvInfo")
-	rvInfoJSON, err := db.FetchRvInfoJSON()
+	rvInfo, err := db.FetchRvInfo()
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.Error("No rvInfo found")
@@ -41,6 +41,13 @@ func getRvInfo(w http.ResponseWriter, _ *http.Request) {
 			slog.Error("Error fetching rvInfo", "error", err)
 			http.Error(w, "Error fetching rvInfo", http.StatusInternalServerError)
 		}
+		return
+	}
+
+	rvInfoJSON, err := db.ConvertRvInstructionsToV1JSON(rvInfo)
+	if err != nil {
+		slog.Error("Error converting rvInfo to JSON", "error", err)
+		http.Error(w, "Error converting rvInfo", http.StatusInternalServerError)
 		return
 	}
 

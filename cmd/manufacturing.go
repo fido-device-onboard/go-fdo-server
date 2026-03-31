@@ -20,12 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
-	"github.com/fido-device-onboard/go-fdo/custom"
-	transport "github.com/fido-device-onboard/go-fdo/http"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/manufacturing"
 	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -234,48 +229,24 @@ func serveManufacturing(config *ManufacturingServerConfig) error {
 		return err
 	}
 
-	// Create FDO responder
-	handler := &transport.Handler{
-		Tokens: dbState,
-		DIResponder: &fdo.DIServer[custom.DeviceMfgInfo]{
-			Session:               dbState,
-			Vouchers:              dbState,
-			SignDeviceCertificate: custom.SignDeviceCertificate(deviceKey, deviceCAChain),
-			DeviceInfo: func(ctx context.Context, info *custom.DeviceMfgInfo, _ []*x509.Certificate) (string, protocol.PublicKey, error) {
-				// TODO: Parse manufacturer key chain (different than device CA chain)
-				mfgPubKey, err := encodePublicKey(info.KeyType, info.KeyEncoding, mfgKey.Public(), nil)
-				if err != nil {
-					return "", protocol.PublicKey{}, err
-				}
-				return info.DeviceInfo, *mfgPubKey, nil
-			},
-			BeforeVoucherPersist: func(ctx context.Context, ov *fdo.Voucher) error {
-				extended, err := fdo.ExtendVoucher(ov, mfgKey, []*x509.Certificate{ownerCert}, nil)
-				if err != nil {
-					return err
-				}
-				*ov = *extended
-				return nil
-			},
-			RvInfo: func(context.Context, *fdo.Voucher) ([][]protocol.RvInstruction, error) {
-				return db.FetchRvInfo()
-			},
-		},
+	// Create manufacturing handler with all dependencies
+	mfgHandler := manufacturing.NewManufacturing(
+		dbState,
+		deviceKey,
+		deviceCAChain,
+		mfgKey,
+		ownerCert,
+		encodePublicKey,
+	)
+	if err = mfgHandler.InitDB(); err != nil {
+		slog.Error("failed to initialize manufacturing database", "err", err)
+		return fmt.Errorf("failed to initialize manufacturing database: %w", err)
 	}
-
-	// Handle messages
-	apiRouter := http.NewServeMux()
-	apiRouter.HandleFunc("GET /vouchers", handlers.GetVoucherHandler)
-	apiRouter.HandleFunc("GET /vouchers/{guid}", handlers.GetVoucherByGUIDHandler)
-	apiRouter.Handle("/rvinfo", handlers.RvInfoHandler())
-	httpHandler, err := api.NewHTTPHandler(handler, dbState).RegisterRoutes(apiRouter)
-	if err != nil {
-		slog.Error("failed to register routes", "err", err)
-		return err
-	}
+	slog.Info("Database initialized successfully", "type", config.DB.Type)
+	handler := mfgHandler.Handler()
 
 	// Listen and serve
-	server := NewManufacturingServer(config.HTTP, httpHandler)
+	server := NewManufacturingServer(config.HTTP, handler)
 
 	slog.Debug("Starting server on:", "addr", config.HTTP.ListenAddress())
 	return server.Start()

@@ -148,7 +148,7 @@ func TestParseHumanReadableRvJSON_Cases(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseHumanReadableRvJSON([]byte(tc.jsonBody))
+			_, err := ParseHumanReadableRvJSON([]byte(tc.jsonBody))
 			if tc.wantError {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
