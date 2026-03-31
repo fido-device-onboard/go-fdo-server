@@ -735,6 +735,5 @@ The compiler will tell you exactly which methods are missing or have wrong signa
 
 ## See Also
 
-- [CONFIG.md](../CONFIG.md) - Server configuration
-- [README.md](../README.md) - General project documentation
-- [CERTIFICATE_SETUP.md](../CERTIFICATE_SETUP.md) - Certificate setup guide
+- [`README.md`](../README.md) - General project documentation
+- [User Guide](user-guide/README.md) - The FDO server user guide

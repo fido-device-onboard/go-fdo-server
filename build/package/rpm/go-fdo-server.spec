@@ -92,7 +92,7 @@ install -m 0644 -vp docs/man/*.1 %{buildroot}%{_mandir}/man1
 
 %files
 %license LICENSE vendor/modules.txt
-%doc CERTIFICATE_SETUP.md CONFIG.md DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
+%doc README.md SECURITY.md docs
 %{_bindir}/go-fdo-server
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/%{name}
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/pki/%{name}
