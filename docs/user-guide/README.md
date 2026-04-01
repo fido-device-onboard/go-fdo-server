@@ -123,7 +123,7 @@ The server's operational configuration includes onboarding-related data, such as
 The `go-fdo-server` base configuration must be provided in order to start the server. While most of the base configuration can be provided via the CLI the full configuration can only be set using a configuration file. See the [Server Configuration Reference](server-config.md) for a description of the configuration file, including example configuration files for each server role (Manufacturing, Rendezvous, and Owner).
 
 ### Command Line Interface
-#### Management Server CLI
+#### Manufacturing Server CLI
 *TBD*
 #### Rendezvous Server CLI
 *TBD*
@@ -139,7 +139,7 @@ The `go-fdo-server` base configuration must be provided in order to start the se
 *TBD*
 
 ## Basic Onboarding Example
-*TBD*
+See the [Quickstart Guide](quick-start.md) for a complete onboarding example.
 
 ## RV-Bypass
 *TBD*

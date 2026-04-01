@@ -105,7 +105,7 @@ Verify the configuration has been stored on the Manufacturing server by sending 
 curl --location --request GET 'http://localhost:8038/api/v1/rvinfo'
 ```
 
-### Managing The Owner Server Redirect (RVTO2Addr) Configuration
+### Managing The Owner Server Redirect Configuration (RVTO2Addr)
 
 The Owner server sends its RVTO2Addr configuration to the Rendezvous server prior to onboarding a device.  The configuration contains the network address of the Owner server, which the Rendezvous server will pass to the device during onboarding.  The device uses this network address to access the Owner server.
 
