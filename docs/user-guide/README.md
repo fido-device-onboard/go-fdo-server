@@ -2,7 +2,7 @@
 
 ## Introduction to FIDO Device Onboarding
 
-**Note**: This document provides an overview of the FIDO Device Onboarding process, not a detailed reference.  For a detailed understanding of the FDO process refer to the [FIDO Device Onboard Specification](https://fidoalliance.org/specifications/download-iot-specifications/) available from FIDO Alliance.
+**Note**: This document provides an overview of the FIDO Device Onboarding process, not a detailed reference.  For a detailed understanding of the FDO process, refer to the [FIDO Device Onboard Specification](https://fidoalliance.org/specifications/download-iot-specifications/) available from FIDO Alliance.
 
 FIDO Device Onboarding (FDO) is an automated onboarding mechanism to securely integrate new devices into your IoT infrastructure. FDO verifies device authenticity and protects the device configuration process, synchronizing each new device with your existing infrastructure upon installation.
 
@@ -15,7 +15,7 @@ With FDO, you can benefit from the following:
 
 FDO is a two-phase process:
 
-* The first phase is *Device Initialization* and is performed by the device manufacturer. During this phase the device is set up to perform onboarding after it has been purchased. On completion of this phase:
+* The first phase is *Device Initialization* and is performed by the device manufacturer. During this phase, the device is set up to perform onboarding after it has been purchased. On completion of this phase:
   * A set of credentials has been stored on the device. These device credentials are used to prove the identity of the device.
   * An *Ownership Voucher* has been created. The Ownership Voucher is a digital document that is used to prove the ownership chain of the device.
   * The device is assigned a Globally Unique Identifier (GUID).
@@ -94,7 +94,7 @@ Refer to the [Certificate Setup Guide](certificates.md) for more information.
 
 #### HTTPS/TLS Certificates
 
-All FDO servers support network access via HTTP. Servers can be configured to enable HTTPS for security purposes. In this case additional TLS certificates for server authentication need to be provided. These certificates are separate from the certificates required by FDO. Refer to the [Certificate Setup Guide](certificates.md) and the [server configuration documentation](server-config.md) for additional information.
+All FDO servers support network access via HTTP. Servers can be configured to enable HTTPS for security purposes. In this case, additional TLS certificates for server authentication need to be provided. These certificates are separate from the certificates required by FDO. Refer to the [Certificate Setup Guide](certificates.md) and the [server configuration documentation](server-config.md) for additional information.
 
 #### Database support
 
