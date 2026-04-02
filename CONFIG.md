@@ -79,43 +79,43 @@ provided under the `[http]` section:
 
 ## Device CA Configuration
 
-The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both manufacturing and owner servers:
+The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both Manufacturing and Owner servers:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `cert` | string | Device CA certificate file path | Yes |
-| `key` | string | Device CA private key file path | Yes (for manufacturing server) |
+| `key` | string | Device CA private key file path | Yes (for Manufacturing server) |
 
-**Note**: For the owner server, only the `cert` field is required. The `key` field is only needed for the manufacturing server.
+**Note**: For the Owner server, only the `cert` field is required. The `key` field is only needed for the Manufacturing server.
 
 ## Manufacturing Server Configuration
 
-The manufacturing server configuration is under the `[manufacturing]` section:
+The Manufacturing server configuration is under the `[manufacturing]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `key` | string | Manufacturing private key file path | Yes |
 
-The manufacturing server also requires:
+The Manufacturing server also requires:
 - `[device_ca]` section with both `cert` and `key` (see Device CA Configuration above)
 - `[owner]` section with `cert` field (see Owner Configuration below)
 
 ## Owner Server Configuration
 
-The owner server configuration is under the `[owner]` section:
+The Owner server configuration is under the `[owner]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `cert` | string | Owner certificate file path | Yes (for manufacturing server) |
-| `key` | string | Owner private key file path | Yes (for owner server) |
+| `cert` | string | Owner certificate file path | Yes (for Manufacturing server) |
+| `key` | string | Owner private key file path | Yes (for Owner server) |
 | `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
 | `service_info` | map | ServiceInfo Modules to execute on device onboarding (See below) | No |
 
-The owner server also requires:
+The Owner server also requires:
 - `[device_ca]` section with `cert` field (see Device CA Configuration above)
 
-**Note**: The `owner.cert` field is used by the manufacturing server to specify the owner certificate. The `owner.key` field is used by the owner server to specify its private key.
+**Note**: The `owner.cert` field is used by the Manufacturing server to specify the Owner certificate. The `owner.key` field is used by the Owner server to specify its private key.
 
 ### Service Info Configuration (FSIM Operations)
 
@@ -316,17 +316,17 @@ For the example above the first download will be saved to `/tmp/app.rpm`, the se
 
 ## Rendezvous Server Configuration
 
-The rendezvous server configuration is under the `[rendezvous]` section:
+The Rendezvous server configuration is under the `[rendezvous]` section:
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
-| `to0_min_wait` | integer | Minimum wait time in seconds for TO0 rendezvous entries. Requests below this value are rejected. Set to 0 for no minimum. | 0 |
-| `to0_max_wait` | integer | Maximum wait time in seconds for TO0 rendezvous entries. Requests above this value are accepted but capped at this maximum. This prevents owner servers from registering rendezvous blobs for excessively long periods. | 86400 (24 hours) |
+| `to0_min_wait` | integer | Minimum wait time the Rendezvous server will accept for an entry registered by the Owner server during TO0 protocol. If the Owner server requests a shorter wait time, it is rejected. | 0 (no minimum) |
+| `to0_max_wait` | integer | Maximum wait time the Rendezvous server will keep an entry registered by the Owner server during TO0 protocol before it expires. If the Owner server requests a longer wait time, it is capped to this value. | 86400 (24 hours) |
 | `cleanup_interval` | integer | Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions. The cleanup task runs periodically in the background, removing rendezvous blobs that have exceeded their expiration time and sessions older than `session_timeout` to prevent database bloat. Set to 0 to disable automatic cleanup (not recommended for production). | 3600 (1 hour) |
 | `session_timeout` | integer | Maximum age in seconds for protocol sessions (TO0/TO1) before cleanup. Sessions older than this age will be deleted during periodic cleanup, along with their associated session data. This prevents accumulation of orphaned sessions from interrupted or failed protocol exchanges. | 3600 (1 hour) |
 | `initial_cleanup_delay` | integer | Delay in seconds before the first cleanup runs after server startup. This prevents startup spikes when restarting servers with large amounts of expired data, allowing the server to start serving requests before running potentially heavy cleanup operations. | 300 (5 minutes) |
 
-**Note**: The rendezvous server performs periodic background cleanup to prevent database bloat. Expired rendezvous blobs and old sessions are automatically removed based on the configured intervals.
+**Note**: The Rendezvous server performs periodic background cleanup to prevent database bloat. Expired rendezvous blobs and old sessions are automatically removed based on the configured intervals.
 
 ## Configuration File Examples
 
