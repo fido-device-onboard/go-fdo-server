@@ -77,8 +77,15 @@ func (rv *RendezvousServerConfig) validate() error {
 
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
-	Use:   "rendezvous http_address",
-	Short: "Serve an instance of the rendezvous server",
+	Use:   "rendezvous [http_address:port]",
+	Short: "Run the FDO Rendezvous server",
+	Long: `Run an FDO Rendezvous server that mediates device onboarding.
+
+The Rendezvous server acts as an intermediary between devices and Owner servers.
+It accepts TO0 registrations from Owner servers and directs devices to their
+Owner during the TO1 protocol.`,
+	Example: `  # Run a Rendezvous server on port 8041 using a configuration file:
+  go-fdo-server rendezvous 0.0.0.0:8041 --config /etc/go-fdo-server/rendezvous.yaml`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		slog.Debug("Binding rendezvous command flags")
 		// Rebind only those keys needed by the rendezvous command. This is
