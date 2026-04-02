@@ -34,13 +34,15 @@ var rootCmd = &cobra.Command{
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
 	},
-	Use:   "go-fdo-server",
-	Short: "Server implementation of FIDO Device Onboard specification in Go",
-	Long: `Server implementation of the three main FDO servers. It can act
-	as a Manufacturer, Owner and Rendezvous.
+	Use:   "go-fdo-server {manufacturing|rendezvous|owner}",
+	Short: "FDO manufacturing, owner, and rendezvous server",
+	Long: `Run a FIDO Device Onboard (FDO) server.
 
-	The server also provides APIs to interact with the various servers implementations.
-`,
+Use one of the subcommands to run a manufacturing, owner, or rendezvous
+server instance. Each subcommand takes an http_address argument specifying
+the host:port to listen on.`,
+	Example: `  # Run a manufacturing server on port 8038 using a configuration file:
+  go-fdo-server manufacturing 0.0.0.0:8038 --config /etc/go-fdo-server/manufacturing.yaml`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// bootstrap debug logging early to include configuration loading
 		level, _ := cmd.Flags().GetString("log-level")
@@ -100,6 +102,9 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 }
+
+// Root returns the root cobra command for use by documentation generators.
+func Root() *cobra.Command { return rootCmd }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
