@@ -1,0 +1,74 @@
+.nh
+.TH "GO-FDO-SERVER-MANUFACTURING" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
+
+.SH NAME
+go-fdo-server-manufacturing - Run the FDO Manufacturing server
+
+
+.SH SYNOPSIS
+\fBgo-fdo-server manufacturing [http_address:port] [flags]\fP
+
+
+.SH DESCRIPTION
+Run an FDO Manufacturing server that handles device initialization.
+
+.PP
+The Manufacturing server runs the DI protocol to initialize devices and
+generate Ownership Vouchers.
+
+
+.SH OPTIONS
+\fB--device-ca-cert\fP=""
+	Device CA certificate path
+
+.PP
+\fB--device-ca-key\fP=""
+	Device CA private key path
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for manufacturing
+
+.PP
+\fB--manufacturing-key\fP=""
+	Manufacturing private key path
+
+.PP
+\fB--owner-cert\fP=""
+	Owner certificate path
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--config\fP=""
+	Pathname of the configuration file
+
+.PP
+\fB--db-dsn\fP=""
+	Database DSN (connection string)
+
+.PP
+\fB--db-type\fP="sqlite"
+	Database type (sqlite or postgres)
+
+.PP
+\fB--http-cert\fP=""
+	Path to server certificate
+
+.PP
+\fB--http-key\fP=""
+	Path to server private key
+
+.PP
+\fB--log-level\fP="info"
+	Set logging level (debug, info, warn, error)
+
+
+.SH EXAMPLE
+.EX
+  # Run a Manufacturing server on port 8038 using a configuration file:
+  go-fdo-server manufacturing 0.0.0.0:8038 --config /etc/go-fdo-server/manufacturing.yaml
+.EE
+
+
+.SH SEE ALSO
+\fBgo-fdo-server(1)\fP

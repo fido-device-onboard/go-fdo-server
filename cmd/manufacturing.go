@@ -88,8 +88,14 @@ func (m *ManufacturingServerConfig) validate() error {
 
 // manufacturingCmd represents the manufacturing command
 var manufacturingCmd = &cobra.Command{
-	Use:   "manufacturing http_address",
-	Short: "Serve an instance of the manufacturing server",
+	Use:   "manufacturing [http_address:port]",
+	Short: "Run the FDO Manufacturing server",
+	Long: `Run an FDO Manufacturing server that handles device initialization.
+
+The Manufacturing server runs the DI protocol to initialize devices and
+generate Ownership Vouchers.`,
+	Example: `  # Run a Manufacturing server on port 8038 using a configuration file:
+  go-fdo-server manufacturing 0.0.0.0:8038 --config /etc/go-fdo-server/manufacturing.yaml`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Rebind only those keys needed by the manufacturing
 		// command. This is necessary because Viper cannot bind the

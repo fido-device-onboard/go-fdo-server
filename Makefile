@@ -49,6 +49,10 @@ vet:
 test:
 	go test -v ./...
 
+.PHONY: man
+man:
+	go run ./internal/tools/docgen -format man
+
 .PHONY: shfmt
 shfmt:
 	shfmt -i 2 -ci -w .

@@ -1,0 +1,67 @@
+.nh
+.TH "GO-FDO-SERVER-RENDEZVOUS" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
+
+.SH NAME
+go-fdo-server-rendezvous - Run the FDO Rendezvous server
+
+
+.SH SYNOPSIS
+\fBgo-fdo-server rendezvous [http_address:port] [flags]\fP
+
+
+.SH DESCRIPTION
+Run an FDO Rendezvous server that mediates device onboarding.
+
+.PP
+The Rendezvous server acts as an intermediary between devices and Owner servers.
+It accepts TO0 registrations from Owner servers and directs devices to their
+Owner during the TO1 protocol.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for rendezvous
+
+.PP
+\fB--to0-max-wait\fP=86400
+	Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: 86400 seconds)
+
+.PP
+\fB--to0-min-wait\fP=0
+	Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--config\fP=""
+	Pathname of the configuration file
+
+.PP
+\fB--db-dsn\fP=""
+	Database DSN (connection string)
+
+.PP
+\fB--db-type\fP="sqlite"
+	Database type (sqlite or postgres)
+
+.PP
+\fB--http-cert\fP=""
+	Path to server certificate
+
+.PP
+\fB--http-key\fP=""
+	Path to server private key
+
+.PP
+\fB--log-level\fP="info"
+	Set logging level (debug, info, warn, error)
+
+
+.SH EXAMPLE
+.EX
+  # Run a Rendezvous server on port 8041 using a configuration file:
+  go-fdo-server rendezvous 0.0.0.0:8041 --config /etc/go-fdo-server/rendezvous.yaml
+.EE
+
+
+.SH SEE ALSO
+\fBgo-fdo-server(1)\fP
