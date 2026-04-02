@@ -8,3 +8,4 @@ go-fdo-server-*.tar.*
 rpmbuild
 test/workdir
 test/coverage
+/docgen

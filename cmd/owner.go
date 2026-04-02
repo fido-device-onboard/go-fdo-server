@@ -64,7 +64,7 @@ func (o *OwnerServerConfig) validate() error {
 		return err
 	}
 	// Validate device CA certificate exists
-	if err := validateCertFile(o.DeviceCA.CertPath, "device CA certificate", "this certificate must be shared with the manufacturer server"); err != nil {
+	if err := validateCertFile(o.DeviceCA.CertPath, "device CA certificate", "this certificate must be shared with the Manufacturing server"); err != nil {
 		return err
 	}
 
@@ -82,8 +82,14 @@ var (
 
 // ownerCmd represents the owner command
 var ownerCmd = &cobra.Command{
-	Use:   "owner http_address",
-	Short: "Serve an instance of the owner server",
+	Use:   "owner [ip_address:port]",
+	Short: "Run an FDO Owner server",
+	Long: `Run an FDO Owner server that handles device onboarding.
+
+The Owner server runs the TO2 protocol to onboard devices. It also runs the
+TO0 protocol against the Rendezvous server, registering itself as a device owner.`,
+	Example: `  # Run an Owner server on port 8043 using a configuration file:
+  go-fdo-server owner 0.0.0.0:8043 --config /etc/go-fdo-server/owner.yaml`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Rebind only those keys needed by the owner command. This is
 		// necessary because Viper cannot bind the same key twice and
@@ -560,10 +566,11 @@ func ownerCmdInit() {
 
 	// Declare any CLI flags for overriding configuration file settings.
 	// These flags are bound to Viper in the ownerCmd PreRun handler.
-	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
+	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol during the TO2 protocol")
 	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
-	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for TO0")
+	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip Rendezvous certificate verification) for the TO0 protocol")
+	ownerCmd.Flags().BoolP("help", "h", false, "Help for Owner server")
 }
 
 func init() {

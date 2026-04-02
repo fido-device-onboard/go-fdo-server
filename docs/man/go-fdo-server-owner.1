@@ -1,0 +1,74 @@
+.nh
+.TH "GO-FDO-SERVER-OWNER" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
+
+.SH NAME
+go-fdo-server-owner - Run an FDO Owner server
+
+
+.SH SYNOPSIS
+\fBgo-fdo-server owner [ip_address:port] [flags]\fP
+
+
+.SH DESCRIPTION
+Run an FDO Owner server that handles device onboarding.
+
+.PP
+The Owner server runs the TO2 protocol to onboard devices. It also runs the
+TO0 protocol against the Rendezvous server, registering itself as a device owner.
+
+
+.SH OPTIONS
+\fB--device-ca-cert\fP=""
+	Device CA certificate path
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	Help for Owner server
+
+.PP
+\fB--owner-key\fP=""
+	Owner private key path
+
+.PP
+\fB--reuse-credentials\fP[=false]
+	Perform the Credential Reuse Protocol during the TO2 protocol
+
+.PP
+\fB--to0-insecure-tls\fP[=false]
+	Use insecure TLS (skip Rendezvous certificate verification) for the TO0 protocol
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--config\fP=""
+	Pathname of the configuration file
+
+.PP
+\fB--db-dsn\fP=""
+	Database DSN (connection string)
+
+.PP
+\fB--db-type\fP="sqlite"
+	Database type (sqlite or postgres)
+
+.PP
+\fB--http-cert\fP=""
+	Path to server certificate
+
+.PP
+\fB--http-key\fP=""
+	Path to server private key
+
+.PP
+\fB--log-level\fP="info"
+	Set logging level (debug, info, warn, error)
+
+
+.SH EXAMPLE
+.EX
+  # Run an Owner server on port 8043 using a configuration file:
+  go-fdo-server owner 0.0.0.0:8043 --config /etc/go-fdo-server/owner.yaml
+.EE
+
+
+.SH SEE ALSO
+\fBgo-fdo-server(1)\fP

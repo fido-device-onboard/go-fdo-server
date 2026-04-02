@@ -81,6 +81,9 @@ install -m 0644 -vp -D init/systemd/* %{buildroot}%{_unitdir}
 install -m 0755 -vd %{buildroot}%{_libexecdir}/%{name}
 install -m 0755 -vp scripts/cert-utils.sh %{buildroot}%{_libexecdir}/%{name}
 install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libexecdir}/%{name}
+# Man pages
+install -m 0755 -vd %{buildroot}%{_mandir}/man1
+install -m 0644 -vp docs/man/*.1 %{buildroot}%{_mandir}/man1
 
 %check
 %if %{with check}
@@ -97,6 +100,11 @@ install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libex
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/cert-utils.sh
 %{_libexecdir}/%{name}/generate-go-fdo-server-certs.sh
+# Man pages
+%{_mandir}/man1/go-fdo-server.1*
+%{_mandir}/man1/go-fdo-server-manufacturing.1*
+%{_mandir}/man1/go-fdo-server-owner.1*
+%{_mandir}/man1/go-fdo-server-rendezvous.1*
 
 %pre
 %sysusers_create_compat %{SOURCE2}
@@ -105,11 +113,11 @@ install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libex
 Requires: go-fdo-server
 Requires: group(go-fdo-server)
 Requires: openssl
-Summary: A Go implementation of the FDO manufacturer server
+Summary: A Go implementation of the FDO Manufacturing server
 BuildArch: noarch
 %description manufacturer
-This package provides the manufacturer server component of the FDO stack.
-The manufacturer server is responsible for creating ownership vouchers and
+This package provides the Manufacturing server component of the FDO stack.
+The Manufacturing server is responsible for creating ownership vouchers and
 preparing devices for the on-boarding process during the manufacturing phase.
 
 %files manufacturer
@@ -135,11 +143,11 @@ preparing devices for the on-boarding process during the manufacturing phase.
 %package rendezvous
 Requires: go-fdo-server
 Requires: group(go-fdo-server)
-Summary: A Go implementation of the FDO rendezvous server
+Summary: A Go implementation of the FDO Rendezvous server
 BuildArch: noarch
 %description rendezvous
-This package provides the rendezvous server component of the FDO stack.
-The rendezvous server acts as a trusted intermediary, redirecting devices
+This package provides the Rendezvous server component of the FDO stack.
+The Rendezvous server acts as a trusted intermediary, redirecting devices
 to their designated owner's on-boarding service based on their ownership
 voucher.
 
@@ -166,10 +174,10 @@ voucher.
 %package owner
 Requires: go-fdo-server
 Requires: group(go-fdo-server)
-Summary: A Go implementation of the FDO owner server
+Summary: A Go implementation of the FDO Owner server
 BuildArch: noarch
 %description owner
-This package provides the owner server component of the FDO stack. The owner
+This package provides the Owner server component of the FDO stack. The Owner
 server is the final destination for a device during on-boarding. It verifies
 the device's authenticity, establishes ownership, and provisions it with the
 necessary credentials and configuration for operation.

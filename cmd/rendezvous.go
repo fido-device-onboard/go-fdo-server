@@ -90,13 +90,13 @@ type RendezvousServerConfig struct {
 
 // validate checks that required configuration is present
 func (rv *RendezvousServerConfig) validate() error {
-	slog.Debug("Validating rendezvous server configuration")
+	slog.Debug("Validating Rendezvous server configuration")
 	if err := rv.HTTP.validate(); err != nil {
 		slog.Error("HTTP configuration validation failed", "err", err)
 		return err
 	}
 	if err := rv.Rendezvous.validate(); err != nil {
-		slog.Error("rendezvous configuration validation failed", "err", err)
+		slog.Error("Rendezvous configuration validation failed", "err", err)
 		return err
 	}
 	slog.Debug("Rendezvous server configuration validated successfully")
@@ -118,13 +118,13 @@ var rendezvousFlags = []rendezvousFlagConfig{
 		name:         "to0-min-wait",
 		viperKey:     "rendezvous.to0_min_wait",
 		defaultValue: defaultMinWaitSecs,
-		description:  "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)",
+		description:  "Minimum wait time the Rendezvous server will accept for an entry registered by the Owner server during TO0 protocol. If the Owner server requests a shorter wait time, it is rejected (default: 0 = no minimum)",
 	},
 	{
 		name:         "to0-max-wait",
 		viperKey:     "rendezvous.to0_max_wait",
 		defaultValue: defaultMaxWaitSecs,
-		description:  "Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)",
+		description:  "Maximum wait time the Rendezvous server will keep an entry registered by the Owner server during TO0 protocol before it expires. If the Owner server requests a longer wait time, it is capped to this value (default: %d seconds)",
 	},
 	{
 		name:         "cleanup-interval",
@@ -148,8 +148,15 @@ var rendezvousFlags = []rendezvousFlagConfig{
 
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
-	Use:   "rendezvous http_address",
-	Short: "Serve an instance of the rendezvous server",
+	Use:   "rendezvous [ip_address:port]",
+	Short: "Run an FDO Rendezvous server",
+	Long: `Run an FDO Rendezvous server that mediates device onboarding.
+
+The Rendezvous server acts as an intermediary between devices and Owner servers.
+It accepts registration requests from Owner servers via the TO0 protocol and
+directs devices to their Owner server during the TO1 protocol.`,
+	Example: `  # Run a Rendezvous server on port 8041 using a configuration file:
+  go-fdo-server rendezvous 0.0.0.0:8041 --config /etc/go-fdo-server/rendezvous.yaml`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		slog.Debug("Binding rendezvous command flags")
 		// Rebind only those keys needed by the rendezvous command. This is
@@ -244,7 +251,7 @@ func (s *RendezvousServer) Start() error {
 }
 
 func serveRendezvous(config *RendezvousServerConfig) error {
-	slog.Info("Initializing rendezvous server")
+	slog.Info("Initializing Rendezvous server")
 
 	db, err := config.DB.getDB()
 	if err != nil {
@@ -258,8 +265,8 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 
 	rendezvous := rendezvous.NewRendezvous(db, minWaitSecs, maxWaitSecs)
 	if err = rendezvous.InitDB(); err != nil {
-		slog.Error("failed to initialize rendezvous database", "err", err)
-		return fmt.Errorf("failed to initialize rendezvous database: %w", err)
+		slog.Error("failed to initialize Rendezvous database", "err", err)
+		return fmt.Errorf("failed to initialize Rendezvous database: %w", err)
 	}
 	slog.Info("Database initialized successfully", "type", config.DB.Type)
 
@@ -296,6 +303,8 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
+
+	rendezvousCmd.Flags().BoolP("help", "h", false, "Help for Rendezvous server")
 
 	// Register all flags and set viper defaults in a single loop
 	for _, flag := range rendezvousFlags {
