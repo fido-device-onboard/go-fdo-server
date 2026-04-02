@@ -22,37 +22,35 @@ func main() {
 	root := cmd.Root()
 	disableAutoGenTag(root)
 
-	var outDir string
+	defaults := map[string]string{"man": "docs/man", "markdown": "docs/cli"}
+	defaultDir, ok := defaults[*format]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unknown format %q: must be \"man\" or \"markdown\"\n", *format)
+		os.Exit(1)
+	}
+
+	outDir := defaultDir
+	if *out != "" {
+		outDir = *out
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		log.Fatalf("failed to create output directory: %v", err)
+	}
+
 	switch *format {
 	case "man":
-		outDir = "docs/man"
-		if *out != "" {
-			outDir = *out
-		}
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			log.Fatalf("failed to create output directory: %v", err)
-		}
 		header := &doc.GenManHeader{
-			Title:   "GO-FDO-SERVER",
 			Section: "1",
+			Source:  "go-fdo-server",
+			Manual:  "Go FDO Server",
 		}
 		if err := doc.GenManTree(root, header, outDir); err != nil {
 			log.Fatalf("failed to generate man pages: %v", err)
 		}
 	case "markdown":
-		outDir = "docs/cli"
-		if *out != "" {
-			outDir = *out
-		}
-		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			log.Fatalf("failed to create output directory: %v", err)
-		}
 		if err := doc.GenMarkdownTree(root, outDir); err != nil {
 			log.Fatalf("failed to generate markdown docs: %v", err)
 		}
-	default:
-		fmt.Fprintf(os.Stderr, "unknown format %q: must be \"man\" or \"markdown\"\n", *format)
-		os.Exit(1)
 	}
 
 	fmt.Printf("Generated %s documentation in %s\n", *format, outDir)
