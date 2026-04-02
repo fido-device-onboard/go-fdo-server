@@ -89,7 +89,7 @@ install -m 0755 -vp scripts/generate-go-fdo-server-certs.sh %{buildroot}%{_libex
 
 %files
 %license LICENSE vendor/modules.txt
-%doc CERTIFICATE_SETUP.md CONFIG.md DOCKERFILE_USAGE.md FSIM_USAGE.md README.md SECURITY.md
+%doc README.md SECURITY.md docs
 %{_bindir}/go-fdo-server
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/%{name}
 %dir %attr(750, root, go-fdo-server) %{_sysconfdir}/pki/%{name}

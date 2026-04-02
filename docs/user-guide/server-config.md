@@ -79,55 +79,55 @@ provided under the `[http]` section:
 
 ## Device CA Configuration
 
-The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both manufacturing and owner servers:
+The Device Certificate Authority configuration is under the `[device_ca]` section. This section is required for both Manufacturing and Owner servers:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `cert` | string | Device CA certificate file path | Yes |
-| `key` | string | Device CA private key file path | Yes (for manufacturing server) |
+| `key` | string | Device CA private key file path | Yes (for Manufacturing server) |
 
-**Note**: For the owner server, only the `cert` field is required. The `key` field is only needed for the manufacturing server.
+**Note**: For the Owner server, only the `cert` field is required. The `key` field is only needed for the Manufacturing server.
 
 ## Manufacturing Server Configuration
 
-The manufacturing server configuration is under the `[manufacturing]` section:
+The Manufacturing server configuration is under the `[manufacturing]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
 | `key` | string | Manufacturing private key file path | Yes |
 
-The manufacturing server also requires:
+The Manufacturing server also requires:
 - `[device_ca]` section with both `cert` and `key` (see Device CA Configuration above)
 - `[owner]` section with `cert` field (see Owner Configuration below)
 
 ## Owner Server Configuration
 
-The owner server configuration is under the `[owner]` section:
+The Owner server configuration is under the `[owner]` section:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `cert` | string | Owner certificate file path | Yes (for manufacturing server) |
-| `key` | string | Owner private key file path | Yes (for owner server) |
+| `cert` | string | Owner certificate file path | Yes (for Manufacturing server) |
+| `key` | string | Owner private key file path | Yes (for Owner server) |
 | `reuse_credentials` | boolean | Perform the Credential Reuse Protocol in TO2 | No (default: false) |
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: false) |
 | `service_info` | map | ServiceInfo Modules to execute on device onboarding (See below) | No |
 
-The owner server also requires:
+The Owner server also requires:
 - `[device_ca]` section with `cert` field (see Device CA Configuration above)
 
-**Note**: The `owner.cert` field is used by the manufacturing server to specify the owner certificate. The `owner.key` field is used by the owner server to specify its private key.
+**Note**: The `owner.cert` field is used by the Manufacturing server to specify the owner certificate. The `owner.key` field is used by the Owner server to specify its private key.
 
 ### Service Info Configuration (FSIM Operations)
 
-The owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. FSIM operations are defined as an ordered list `fsims` under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
+The Owner server can be configured to execute FSIM (FDO Service Info Module) operations during device onboarding. See the [FSIM Guide](fsim-guide.md) for a description of each supported FSIM module. FSIM operations are defined as an ordered list `fsims` under the `service_info` field within the `[owner]` section. Each list entry contains the name of the FSIM operation to perform and parameters to pass to the operation. FSIM Operations may be listed in any order but will be executed on the device in the order they appear in the list.
 
 ### Supported FSIM Modules
 
 The following FSIM modules are supported:
 
 1. **fdo.command** - Execute commands on the device
-2. **fdo.download** - Download files from the owner server to the device
-3. **fdo.upload** - Upload files from the device to the owner server
+2. **fdo.download** - Download files from the Owner server to the device
+3. **fdo.upload** - Upload files from the device to the Owner server
 4. **fdo.wget** - Instruct the device to download files from specified URLs
 
 ### Service Info Operation Structure
@@ -153,7 +153,7 @@ The `defaults` field is a list of default entries with the following structure:
 **Important notes:**
 - Each `fsim` value can appear only once in the defaults list (maximum of 3 entries)
 - The `dir` path must be absolute
-- For `fdo.download` and `fdo.upload`, the directory must exist on the owner server at startup
+- For `fdo.download` and `fdo.upload`, the directory must exist on the Owner server at startup
 - For `fdo.wget`, the directory is on the device (existence is not checked at startup)
 - Defaults can be overridden by specifying `params.dir` in individual FSIM operations
 - If neither a default nor `params.dir` is specified, the current working directory is used
@@ -193,8 +193,8 @@ Execute commands on the device.
 | `cmd` | string | The command processor to execute (e.g., "sh", "bash", "cmd"). | Yes |
 | `args` | array of strings | Command arguments | No |
 | `may_fail` | boolean | If true, allow the command to fail without aborting onboarding | No (default: false) |
-| `return_stdout` | boolean | If true, the device's stdout stream from the command will be sent to the owner server and written to the logs | No (default: false) |
-| `return_stderr` | boolean | If true, the device's stderr stream from the command will be sent to the owner server and written to the logs | No (default: false) |
+| `return_stdout` | boolean | If true, the device's stdout stream from the command will be sent to the Owner server and written to the logs | No (default: false) |
+| `return_stderr` | boolean | If true, the device's stderr stream from the command will be sent to the Owner server and written to the logs | No (default: false) |
 
 ### fdo.command Example
 
@@ -216,18 +216,18 @@ params:
 
 ### fdo.download Parameters
 
-Download files from the owner server to the device.
+Download files from the Owner server to the device.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Base directory path on the owner server where source files are located (used when `files.src` is relative). If not specified, uses the default from `service_info.defaults` or the owner server's current working directory. | No |
+| `dir` | string | Base directory path on the Owner server where source files are located (used when `files.src` is relative). If not specified, uses the default from `service_info.defaults` or the Owner server's current working directory. | No |
 | `files` | array of objects | List of files to download | Yes |
 
 Each file object in the `files` array has:
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `src` | string | Path to the file on the owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). | Yes |
+| `src` | string | Path to the file on the Owner server. Can be absolute (ignores `params.dir`) or relative (appended to `params.dir`). | Yes |
 | `dst` | string | Destination path on the device. Can be absolute or relative (to device working directory). | Yes |
 | `may_fail` | boolean | If true, allow the download to fail without aborting onboarding | No (default: false) |
 
@@ -247,11 +247,11 @@ params:
 
 ### fdo.upload Parameters
 
-Upload files from the device to the owner server. Files are uploaded to a per-device directory on the owner server. The name of the directory is the device's replacement GUID (the GUID that is set after onboarding completes). This prevents files with the same name from being overwritten as devices are onboarded.
+Upload files from the device to the Owner server. Files are uploaded to a per-device directory on the Owner server. The name of the directory is the device's replacement GUID (the GUID that is set after onboarding completes). This prevents files with the same name from being overwritten as devices are onboarded.
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
-| `dir` | string | Absolute path to a directory on the owner server where uploaded files will be stored. A per-device subdirectory is created in this directory for each device that uploads files during onboarding. If not set the directory from the `fdo.upload` entry in `service_info.defaults` is used. | No |
+| `dir` | string | Absolute path to a directory on the Owner server where uploaded files will be stored. A per-device subdirectory is created in this directory for each device that uploads files during onboarding. If not set the directory from the `fdo.upload` entry in `service_info.defaults` is used. | No |
 | `files` | array of objects | List of files to request from the device | Yes |
 
 Each file object in the `files` array has:
@@ -259,7 +259,7 @@ Each file object in the `files` array has:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `src` | string | Path to the file on the device to upload. Can be absolute or relative (to device working directory). | Yes |
-| `dst` | string | Destination path on the owner server. If omitted the basename of `src` will be used. Must be a relative path (appended to `params.dir`/$GUID/). | No |
+| `dst` | string | Destination path on the Owner server. If omitted the basename of `src` will be used. Must be a relative path (appended to `params.dir`/$GUID/). | No |
 
 ### fdo.upload Example
 
@@ -316,12 +316,12 @@ For the example above the first download will be saved to `/tmp/app.rpm`, the se
 
 ## Rendezvous Server Configuration
 
-The rendezvous server configuration is under the `[rendezvous]` section:
+The Rendezvous server configuration is under the `[rendezvous]` section:
 
 | Key | Type | Description | Default |
 |-----|------|-------------|---------|
 | `to0_min_wait` | integer | Minimum wait time in seconds for TO0 rendezvous entries. Requests below this value are rejected. Set to 0 for no minimum. | 0 |
-| `to0_max_wait` | integer | Maximum wait time in seconds for TO0 rendezvous entries. Requests above this value are accepted but capped at this maximum. This prevents owner servers from registering rendezvous blobs for excessively long periods. | 86400 (24 hours) |
+| `to0_max_wait` | integer | Maximum wait time in seconds for TO0 rendezvous entries. Requests above this value are accepted but capped at this maximum. This prevents Owner servers from registering rendezvous blobs for excessively long periods. | 86400 (24 hours) |
 
 ## Configuration File Examples
 

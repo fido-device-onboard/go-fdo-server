@@ -8,38 +8,37 @@ This guide explains how to set up certificates for the go-fdo-server in both pro
 - [Certificate Types](#certificate-types)
 - [Quick Start: Single-Host Testing](#quick-start-single-host-testing)
 - [Production Deployment (Multi-Host)](#production-deployment-multi-host)
-- [Troubleshooting](#troubleshooting)
 
 ## Overview
 
 **Platform Note**: This guide uses file paths and commands for Fedora, RHEL, and CentOS. If you are using a different operating system or distribution, adjust the certificate and configuration file paths accordingly.
 
-The go-fdo-server requires certificates for FDO protocol operation:
+The `go-fdo-server` requires a set of certificates for FDO protocol operation:
 
 1. **Manufacturer Certificate** (manufacturer.key/crt)
-   - Private key: Local to manufacturer server only
-   - Certificate: Local to manufacturer server only
+   - Private key: Local to Manufacturing server only
+   - Certificate: Local to Manufacturing server only
 
 2. **Owner Certificate** (owner.key/crt)
-   - Private key: Local to owner server only
-   - Certificate: Generated on owner server, then copied to manufacturer server
+   - Private key: Local to Owner server only
+   - Certificate: Generated on Owner server, then copied to Manufacturing server
 
 3. **Device CA Certificate** (device-ca.key/crt)
-   - Shared: MUST be identical on both manufacturer and owner servers
+   - Shared: MUST be identical on both Manufacturing and Owner servers
 
 ## Certificate Types
 
 ### Local Certificates
 
 **Manufacturer Certificate** (`/etc/pki/go-fdo-server/manufacturer.key/crt`)
-- Used only by the manufacturer server
+- Used only by the Manufacturing server
 - Signs vouchers during device initialization (DI protocol)
 - Must be created manually or using the helper script
 - Default filenames in configs: `manufacturer-example.key/crt`
 
 **Owner Certificate** (`/etc/pki/go-fdo-server/owner.key/crt`)
-- Private key (.key): Used only by owner server for TO2 protocol
-- Certificate (.crt): Generated on owner server, then copied to manufacturer server
+- Private key (.key): Used only by Owner server for TO2 protocol
+- Certificate (.crt): Generated on Owner server, then copied to Manufacturing server
 - Manufacturer needs owner certificate to extend vouchers to the correct owner
 - Must be created manually or using the helper script
 - Default filenames in configs: `owner-example.key/crt`
@@ -47,7 +46,7 @@ The go-fdo-server requires certificates for FDO protocol operation:
 ### Shared Certificates
 
 **Device CA Certificate** (`/etc/pki/go-fdo-server/device-ca.key/crt`)
-- MUST be identical on both manufacturer and owner servers
+- MUST be identical on both Manufacturing and Owner servers
 - Signs device certificates during DI protocol (manufacturer)
 - Verifies device certificates during TO2 protocol (owner)
 - Must be created once and distributed to both servers
@@ -56,7 +55,7 @@ The go-fdo-server requires certificates for FDO protocol operation:
 
 ### HTTPS/TLS Certificates
 
-FDO protocol certificates are separate from HTTPS server certificates:
+Do not confuse the FDO certificates with TLS certificates used for HTTPS server authentication. The FDO certificates are separate from the HTTPS server certificates:
 
 - **FDO protocol**: Uses manufacturer/owner/device-ca certificates (this guide)
 - **HTTPS server**: Configured via `--http-cert` and `--http-key` flags or reverse proxy
@@ -65,7 +64,11 @@ For production, use proper TLS certificates from a trusted CA (Let's Encrypt, in
 
 ## Quick Start: Single-Host Testing
 
-For development or testing with all FDO services on one host, use the provided helper script:
+For development or testing with all FDO services on one host a helper script is included in the FDO server packages. This script will generate all the certificates necessary to run the FDO servers in a test environment.
+
+**IMPORTANT**: These are self-signed test certificates and are suitable for testing and demonstration purposes *only*. Never use them in production.
+
+To generate these example certificates and keys use the provided helper script:
 
 ```bash
 sudo /usr/libexec/go-fdo-server/generate-go-fdo-server-certs.sh
@@ -85,8 +88,6 @@ sudo systemctl start go-fdo-server-manufacturer.service
 sudo systemctl start go-fdo-server-rendezvous.service
 sudo systemctl start go-fdo-server-owner.service
 ```
-
-**Important**: These are self-signed test certificates. Never use them in production.
 
 ## Production Deployment (Multi-Host)
 
@@ -139,7 +140,7 @@ sudo chown go-fdo-server-owner:go-fdo-server /etc/pki/go-fdo-server/device-ca.cr
 sudo chmod 644 /etc/pki/go-fdo-server/device-ca.crt
 ```
 
-**Note**: The owner server only needs device-ca.crt for verification, not the private key.
+**Note**: The Owner server only needs device-ca.crt for verification, not the private key.
 
 ### Step 3: Generate Local Certificates
 
@@ -177,7 +178,7 @@ sudo chmod 644 /etc/pki/go-fdo-server/owner.crt
 
 ### Step 4: Exchange Owner Certificate
 
-The manufacturer server needs a copy of the owner's public certificate to extend ownership vouchers during device initialization.
+The Manufacturing server needs a copy of the owner's public certificate to extend ownership vouchers during device initialization.
 
 **From Owner Server, copy certificate to manufacturer:**
 ```bash
@@ -210,6 +211,7 @@ sudo systemctl enable --now go-fdo-server-rendezvous.service
 # Owner host
 sudo systemctl enable --now go-fdo-server-owner.service
 ```
+
 ## Additional Resources
 
 - FDO Specification: https://fidoalliance.org/specs/FDO/
