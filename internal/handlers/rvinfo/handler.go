@@ -28,8 +28,8 @@ var _ StrictServerInterface = (*Server)(nil)
 func (s *Server) GetRendezvousInfo(ctx context.Context, request GetRendezvousInfoRequestObject) (GetRendezvousInfoResponseObject, error) {
 	slog.Debug("GetRendezvousInfo called")
 
-	// Fetch RV info from state
-	rvInfoJSON, err := s.RvInfo.FetchRvInfoJSON(ctx)
+	// Fetch RV info from state (returns [][]protocol.RvInstruction)
+	rvInstructions, err := s.RvInfo.FetchRvInfo(ctx)
 	if err != nil {
 		if errors.Is(err, state.ErrRvInfoNotFound) {
 			// Return empty array if no configuration set
@@ -39,6 +39,15 @@ func (s *Server) GetRendezvousInfo(ctx context.Context, request GetRendezvousInf
 		slog.Error("failed to fetch RV info", "error", err)
 		return GetRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to fetch rendezvous info"},
+		}, nil
+	}
+
+	// Convert to V2 JSON format (API layer responsibility)
+	rvInfoJSON, err := convertToV2JSON(rvInstructions)
+	if err != nil {
+		slog.Error("failed to convert RV info to JSON", "error", err)
+		return GetRendezvousInfo500JSONResponse{
+			components.InternalServerError{Message: "failed to format rendezvous info"},
 		}, nil
 	}
 
@@ -74,37 +83,26 @@ func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezv
 		}, nil
 	}
 
-	// Validate the RV info can be parsed (before storing)
-	if _, err := state.ParseOpenAPIRvJSON(rvInfoJSON); err != nil {
+	// Parse and validate the RV info (API layer responsibility)
+	rvInstructions, err := parseV2JSON(rvInfoJSON)
+	if err != nil {
 		slog.Warn("invalid RV info format", "error", err)
 		return UpdateRendezvousInfo400JSONResponse{
 			components.BadRequest{Message: "invalid rendezvous info: " + err.Error()},
 		}, nil
 	}
 
-	// Try to update first
-	err = s.RvInfo.UpdateRvInfo(ctx, rvInfoJSON)
+	// Try to update first (pass parsed data, not JSON)
+	err = s.RvInfo.UpdateRvInfo(ctx, rvInstructions)
 	if errors.Is(err, state.ErrRvInfoNotFound) {
 		// No existing record, insert instead
-		if err := s.RvInfo.InsertRvInfo(ctx, rvInfoJSON); err != nil {
-			if errors.Is(err, state.ErrInvalidRvInfo) {
-				slog.Warn("invalid RV info provided", "error", err)
-				return UpdateRendezvousInfo400JSONResponse{
-					components.BadRequest{Message: "invalid rendezvous info: " + err.Error()},
-				}, nil
-			}
+		if err := s.RvInfo.InsertRvInfo(ctx, rvInstructions); err != nil {
 			slog.Error("failed to insert RV info", "error", err)
 			return UpdateRendezvousInfo500JSONResponse{
 				components.InternalServerError{Message: "failed to save rendezvous info"},
 			}, nil
 		}
 	} else if err != nil {
-		if errors.Is(err, state.ErrInvalidRvInfo) {
-			slog.Warn("invalid RV info provided", "error", err)
-			return UpdateRendezvousInfo400JSONResponse{
-				components.BadRequest{Message: "invalid rendezvous info: " + err.Error()},
-			}, nil
-		}
 		slog.Error("failed to update RV info", "error", err)
 		return UpdateRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to update rendezvous info"},
@@ -120,7 +118,7 @@ func (s *Server) DeleteRendezvousInfo(ctx context.Context, request DeleteRendezv
 	slog.Debug("DeleteRendezvousInfo called")
 
 	// Fetch current RV info before deletion (to return it)
-	rvInfoJSON, err := s.RvInfo.FetchRvInfoJSON(ctx)
+	rvInstructions, err := s.RvInfo.FetchRvInfo(ctx)
 	if err != nil {
 		if errors.Is(err, state.ErrRvInfoNotFound) {
 			// No configuration set, return empty array
@@ -130,6 +128,15 @@ func (s *Server) DeleteRendezvousInfo(ctx context.Context, request DeleteRendezv
 		slog.Error("failed to fetch RV info for deletion", "error", err)
 		return DeleteRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to delete rendezvous info"},
+		}, nil
+	}
+
+	// Convert to V2 JSON format (API layer responsibility)
+	rvInfoJSON, err := convertToV2JSON(rvInstructions)
+	if err != nil {
+		slog.Error("failed to convert RV info to JSON", "error", err)
+		return DeleteRendezvousInfo500JSONResponse{
+			components.InternalServerError{Message: "failed to format rendezvous info"},
 		}, nil
 	}
 
