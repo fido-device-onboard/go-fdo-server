@@ -9,6 +9,8 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
 // TestInsertRvInfo_StoresCBOR verifies that RvInfo is stored as CBOR, not JSON
@@ -56,145 +58,6 @@ func TestInsertRvInfo_StoresCBOR(t *testing.T) {
 	}
 }
 
-// TestFetchRvInfo_AutoMigration tests automatic migration from V1 JSON to CBOR
-func TestFetchRvInfo_AutoMigration(t *testing.T) {
-	state, err := InitDb("sqlite", "file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = state.Close()
-	})
-
-	// Simulate old database: Insert V1 JSON directly (bypassing CBOR encoding)
-	v1JSON := `[{"dns":"rv.example.com","protocol":"https","owner_port":"8443","device_port":"8041"}]`
-	oldRvInfo := RvInfo{
-		ID:    1,
-		Value: []byte(v1JSON),
-	}
-	if err := db.Create(&oldRvInfo).Error; err != nil {
-		t.Fatalf("failed to create old JSON record: %v", err)
-	}
-
-	// Verify it's JSON before migration
-	var jsonTest interface{}
-	if err := json.Unmarshal(oldRvInfo.Value, &jsonTest); err != nil {
-		t.Fatalf("Setup failed: inserted data should be JSON: %v", err)
-	}
-
-	// Call FetchRvInfo() - should trigger auto-migration
-	result, err := FetchRvInfo()
-	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
-	}
-
-	// Verify returned data is correct
-	if len(result) != 1 {
-		t.Errorf("Expected 1 directive, got %d", len(result))
-	}
-	if len(result[0]) != 4 {
-		t.Errorf("Expected 4 instructions, got %d", len(result[0]))
-	}
-
-	// Verify database now contains CBOR (not JSON)
-	var migratedRow RvInfo
-	if err := db.Where("id = ?", 1).First(&migratedRow).Error; err != nil {
-		t.Fatalf("failed to read migrated row: %v", err)
-	}
-
-	// Should be valid CBOR
-	var cborTest [][]protocol.RvInstruction
-	if err := cbor.Unmarshal(migratedRow.Value, &cborTest); err != nil {
-		t.Errorf("After migration, data should be CBOR: %v", err)
-	}
-
-	// Should NOT be valid JSON
-	if err := json.Unmarshal(migratedRow.Value, &jsonTest); err == nil {
-		t.Error("After migration, data should be CBOR, not JSON")
-	}
-}
-
-// TestFetchRvInfoJSON_AutoMigration tests auto-migration and V1 JSON output format
-func TestFetchRvInfoJSON_AutoMigration(t *testing.T) {
-	// Define V1 format structure for parsing
-	type rvHuman struct {
-		DNS          string  `json:"dns,omitempty"`
-		IP           string  `json:"ip,omitempty"`
-		Protocol     string  `json:"protocol,omitempty"`
-		Medium       string  `json:"medium,omitempty"`
-		DevicePort   string  `json:"device_port,omitempty"`
-		OwnerPort    string  `json:"owner_port,omitempty"`
-		WifiSSID     string  `json:"wifi_ssid,omitempty"`
-		WifiPW       string  `json:"wifi_pw,omitempty"`
-		DevOnly      bool    `json:"dev_only,omitempty"`
-		OwnerOnly    bool    `json:"owner_only,omitempty"`
-		RvBypass     bool    `json:"rv_bypass,omitempty"`
-		DelaySeconds *uint32 `json:"delay_seconds,omitempty"`
-		SvCertHash   string  `json:"sv_cert_hash,omitempty"`
-		ClCertHash   string  `json:"cl_cert_hash,omitempty"`
-		UserInput    string  `json:"user_input,omitempty"`
-		ExtRV        string  `json:"ext_rv,omitempty"`
-	}
-
-	state, err := InitDb("sqlite", "file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("init db: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = state.Close()
-	})
-
-	// Simulate old database: Insert V1 JSON directly
-	v1JSON := `[{"dns":"rv.example.com","protocol":"http","owner_port":"8080","rv_bypass":true}]`
-	oldRvInfo := RvInfo{
-		ID:    1,
-		Value: []byte(v1JSON),
-	}
-	if err := db.Create(&oldRvInfo).Error; err != nil {
-		t.Fatalf("failed to create old JSON record: %v", err)
-	}
-
-	// Call FetchRvInfoJSON() - should trigger migration and return V1 JSON
-	outputJSON, err := FetchRvInfoJSON()
-	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
-	}
-
-	// Parse output to verify V1 format
-	var output []rvHuman
-	if err := json.Unmarshal(outputJSON, &output); err != nil {
-		t.Fatalf("failed to parse output JSON: %v", err)
-	}
-
-	// Verify V1 format specifics
-	if len(output) != 1 {
-		t.Errorf("Expected 1 item, got %d", len(output))
-	}
-	if output[0].DNS != "rv.example.com" {
-		t.Errorf("Expected DNS 'rv.example.com', got '%s'", output[0].DNS)
-	}
-	if output[0].Protocol != "http" {
-		t.Errorf("Expected protocol 'http', got '%s'", output[0].Protocol)
-	}
-	// V1 uses STRING ports
-	if output[0].OwnerPort != "8080" {
-		t.Errorf("Expected owner_port '8080' (string), got '%s'", output[0].OwnerPort)
-	}
-	if !output[0].RvBypass {
-		t.Error("Expected rv_bypass to be true")
-	}
-
-	// Verify database was migrated to CBOR
-	var migratedRow RvInfo
-	if err := db.Where("id = ?", 1).First(&migratedRow).Error; err != nil {
-		t.Fatalf("failed to read migrated row: %v", err)
-	}
-	var cborTest [][]protocol.RvInstruction
-	if err := cbor.Unmarshal(migratedRow.Value, &cborTest); err != nil {
-		t.Errorf("After migration, data should be CBOR: %v", err)
-	}
-}
-
 // TestV1_RoundTrip verifies V1 JSON → CBOR → V1 JSON preserves data
 func TestV1_RoundTrip(t *testing.T) {
 	// Define V1 format structure for parsing
@@ -237,9 +100,14 @@ func TestV1_RoundTrip(t *testing.T) {
 	}
 
 	// Retrieve via V1 API
-	outputJSON, err := FetchRvInfoJSON()
+	rvInfo, err := FetchRvInfo()
 	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	outputJSON, err := ConvertRvInstructionsToV1JSON(rvInfo)
+	if err != nil {
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	// Parse input and output
@@ -330,9 +198,9 @@ func TestConvertRvInstructionsToV1JSON_AllFields(t *testing.T) {
 	}}
 
 	// Convert to V1 JSON
-	result, err := convertRvInstructionsToV1JSON(instructions)
+	result, err := ConvertRvInstructionsToV1JSON(instructions)
 	if err != nil {
-		t.Fatalf("convertRvInstructionsToV1JSON failed: %v", err)
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	// Parse result
@@ -435,9 +303,9 @@ func TestConvertRvInstructionsToV1JSON_MultipleDirectives(t *testing.T) {
 		},
 	}
 
-	result, err := convertRvInstructionsToV1JSON(instructions)
+	result, err := ConvertRvInstructionsToV1JSON(instructions)
 	if err != nil {
-		t.Fatalf("convertRvInstructionsToV1JSON failed: %v", err)
+		t.Fatalf("ConvertRvInstructionsToV1JSON failed: %v", err)
 	}
 
 	var output []rvHuman
@@ -474,9 +342,9 @@ func TestProtocolStringFromCode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := protocolStringFromCode(tt.code)
+		got := utils.ProtocolStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("protocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.ProtocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }
@@ -493,9 +361,9 @@ func TestMediumStringFromCode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := mediumStringFromCode(tt.code)
+		got := utils.MediumStringFromCode(tt.code)
 		if got != tt.want {
-			t.Errorf("mediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
+			t.Errorf("utils.MediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
 		}
 	}
 }

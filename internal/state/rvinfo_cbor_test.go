@@ -14,6 +14,8 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
+
+	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
 // setupTestDB creates a temporary SQLite database for testing
@@ -49,22 +51,32 @@ func setupCBORTestDB(t *testing.T) (*RvInfoState, func()) {
 	return rvInfoState, cleanup
 }
 
-// TestInsertRvInfo_StoresCBOR_V2 verifies V2 API stores CBOR, not JSON
-func TestInsertRvInfo_StoresCBOR_V2(t *testing.T) {
+// mustCBORMarshal marshals a value to CBOR or fails the test
+func mustCBORMarshal(t *testing.T, v interface{}) []byte {
+	t.Helper()
+	data, err := cbor.Marshal(v)
+	if err != nil {
+		t.Fatalf("cbor.Marshal failed: %v", err)
+	}
+	return data
+}
+
+// TestInsertRvInfo_StoresCBOR verifies state layer stores CBOR, not JSON
+func TestInsertRvInfo_StoresCBOR(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Valid V2 OpenAPI JSON input (array of arrays of single-key objects)
-	v2JSON := []byte(`[[
-		{"dns":"rv.example.com"},
-		{"protocol":"https"},
-		{"owner_port":8443}
-	]]`)
+	// Manually construct RV instructions (state layer tests don't depend on JSON parsing)
+	rvInstructions := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
+		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
+		{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
+	}}
 
-	// Insert via V2 API
-	if err := state.InsertRvInfo(ctx, v2JSON); err != nil {
+	// Insert via state layer
+	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
 		t.Fatalf("InsertRvInfo failed: %v", err)
 	}
 
@@ -80,7 +92,7 @@ func TestInsertRvInfo_StoresCBOR_V2(t *testing.T) {
 		t.Errorf("Expected CBOR-encoded data, got error: %v", err)
 	}
 
-	// Verify it's NOT valid JSON (V2 format)
+	// Verify it's NOT valid JSON
 	var jsonTest interface{}
 	if err := json.Unmarshal(rvInfoRow.Value, &jsonTest); err == nil {
 		t.Error("Data should be CBOR, not JSON - JSON unmarshal should fail")
@@ -91,167 +103,300 @@ func TestInsertRvInfo_StoresCBOR_V2(t *testing.T) {
 		t.Errorf("Expected 1 directive, got %d", len(rvInfo))
 	}
 	if len(rvInfo[0]) != 3 {
-		t.Errorf("Expected 3 instructions (dns, protocol, owner_port), got %d", len(rvInfo[0]))
+		t.Errorf("Expected 3 instructions, got %d", len(rvInfo[0]))
 	}
 }
 
-// TestFetchRvInfoJSON_AutoMigration_V2 tests automatic migration from V2 JSON to CBOR
-func TestFetchRvInfoJSON_AutoMigration_V2(t *testing.T) {
+// TestFetchRvInfo_RetrievesProtocolStructs tests fetching RV info as protocol.RvInstruction
+func TestFetchRvInfo_RetrievesProtocolStructs(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Simulate old database: Insert V2 OpenAPI JSON directly (bypassing CBOR encoding)
-	// Use format that matches existing parser tests
-	v2JSON := `[
-		[
-			{"dns":"rv.example.com"},
-			{"protocol":"https"},
-			{"owner_port":8443}
-		]
-	]`
-	oldRvInfo := RvInfo{
-		ID:    1,
-		Value: []byte(v2JSON),
-	}
-	if err := state.DB.Create(&oldRvInfo).Error; err != nil {
-		t.Fatalf("failed to create old JSON record: %v", err)
-	}
+	// Insert test data
+	rvInstructions := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
+		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
+		{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
+	}}
 
-	// Verify it's JSON before migration
-	var jsonTest interface{}
-	if err := json.Unmarshal(oldRvInfo.Value, &jsonTest); err != nil {
-		t.Fatalf("Setup failed: inserted data should be JSON: %v", err)
-	}
-
-	// Call FetchRvInfoJSON() - should trigger auto-migration
-	outputJSON, err := state.FetchRvInfoJSON(ctx)
-	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
-	}
-
-	// Verify returned data is correct V2 format
-	var output [][]map[string]interface{}
-	if err := json.Unmarshal(outputJSON, &output); err != nil {
-		t.Fatalf("failed to parse output JSON: %v", err)
-	}
-
-	if len(output) != 1 {
-		t.Errorf("Expected 1 directive, got %d, output: %v", len(output), output)
-	}
-	if len(output) > 0 && len(output[0]) != 3 {
-		t.Errorf("Expected 3 instructions, got %d", len(output[0]))
-	}
-
-	// Verify database now contains CBOR (not JSON)
-	var migratedRow RvInfo
-	if err := state.DB.Where("id = ?", 1).First(&migratedRow).Error; err != nil {
-		t.Fatalf("failed to read migrated row: %v", err)
-	}
-
-	// Should be valid CBOR
-	var cborTest [][]protocol.RvInstruction
-	if err := cbor.Unmarshal(migratedRow.Value, &cborTest); err != nil {
-		t.Errorf("After migration, data should be CBOR: %v", err)
-	}
-
-	// Should NOT be valid JSON
-	if err := json.Unmarshal(migratedRow.Value, &jsonTest); err == nil {
-		t.Error("After migration, data should be CBOR, not JSON")
-	}
-}
-
-// TestV2_RoundTrip verifies V2 JSON → CBOR → V2 JSON preserves data
-func TestV2_RoundTrip(t *testing.T) {
-	state, cleanup := setupCBORTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Input V2 OpenAPI JSON with multiple directives and field types
-	inputJSON := []byte(`[
-		[
-			{"dns":"rv1.example.com"},
-			{"protocol":"https"},
-			{"owner_port":8443},
-			{"device_port":8041},
-			{"rv_bypass":true}
-		],
-		[
-			{"ip":"192.168.1.100"},
-			{"protocol":"http"},
-			{"owner_port":8080},
-			{"delay_seconds":30}
-		]
-	]`)
-
-	// Insert via V2 API
-	if err := state.InsertRvInfo(ctx, inputJSON); err != nil {
+	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
 		t.Fatalf("InsertRvInfo failed: %v", err)
 	}
 
-	// Retrieve via V2 API
-	outputJSON, err := state.FetchRvInfoJSON(ctx)
+	// Fetch it back
+	retrieved, err := state.FetchRvInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
+		t.Fatalf("FetchRvInfo failed: %v", err)
 	}
 
-	// Parse input and output
-	var inputData, outputData [][]map[string]interface{}
-	if err := json.Unmarshal(inputJSON, &inputData); err != nil {
-		t.Fatalf("failed to parse input: %v", err)
+	// Verify structure
+	if len(retrieved) != 1 {
+		t.Fatalf("Expected 1 directive, got %d", len(retrieved))
 	}
-	if err := json.Unmarshal(outputJSON, &outputData); err != nil {
-		t.Fatalf("failed to parse output: %v", err)
-	}
-
-	// Verify structure matches
-	if len(inputData) != len(outputData) {
-		t.Fatalf("Expected %d directives, got %d", len(inputData), len(outputData))
+	if len(retrieved[0]) != 3 {
+		t.Fatalf("Expected 3 instructions, got %d", len(retrieved[0]))
 	}
 
-	// Verify each directive
-	for i := range inputData {
-		if len(inputData[i]) != len(outputData[i]) {
-			t.Errorf("Directive[%d]: expected %d instructions, got %d",
-				i, len(inputData[i]), len(outputData[i]))
-		}
+	// Verify instruction types
+	if retrieved[0][0].Variable != protocol.RVDns {
+		t.Errorf("Expected RVDns, got %v", retrieved[0][0].Variable)
+	}
+	if retrieved[0][1].Variable != protocol.RVProtocol {
+		t.Errorf("Expected RVProtocol, got %v", retrieved[0][1].Variable)
+	}
+	if retrieved[0][2].Variable != protocol.RVOwnerPort {
+		t.Errorf("Expected RVOwnerPort, got %v", retrieved[0][2].Variable)
 	}
 
-	// Detailed verification of first directive
-	if len(outputData) > 0 && len(outputData[0]) >= 5 {
-		// Create map for easier lookup
-		directive0 := make(map[string]interface{})
-		for _, instr := range outputData[0] {
-			for k, v := range instr {
-				directive0[k] = v
-			}
-		}
+	// Verify values can be unmarshaled correctly
+	var dns string
+	if err := cbor.Unmarshal(retrieved[0][0].Value, &dns); err != nil {
+		t.Fatalf("Failed to unmarshal DNS: %v", err)
+	}
+	if dns != "rv.example.com" {
+		t.Errorf("Expected DNS 'rv.example.com', got %q", dns)
+	}
 
-		if directive0["dns"] != "rv1.example.com" {
-			t.Errorf("Expected dns 'rv1.example.com', got %v", directive0["dns"])
-		}
-		if directive0["protocol"] != "https" {
-			t.Errorf("Expected protocol 'https', got %v", directive0["protocol"])
-		}
-		// V2 uses integer ports
-		if ownerPort, ok := directive0["owner_port"].(float64); !ok || int(ownerPort) != 8443 {
-			t.Errorf("Expected owner_port 8443 (int), got %v", directive0["owner_port"])
-		}
-		if devicePort, ok := directive0["device_port"].(float64); !ok || int(devicePort) != 8041 {
-			t.Errorf("Expected device_port 8041 (int), got %v", directive0["device_port"])
-		}
-		if rvBypass, ok := directive0["rv_bypass"].(bool); !ok || !rvBypass {
-			t.Errorf("Expected rv_bypass true, got %v", directive0["rv_bypass"])
-		}
+	var port uint16
+	if err := cbor.Unmarshal(retrieved[0][2].Value, &port); err != nil {
+		t.Fatalf("Failed to unmarshal port: %v", err)
+	}
+	if port != 8443 {
+		t.Errorf("Expected port 8443, got %d", port)
 	}
 }
 
-// TestConvertRvInstructionsToV2JSON_AllFields tests conversion with all RV instruction types
-func TestConvertRvInstructionsToV2JSON_AllFields(t *testing.T) {
+// TestFetchRvInfo_NotFound tests fetching when no data exists
+func TestFetchRvInfo_NotFound(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	_, err := state.FetchRvInfo(ctx)
+	if err != ErrRvInfoNotFound {
+		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
+	}
+}
+
+// TestUpdateRvInfo_UpdatesExistingData tests updating RV info
+func TestUpdateRvInfo_UpdatesExistingData(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert initial data
+	initial := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv1.example.com")},
+	}}
+	if err := state.InsertRvInfo(ctx, initial); err != nil {
+		t.Fatalf("InsertRvInfo failed: %v", err)
+	}
+
+	// Update with new data
+	updated := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv2.example.com")},
+		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTP))},
+	}}
+	if err := state.UpdateRvInfo(ctx, updated); err != nil {
+		t.Fatalf("UpdateRvInfo failed: %v", err)
+	}
+
+	// Fetch and verify
+	retrieved, err := state.FetchRvInfo(ctx)
+	if err != nil {
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	if len(retrieved) != 1 || len(retrieved[0]) != 2 {
+		t.Fatalf("Expected 1 directive with 2 instructions, got %d directives", len(retrieved))
+	}
+
+	// Verify updated DNS value
+	var dns string
+	if err := cbor.Unmarshal(retrieved[0][0].Value, &dns); err != nil {
+		t.Fatalf("Failed to unmarshal DNS: %v", err)
+	}
+	if dns != "rv2.example.com" {
+		t.Errorf("Expected DNS 'rv2.example.com', got %q", dns)
+	}
+}
+
+// TestUpdateRvInfo_NotFound tests updating when no data exists
+func TestUpdateRvInfo_NotFound(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	updated := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
+	}}
+	err := state.UpdateRvInfo(ctx, updated)
+	if err != ErrRvInfoNotFound {
+		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
+	}
+}
+
+// TestDeleteRvInfo_RemovesData tests deleting RV info
+func TestDeleteRvInfo_RemovesData(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert data
+	rvInstructions := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
+	}}
+	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("InsertRvInfo failed: %v", err)
+	}
+
+	// Delete it
+	if err := state.DeleteRvInfo(ctx); err != nil {
+		t.Fatalf("DeleteRvInfo failed: %v", err)
+	}
+
+	// Verify it's gone
+	_, err := state.FetchRvInfo(ctx)
+	if err != ErrRvInfoNotFound {
+		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
+	}
+}
+
+// TestDeleteRvInfo_NotFound tests deleting when no data exists
+func TestDeleteRvInfo_NotFound(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := state.DeleteRvInfo(ctx)
+	if err != ErrRvInfoNotFound {
+		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
+	}
+}
+
+// TestCrossAPI_V1InsertV2Read tests inserting via V1 API and reading via V2 state layer
+// This verifies both APIs use the same CBOR storage format
+func TestCrossAPI_V1InsertV2Read(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert via V1 API (flat array, string ports, multi-key objects)
+	v1JSON := []byte(`[{"dns":"rv.example.com", "protocol":"https", "owner_port":"8443"}]`)
+
+	// Parse V1 JSON using V1 parser
+	rvInstructions, err := db.ParseHumanReadableRvJSON(v1JSON)
+	if err != nil {
+		t.Fatalf("V1 parser failed: %v", err)
+	}
+
+	// Use the shared CBOR storage function (which both V1 and V2 use)
+	if err := db.InsertRvInfoCBOR(state.DB, rvInstructions); err != nil {
+		t.Fatalf("V1 InsertRvInfo failed: %v", err)
+	}
+
+	// Read via V2 state layer - should get protocol structs
+	retrieved, err := state.FetchRvInfo(ctx)
+	if err != nil {
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	// Verify structure
+	if len(retrieved) != 1 {
+		t.Fatalf("Expected 1 directive, got %d", len(retrieved))
+	}
+	if len(retrieved[0]) != 3 {
+		t.Errorf("Expected 3 instructions in directive, got %d", len(retrieved[0]))
+	}
+
+	// Verify values
+	var dns string
+	if err := cbor.Unmarshal(retrieved[0][0].Value, &dns); err != nil {
+		t.Fatalf("Failed to unmarshal DNS: %v", err)
+	}
+	if dns != "rv.example.com" {
+		t.Errorf("Expected DNS 'rv.example.com', got %q", dns)
+	}
+
+	var port uint16
+	if err := cbor.Unmarshal(retrieved[0][2].Value, &port); err != nil {
+		t.Fatalf("Failed to unmarshal port: %v", err)
+	}
+	if port != 8443 {
+		t.Errorf("Expected port 8443, got %d", port)
+	}
+}
+
+// TestMultipleDirectives verifies handling of multiple RV directives
+func TestMultipleDirectives(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert multiple directives
+	rvInstructions := [][]protocol.RvInstruction{
+		{
+			{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv1.example.com")},
+			{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
+			{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
+		},
+		{
+			{Variable: protocol.RVIPAddress, Value: mustCBORMarshal(t, []byte{192, 168, 1, 100})},
+			{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTP))},
+			{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8080))},
+		},
+	}
+
+	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("InsertRvInfo failed: %v", err)
+	}
+
+	// Fetch and verify
+	retrieved, err := state.FetchRvInfo(ctx)
+	if err != nil {
+		t.Fatalf("FetchRvInfo failed: %v", err)
+	}
+
+	if len(retrieved) != 2 {
+		t.Fatalf("Expected 2 directives, got %d", len(retrieved))
+	}
+
+	// Verify first directive
+	if len(retrieved[0]) != 3 {
+		t.Errorf("Expected 3 instructions in first directive, got %d", len(retrieved[0]))
+	}
+	var dns string
+	if err := cbor.Unmarshal(retrieved[0][0].Value, &dns); err != nil {
+		t.Fatalf("Failed to unmarshal DNS: %v", err)
+	}
+	if dns != "rv1.example.com" {
+		t.Errorf("Expected DNS 'rv1.example.com', got %q", dns)
+	}
+
+	// Verify second directive
+	if len(retrieved[1]) != 3 {
+		t.Errorf("Expected 3 instructions in second directive, got %d", len(retrieved[1]))
+	}
+}
+
+// TestAllInstructionTypes verifies all RV instruction types can be stored/retrieved
+func TestAllInstructionTypes(t *testing.T) {
+	state, cleanup := setupCBORTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
 	// Create instructions with all field types
-	instructions := [][]protocol.RvInstruction{{
+	rvInstructions := [][]protocol.RvInstruction{{
 		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
 		{Variable: protocol.RVIPAddress, Value: mustCBORMarshal(t, []byte{192, 168, 1, 100})},
 		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
@@ -270,252 +415,46 @@ func TestConvertRvInstructionsToV2JSON_AllFields(t *testing.T) {
 		{Variable: protocol.RVClCertHash, Value: mustCBORMarshal(t, []byte{0xDD, 0xEE, 0xFF})},
 	}}
 
-	// Convert to V2 JSON
-	result, err := convertRvInstructionsToV2JSON(instructions)
-	if err != nil {
-		t.Fatalf("convertRvInstructionsToV2JSON failed: %v", err)
-	}
-
-	// Parse result
-	var output [][]map[string]interface{}
-	if err := json.Unmarshal(result, &output); err != nil {
-		t.Fatalf("failed to parse result: %v", err)
-	}
-
-	if len(output) != 1 {
-		t.Fatalf("expected 1 directive, got %d", len(output))
-	}
-
-	if len(output[0]) != 16 {
-		t.Fatalf("expected 16 instructions, got %d", len(output[0]))
-	}
-
-	// Create map for easier verification
-	directive := make(map[string]interface{})
-	for _, instr := range output[0] {
-		for k, v := range instr {
-			directive[k] = v
-		}
-	}
-
-	// Verify V2 format specifics (each instruction is single-key object)
-	if directive["dns"] != "rv.example.com" {
-		t.Errorf("Expected dns 'rv.example.com', got %v", directive["dns"])
-	}
-	if directive["ip"] != "192.168.1.100" {
-		t.Errorf("Expected ip '192.168.1.100', got %v", directive["ip"])
-	}
-	if directive["protocol"] != "https" {
-		t.Errorf("Expected protocol 'https', got %v", directive["protocol"])
-	}
-
-	// V2 uses INTEGER ports (not strings like V1)
-	devicePort, ok := directive["device_port"].(float64) // JSON numbers are float64
-	if !ok || int(devicePort) != 8041 {
-		t.Errorf("Expected device_port 8041 (int), got %v", directive["device_port"])
-	}
-	ownerPort, ok := directive["owner_port"].(float64)
-	if !ok || int(ownerPort) != 8443 {
-		t.Errorf("Expected owner_port 8443 (int), got %v", directive["owner_port"])
-	}
-
-	// Boolean flags
-	if rvBypass, ok := directive["rv_bypass"].(bool); !ok || !rvBypass {
-		t.Errorf("Expected rv_bypass true, got %v", directive["rv_bypass"])
-	}
-	if devOnly, ok := directive["dev_only"].(bool); !ok || !devOnly {
-		t.Errorf("Expected dev_only true, got %v", directive["dev_only"])
-	}
-	if ownerOnly, ok := directive["owner_only"].(bool); !ok || !ownerOnly {
-		t.Errorf("Expected owner_only true, got %v", directive["owner_only"])
-	}
-	if userInput, ok := directive["user_input"].(bool); !ok || !userInput {
-		t.Errorf("Expected user_input true, got %v", directive["user_input"])
-	}
-
-	// Other fields
-	if delaySeconds, ok := directive["delay_seconds"].(float64); !ok || int(delaySeconds) != 120 {
-		t.Errorf("Expected delay_seconds 120, got %v", directive["delay_seconds"])
-	}
-	if directive["medium"] != "wifi_all" {
-		t.Errorf("Expected medium 'wifi_all', got %v", directive["medium"])
-	}
-	if directive["wifi_ssid"] != "TestNetwork" {
-		t.Errorf("Expected wifi_ssid 'TestNetwork', got %v", directive["wifi_ssid"])
-	}
-	if directive["wifi_pw"] != "password123" {
-		t.Errorf("Expected wifi_pw 'password123', got %v", directive["wifi_pw"])
-	}
-
-	// ext_rv is array in V2 (not JSON string like V1)
-	extRV, ok := directive["ext_rv"].([]interface{})
-	if !ok || len(extRV) != 2 || extRV[0] != "ext1" || extRV[1] != "ext2" {
-		t.Errorf("Expected ext_rv [\"ext1\",\"ext2\"], got %v", directive["ext_rv"])
-	}
-
-	if directive["sv_cert_hash"] != "aabbcc" {
-		t.Errorf("Expected sv_cert_hash 'aabbcc', got %v", directive["sv_cert_hash"])
-	}
-	if directive["cl_cert_hash"] != "ddeeff" {
-		t.Errorf("Expected cl_cert_hash 'ddeeff', got %v", directive["cl_cert_hash"])
-	}
-}
-
-// TestConvertRvInstructionsToV2JSON_MultipleDirectives tests multiple RV directives
-func TestConvertRvInstructionsToV2JSON_MultipleDirectives(t *testing.T) {
-	instructions := [][]protocol.RvInstruction{
-		{
-			{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv1.example.com")},
-			{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
-			{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
-		},
-		{
-			{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv2.example.com")},
-			{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTP))},
-			{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8080))},
-		},
-	}
-
-	result, err := convertRvInstructionsToV2JSON(instructions)
-	if err != nil {
-		t.Fatalf("convertRvInstructionsToV2JSON failed: %v", err)
-	}
-
-	var output [][]map[string]interface{}
-	if err := json.Unmarshal(result, &output); err != nil {
-		t.Fatalf("failed to parse result: %v", err)
-	}
-
-	if len(output) != 2 {
-		t.Fatalf("expected 2 directives, got %d", len(output))
-	}
-
-	// First directive
-	dir0 := make(map[string]interface{})
-	for _, instr := range output[0] {
-		for k, v := range instr {
-			dir0[k] = v
-		}
-	}
-	if dir0["dns"] != "rv1.example.com" || dir0["protocol"] != "https" {
-		t.Error("First directive values incorrect")
-	}
-	if port, ok := dir0["owner_port"].(float64); !ok || int(port) != 8443 {
-		t.Error("First directive owner_port incorrect")
-	}
-
-	// Second directive
-	dir1 := make(map[string]interface{})
-	for _, instr := range output[1] {
-		for k, v := range instr {
-			dir1[k] = v
-		}
-	}
-	if dir1["dns"] != "rv2.example.com" || dir1["protocol"] != "http" {
-		t.Error("Second directive values incorrect")
-	}
-	if port, ok := dir1["owner_port"].(float64); !ok || int(port) != 8080 {
-		t.Error("Second directive owner_port incorrect")
-	}
-}
-
-// TestProtocolStringFromCode_V2 verifies protocol code to string conversion
-func TestProtocolStringFromCode_V2(t *testing.T) {
-	tests := []struct {
-		code uint8
-		want string
-	}{
-		{uint8(protocol.RVProtRest), "rest"},
-		{uint8(protocol.RVProtHTTP), "http"},
-		{uint8(protocol.RVProtHTTPS), "https"},
-		{uint8(protocol.RVProtTCP), "tcp"},
-		{uint8(protocol.RVProtTLS), "tls"},
-		{uint8(protocol.RVProtCoapTCP), "coap+tcp"},
-		{uint8(protocol.RVProtCoapUDP), "coap"},
-		{99, "99"}, // Unknown code returns numeric string
-	}
-
-	for _, tt := range tests {
-		got := ProtocolStringFromCode(tt.code)
-		if got != tt.want {
-			t.Errorf("ProtocolStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
-		}
-	}
-}
-
-// TestMediumStringFromCode_V2 verifies medium code to string conversion
-func TestMediumStringFromCode_V2(t *testing.T) {
-	tests := []struct {
-		code uint8
-		want string
-	}{
-		{protocol.RVMedEthAll, "eth_all"},
-		{protocol.RVMedWifiAll, "wifi_all"},
-		{99, "99"}, // Unknown code returns numeric string
-	}
-
-	for _, tt := range tests {
-		got := MediumStringFromCode(tt.code)
-		if got != tt.want {
-			t.Errorf("MediumStringFromCode(%d) = %s, want %s", tt.code, got, tt.want)
-		}
-	}
-}
-
-// TestCrossAPI_V1InsertV2Read tests inserting via V1 API and reading via V2 API
-func TestCrossAPI_V1InsertV2Read(t *testing.T) {
-	// This test verifies that V2 API can read CBOR stored by any source
-	// Both V1 and V2 APIs use the same CBOR storage format
-
-	state, cleanup := setupCBORTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Insert via V2 format and verify cross-compatibility
-	// (Both V1 and V2 APIs store the same CBOR internally)
-	v2JSON := []byte(`[[ {"dns":"rv.example.com"}, {"protocol":"https"}, {"owner_port":8443} ]]`)
-
-	if err := state.InsertRvInfo(ctx, v2JSON); err != nil {
+	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
 		t.Fatalf("InsertRvInfo failed: %v", err)
 	}
 
-	// Read it back
-	outputJSON, err := state.FetchRvInfoJSON(ctx)
+	// Fetch and verify
+	retrieved, err := state.FetchRvInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfoJSON failed: %v", err)
+		t.Fatalf("FetchRvInfo failed: %v", err)
 	}
 
-	// Should get V2 format with integer ports
-	var output [][]map[string]interface{}
-	if err := json.Unmarshal(outputJSON, &output); err != nil {
-		t.Fatalf("failed to parse output: %v", err)
+	if len(retrieved) != 1 {
+		t.Fatalf("Expected 1 directive, got %d", len(retrieved))
+	}
+	if len(retrieved[0]) != 16 {
+		t.Fatalf("Expected 16 instructions, got %d", len(retrieved[0]))
 	}
 
-	// Verify V2 format (array of arrays of single-key objects)
-	if len(output) != 1 || len(output[0]) != 3 {
-		t.Fatalf("Expected 1 directive with 3 instructions, got %d directives", len(output))
+	// Verify all instruction types are present
+	expectedVars := []protocol.RvVar{
+		protocol.RVDns,
+		protocol.RVIPAddress,
+		protocol.RVProtocol,
+		protocol.RVDevPort,
+		protocol.RVOwnerPort,
+		protocol.RVBypass,
+		protocol.RVDelaysec,
+		protocol.RVMedium,
+		protocol.RVWifiSsid,
+		protocol.RVWifiPw,
+		protocol.RVDevOnly,
+		protocol.RVOwnerOnly,
+		protocol.RVUserInput,
+		protocol.RVExtRV,
+		protocol.RVSvCertHash,
+		protocol.RVClCertHash,
 	}
 
-	// Verify port is integer
-	directive := make(map[string]interface{})
-	for _, instr := range output[0] {
-		for k, v := range instr {
-			directive[k] = v
+	for i, expectedVar := range expectedVars {
+		if retrieved[0][i].Variable != expectedVar {
+			t.Errorf("Instruction[%d]: expected variable %v, got %v", i, expectedVar, retrieved[0][i].Variable)
 		}
 	}
-
-	if port, ok := directive["owner_port"].(float64); !ok || int(port) != 8443 {
-		t.Errorf("Expected owner_port 8443 (int), got %v (type %T)", directive["owner_port"], directive["owner_port"])
-	}
-}
-
-// Helper function to CBOR marshal values for tests
-func mustCBORMarshal(t *testing.T, v interface{}) []byte {
-	t.Helper()
-	data, err := cbor.Marshal(v)
-	if err != nil {
-		t.Fatalf("failed to CBOR marshal test data: %v", err)
-	}
-	return data
 }
