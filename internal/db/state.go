@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -77,6 +78,12 @@ func InitDb(dbType, dsn string) (*State, error) {
 		return nil, err
 	}
 
+	// One-time migration: Convert old V1 JSON RvInfo to CBOR format
+	if err := migrateRvInfoToCBOR(state.DB); err != nil {
+		// Log warning but don't fail startup - migration is best-effort
+		slog.Warn("RvInfo migration check failed, database may have old format", "error", err)
+	}
+
 	// Enable foreign keys for SQLite
 	if dbType == "sqlite" {
 		sqlDB, err := state.DB.DB()
@@ -87,6 +94,56 @@ func InitDb(dbType, dsn string) (*State, error) {
 
 	slog.Info("Database initialized successfully", "type", dbType)
 	return state, nil
+}
+
+// migrateRvInfoToCBOR performs a one-time migration of V1 JSON RvInfo to CBOR format.
+// This runs once at database initialization. If data is already in CBOR format, it does nothing.
+func migrateRvInfoToCBOR(gormDB *gorm.DB) error {
+	// Check if rvinfo table has data
+	var rvInfoRow RvInfo
+	err := gormDB.Where("id = ?", 1).First(&rvInfoRow).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No data to migrate
+			return nil
+		}
+		return fmt.Errorf("failed to check rvinfo: %w", err)
+	}
+
+	// Try to unmarshal as CBOR first
+	var testCBOR [][]protocol.RvInstruction
+	if err := cbor.Unmarshal(rvInfoRow.Value, &testCBOR); err == nil {
+		// Already in CBOR format, no migration needed
+		slog.Debug("RvInfo already in CBOR format, no migration needed")
+		return nil
+	}
+
+	// CBOR failed, try V1 JSON format
+	rvInstructions, err := ParseHumanReadableRvJSON(rvInfoRow.Value)
+	if err != nil {
+		// Not valid V1 JSON either - data is corrupted or unknown format
+		return fmt.Errorf("rvinfo is neither valid CBOR nor V1 JSON: %w", err)
+	}
+
+	// Convert to CBOR
+	rvInfoCBOR, err := cbor.Marshal(rvInstructions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
+	}
+
+	// Update database with CBOR format
+	tx := gormDB.Model(&RvInfo{}).Where("id = ?", 1).Update("value", rvInfoCBOR)
+	if tx.Error != nil {
+		return fmt.Errorf("failed to update rvinfo to CBOR: %w", tx.Error)
+	}
+
+	if tx.RowsAffected == 0 {
+		slog.Warn("RvInfo migration: no rows updated (row may have been deleted)")
+	} else {
+		slog.Info("Successfully migrated RvInfo from V1 JSON to CBOR format")
+	}
+
+	return nil
 }
 
 func (s *State) Ping() error {
