@@ -37,7 +37,7 @@ func FuzzParseHumanReadableRvJSON(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// Must not panic
-		_, _ = parseHumanReadableRvJSON(data)
+		_, _ = ParseHumanReadableRvJSON(data)
 	})
 }
 
