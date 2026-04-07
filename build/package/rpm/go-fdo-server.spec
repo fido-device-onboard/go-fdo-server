@@ -100,8 +100,11 @@ install -m 0644 -vp docs/man/*.1 %{buildroot}%{_mandir}/man1
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/cert-utils.sh
 %{_libexecdir}/%{name}/generate-go-fdo-server-certs.sh
-# Man page
+# Man pages
 %{_mandir}/man1/go-fdo-server.1*
+%{_mandir}/man1/go-fdo-server-manufacturing.1*
+%{_mandir}/man1/go-fdo-server-owner.1*
+%{_mandir}/man1/go-fdo-server-rendezvous.1*
 
 %pre
 %sysusers_create_compat %{SOURCE2}
@@ -118,8 +121,6 @@ The manufacturer server is responsible for creating ownership vouchers and
 preparing devices for the on-boarding process during the manufacturing phase.
 
 %files manufacturer
-# Man page
-%{_mandir}/man1/go-fdo-server-manufacturing.1*
 # Systemd unit
 %{_unitdir}/go-fdo-server-manufacturer.service
 # Sysuser
@@ -151,8 +152,6 @@ to their designated owner's on-boarding service based on their ownership
 voucher.
 
 %files rendezvous
-# Man page
-%{_mandir}/man1/go-fdo-server-rendezvous.1*
 # Systemd unit
 %{_unitdir}/go-fdo-server-rendezvous.service
 # Sysuser
@@ -184,8 +183,6 @@ the device's authenticity, establishes ownership, and provisions it with the
 necessary credentials and configuration for operation.
 
 %files owner
-# Man page
-%{_mandir}/man1/go-fdo-server-owner.1*
 # Systemd unit
 %{_unitdir}/go-fdo-server-owner.service
 # Sysuser

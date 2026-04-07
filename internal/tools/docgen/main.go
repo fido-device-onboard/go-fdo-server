@@ -6,7 +6,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/fido-device-onboard/go-fdo-server/cmd"
@@ -34,7 +33,8 @@ func main() {
 		outDir = *out
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		log.Fatalf("failed to create output directory: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to create output directory: %v\n", err)
+		os.Exit(1)
 	}
 
 	switch *format {
@@ -45,12 +45,17 @@ func main() {
 			Manual:  "Go FDO Server",
 		}
 		if err := doc.GenManTree(root, header, outDir); err != nil {
-			log.Fatalf("failed to generate man pages: %v", err)
+			fmt.Fprintf(os.Stderr, "failed to generate man pages: %v\n", err)
+			os.Exit(1)
 		}
 	case "markdown":
 		if err := doc.GenMarkdownTree(root, outDir); err != nil {
-			log.Fatalf("failed to generate markdown docs: %v", err)
+			fmt.Fprintf(os.Stderr, "failed to generate markdown docs: %v\n", err)
+			os.Exit(1)
 		}
+	default:
+		fmt.Fprintf(os.Stderr, "unsupported format %q\n", *format)
+		os.Exit(1)
 	}
 
 	fmt.Printf("Generated %s documentation in %s\n", *format, outDir)

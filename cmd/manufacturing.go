@@ -83,8 +83,8 @@ func (m *ManufacturingServerConfig) validate() error {
 
 // manufacturingCmd represents the manufacturing command
 var manufacturingCmd = &cobra.Command{
-	Use:   "manufacturing [http_address:port]",
-	Short: "Run the FDO Manufacturing server",
+	Use:   "manufacturing [ip_address:port]",
+	Short: "Run an FDO Manufacturing server",
 	Long: `Run an FDO Manufacturing server that handles device initialization.
 
 The Manufacturing server runs the DI protocol to initialize devices and

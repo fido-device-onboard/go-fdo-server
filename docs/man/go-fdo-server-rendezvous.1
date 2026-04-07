@@ -2,11 +2,11 @@
 .TH "GO-FDO-SERVER-RENDEZVOUS" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
 
 .SH NAME
-go-fdo-server-rendezvous - Run the FDO Rendezvous server
+go-fdo-server-rendezvous - Run an FDO Rendezvous server
 
 
 .SH SYNOPSIS
-\fBgo-fdo-server rendezvous [http_address:port] [flags]\fP
+\fBgo-fdo-server rendezvous [ip_address:port] [flags]\fP
 
 
 .SH DESCRIPTION
@@ -14,13 +14,25 @@ Run an FDO Rendezvous server that mediates device onboarding.
 
 .PP
 The Rendezvous server acts as an intermediary between devices and Owner servers.
-It accepts TO0 registrations from Owner servers and directs devices to their
-Owner during the TO1 protocol.
+It accepts registration requests from Owner servers via the TO0 protocol and
+directs devices to their Owner server during the TO1 protocol.
 
 
 .SH OPTIONS
+\fB--cleanup-interval\fP=3600
+	Interval in seconds for automatic cleanup of expired rendezvous blobs and sessions (set to 0 to disable, default: 3600 seconds)
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for rendezvous
+
+.PP
+\fB--initial-cleanup-delay\fP=300
+	Delay in seconds before first cleanup after startup (default: 300 seconds)
+
+.PP
+\fB--session-timeout\fP=3600
+	Maximum age in seconds for sessions before cleanup (default: 3600 seconds)
 
 .PP
 \fB--to0-max-wait\fP=86400

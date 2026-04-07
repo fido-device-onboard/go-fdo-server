@@ -2,11 +2,11 @@
 .TH "GO-FDO-SERVER-OWNER" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
 
 .SH NAME
-go-fdo-server-owner - Run the FDO Owner server
+go-fdo-server-owner - Run an FDO Owner server
 
 
 .SH SYNOPSIS
-\fBgo-fdo-server owner [http_address:port] [flags]\fP
+\fBgo-fdo-server owner [ip_address:port] [flags]\fP
 
 
 .SH DESCRIPTION
@@ -31,11 +31,11 @@ TO0 protocol against the Rendezvous server, registering itself as a device owner
 
 .PP
 \fB--reuse-credentials\fP[=false]
-	Perform the Credential Reuse Protocol in TO2
+	Perform the Credential Reuse Protocol during the TO2 protocol
 
 .PP
 \fB--to0-insecure-tls\fP[=false]
-	Use insecure TLS (skip rendezvous certificate verification) for TO0
+	Use insecure TLS (skip rendezvous certificate verification) for the TO0 protocol
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

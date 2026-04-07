@@ -148,13 +148,13 @@ var rendezvousFlags = []rendezvousFlagConfig{
 
 // rendezvousCmd represents the rendezvous command
 var rendezvousCmd = &cobra.Command{
-	Use:   "rendezvous [http_address:port]",
-	Short: "Run the FDO Rendezvous server",
+	Use:   "rendezvous [ip_address:port]",
+	Short: "Run an FDO Rendezvous server",
 	Long: `Run an FDO Rendezvous server that mediates device onboarding.
 
 The Rendezvous server acts as an intermediary between devices and Owner servers.
-It accepts TO0 registrations from Owner servers and directs devices to their
-Owner during the TO1 protocol.`,
+It accepts registration requests from Owner servers via the TO0 protocol and
+directs devices to their Owner server during the TO1 protocol.`,
 	Example: `  # Run a Rendezvous server on port 8041 using a configuration file:
   go-fdo-server rendezvous 0.0.0.0:8041 --config /etc/go-fdo-server/rendezvous.yaml`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {

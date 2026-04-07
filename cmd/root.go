@@ -35,12 +35,11 @@ var rootCmd = &cobra.Command{
 		DisableDefaultCmd: true,
 	},
 	Use:   "go-fdo-server {manufacturing|rendezvous|owner}",
-	Short: "FDO manufacturing, owner, and rendezvous server",
-	Long: `Run a FIDO Device Onboard (FDO) server.
+	Short: "Run a FIDO Device Onboard (FDO) server",
+	Long: `Run an FDO manufacturing, rendezvous, or owner server.
 
-Use one of the subcommands to run a manufacturing, owner, or rendezvous
-server instance. Each subcommand takes an http_address argument specifying
-the host:port to listen on.`,
+Use one of the subcommands to run a manufacturing, rendezvous, or owner
+server instance. Each subcommand accepts an ip_address:port argument specifying the listen address.`,
 	Example: `  # Run a manufacturing server on port 8038 using a configuration file:
   go-fdo-server manufacturing 0.0.0.0:8038 --config /etc/go-fdo-server/manufacturing.yaml`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -89,11 +88,11 @@ the host:port to listen on.`,
 			logLevel.Set(slog.LevelError)
 		}
 
-		// Parse HTTP address from positional argument if provided
+		// Parse ip_address:port from positional argument if provided
 		if len(args) > 0 {
 			ip, port, err := parseHTTPAddress(args[0])
 			if err != nil {
-				return fmt.Errorf("invalid http_address: %w", err)
+				return fmt.Errorf("invalid ip_address:port: %w", err)
 			}
 			viper.Set("http.ip", ip)
 			viper.Set("http.port", port)

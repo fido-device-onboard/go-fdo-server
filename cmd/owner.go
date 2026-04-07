@@ -82,8 +82,8 @@ var (
 
 // ownerCmd represents the owner command
 var ownerCmd = &cobra.Command{
-	Use:   "owner [http_address:port]",
-	Short: "Run the FDO Owner server",
+	Use:   "owner [ip_address:port]",
+	Short: "Run an FDO Owner server",
 	Long: `Run an FDO Owner server that handles device onboarding.
 
 The Owner server runs the TO2 protocol to onboard devices. It also runs the
@@ -566,10 +566,10 @@ func ownerCmdInit() {
 
 	// Declare any CLI flags for overriding configuration file settings.
 	// These flags are bound to Viper in the ownerCmd PreRun handler.
-	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol in TO2")
+	ownerCmd.Flags().Bool("reuse-credentials", false, "Perform the Credential Reuse Protocol during the TO2 protocol")
 	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
-	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for TO0")
+	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for the TO0 protocol")
 }
 
 func init() {

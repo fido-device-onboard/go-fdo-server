@@ -2,7 +2,7 @@
 .TH "GO-FDO-SERVER" "1" "Apr 2026" "go-fdo-server" "Go FDO Server"
 
 .SH NAME
-go-fdo-server - FDO manufacturing, owner, and rendezvous server
+go-fdo-server - Run a FIDO Device Onboard (FDO) server
 
 
 .SH SYNOPSIS
@@ -10,12 +10,11 @@ go-fdo-server - FDO manufacturing, owner, and rendezvous server
 
 
 .SH DESCRIPTION
-Run a FIDO Device Onboard (FDO) server.
+Run an FDO manufacturing, rendezvous, or owner server.
 
 .PP
-Use one of the subcommands to run a manufacturing, owner, or rendezvous
-server instance. Each subcommand takes an http_address argument specifying
-the host:port to listen on.
+Use one of the subcommands to run a manufacturing, rendezvous, or owner
+server instance. Each subcommand accepts an ip_address:port argument specifying the listen address.
 
 
 .SH OPTIONS
