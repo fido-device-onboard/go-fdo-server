@@ -92,6 +92,13 @@ func (s *RvInfoState) UpdateRvInfo(ctx context.Context, rvInstructions [][]proto
 	return err
 }
 
+// UpsertRvInfo atomically inserts or updates rendezvous information configuration
+// Accepts pre-parsed RvInstructions - JSON parsing is the API layer's responsibility
+// This method is race-condition safe for concurrent requests
+func (s *RvInfoState) UpsertRvInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
+	return db.UpsertRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
+}
+
 // DeleteRvInfo removes the rendezvous information configuration
 func (s *RvInfoState) DeleteRvInfo(ctx context.Context) error {
 	tx := s.DB.WithContext(ctx).Where("id = ?", 1).Delete(&RvInfo{})

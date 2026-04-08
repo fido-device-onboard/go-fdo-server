@@ -224,6 +224,21 @@ func UpdateRvInfoCBOR(database *gorm.DB, rvInstructions [][]protocol.RvInstructi
 	return nil
 }
 
+// UpsertRvInfoCBOR atomically inserts or updates RV instructions using CBOR encoding
+// This prevents race conditions in concurrent requests by using a single atomic operation
+func UpsertRvInfoCBOR(database *gorm.DB, rvInstructions [][]protocol.RvInstruction) error {
+	cborData, err := cbor.Marshal(rvInstructions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
+	}
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: cborData,
+	}
+	return database.Save(&rvInfo).Error
+}
+
 func InsertRvInfo(data []byte) error {
 	// Parse V1 JSON into [][]protocol.RvInstruction
 	rvInstructions, err := ParseHumanReadableRvJSON(data)
