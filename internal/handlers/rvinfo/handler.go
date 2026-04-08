@@ -92,20 +92,11 @@ func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezv
 		}, nil
 	}
 
-	// Try to update first (pass parsed data, not JSON)
-	err = s.RvInfo.UpdateRvInfo(ctx, rvInstructions)
-	if errors.Is(err, state.ErrRvInfoNotFound) {
-		// No existing record, insert instead
-		if err := s.RvInfo.InsertRvInfo(ctx, rvInstructions); err != nil {
-			slog.Error("failed to insert RV info", "error", err)
-			return UpdateRendezvousInfo500JSONResponse{
-				components.InternalServerError{Message: "failed to save rendezvous info"},
-			}, nil
-		}
-	} else if err != nil {
-		slog.Error("failed to update RV info", "error", err)
+	// Atomically insert or update (prevents race conditions)
+	if err := s.RvInfo.UpsertRvInfo(ctx, rvInstructions); err != nil {
+		slog.Error("failed to save RV info", "error", err)
 		return UpdateRendezvousInfo500JSONResponse{
-			components.InternalServerError{Message: "failed to update rendezvous info"},
+			components.InternalServerError{Message: "failed to save rendezvous info"},
 		}, nil
 	}
 
