@@ -107,28 +107,28 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 log() {
-  echo -ne "$@"
+  echo -ne "$@" >&2
 }
 
 log_info() {
-  echo -e "${BLUE}[INFO]${NC} ⭐" "$@"
+  log "${BLUE}[INFO]${NC} ⭐" "$@" "\n"
 }
 
 log_warn() {
-  echo -e "${YELLOW}[WARN]${NC} 🚧" "$@"
+  log "${YELLOW}[WARN]${NC} 🚧" "$@" "\n"
 }
 
 log_success() {
-  echo -e "✔" "$@"
+  log "✔" "\n"
 }
 
 log_error() {
-  echo -e "${RED}[ERROR]${NC} ❌" "$@"
+  log "${RED}[ERROR]${NC} ❌" "$@" "\n"
   return 1
 }
 
 test_pass() {
-  echo -e "${GREEN}[PASS]${NC} ✅ Test PASSED!"
+  log "${GREEN}[PASS]${NC} ✅ Test PASSED!\n"
 }
 
 test_fail() {
@@ -472,22 +472,18 @@ send_manufacturer_ov_to_owner() {
   return ${status}
 }
 
-set_or_update_owner_redirect_info() {
+update_rvto2addr() {
   local owner_url=$1
   local owner_service_name=$2
   local owner_dns=$3
   local owner_port=$4
   local owner_protocol=${5:-http}
   local real_owner_ip
+  local rvto2addr
   real_owner_ip="$(get_real_ip "${owner_service_name}")"
-  log_info "Checking if 'RVTO2Addr' is configured on owner side (${owner_url})"
-  if [ -z "$(get_owner_redirect_info "${owner_url}")" ]; then
-    log_warn "'RVTO2Addr' not found, creating it"
-    set_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
-  else
-    log_info "'RVTO2Addr' found, updating it"
-    update_owner_redirect_info "${owner_url}" "${real_owner_ip}" "${owner_dns}" "${owner_port}" "${owner_protocol}"
-  fi
+  rvto2addr="[{\"ip\": \"${real_owner_ip}\", \"dns\": \"${owner_dns}\", \"port\": ${owner_port}, \"protocol\": \"${owner_protocol}\"}]"
+  log_info "Setting 'RVTO2Addr' on owner side (${owner_url})"
+  set_rvto2addr "${owner_url}" "${rvto2addr}"
   echo
 }
 

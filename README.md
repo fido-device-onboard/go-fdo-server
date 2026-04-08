@@ -85,7 +85,7 @@ curl -fsS http://127.0.0.1:8043/health
 
 ## Managing RV Info Data
 ### Create New RV Info Data
-Send a `POST` request to create new RV info data, which is stored in the Manufacturer’s database:
+Send a `POST` request to create new RV info data, which is stored in the Manufacturer's database:
 ```
 curl --location --request POST 'http://localhost:8038/api/v1/rvinfo' \
 --header 'Content-Type: text/plain' \
@@ -111,23 +111,19 @@ curl --location --request PUT 'http://localhost:8038/api/v1/rvinfo' \
 --data-raw '[{"dns":"fdo.example.com","device_port":"8041","rv_bypass": false, "owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
 ```
 
-## Managing Owner Redirect Data
-### Create New Owner Redirect Data
-Send a `POST` request to create new Owner redirect data, which is stored in the Owner’s database:
+## Managing Rendezvous TO2 Address (Owner's public address for Device Onboarding) 
+### Set Rendezvous TO2 Address
+Send a `PUT` request to set the rendezvous TO2 address, which is stored in the Owner's database:
 ```
-curl --location --request POST 'http://localhost:8043/api/v1/owner/redirect' \
---header 'Content-Type: text/plain' \
---data-raw '[{"dns":"fdo.example.com","port":"8043","protocol":"http","ip":"127.0.0.1"}]'
+curl --location --request PUT 'http://localhost:8043/api/v1/rvto2addr' \
+--header 'Content-Type: application/json' \
+--data-raw '[{"dns":"fdo.example.com","port":8043,"protocol":"http","ip":"127.0.0.1"}]'
 ```
 
-### View and Update Existing Owner Redirect Data
-Use `GET` and `PUT` requests to view and update existing Owner redirect data:
+### View Existing Rendezvous TO2 Address
+Use `GET` to view the current rendezvous TO2 address:
 ```
-curl --location --request GET 'http://localhost:8043/api/v1/owner/redirect'
-
-curl --location --request PUT 'http://localhost:8043/api/v1/owner/redirect' \
---header 'Content-Type: text/plain' \
---data-raw '[{"dns":"fdo.test.com","port":"8085","protocol":"http","ip":"127.0.0.1"}]'
+curl --location --request GET 'http://localhost:8043/api/v1/rvto2addr'
 ```
 
 
@@ -154,7 +150,7 @@ echo "GUID=${GUID}"
 
 ```bash
 curl -v "http://localhost:8038/api/v1/vouchers/${GUID}" > /tmp/fdo/ov/ownervoucher
-curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
+curl -X POST 'http://localhost:8043/api/v1/vouchers' --data-binary @/tmp/fdo/ov/ownervoucher
 ```
 
 4. TO0 on Owner server:
