@@ -57,7 +57,7 @@ When running the tmt tests it's important to be verbose `-vvv` to see the actual
 
 It's also possible to run the scripts directly without `act` or `tmt`.
 Any script from `./test/{ci,container,fmf}` directories can be executed from the shell:
-*  CI tests 
+*  CI tests
 ```bash
 ➜ ./test/ci/test-onboarding.sh
 ```
@@ -77,3 +77,94 @@ Any script from `./test/{ci,container,fmf}` directories can be executed from the
 # or
 ➜ sh -x ./test/fmf/tests/test-onboarding.sh
 ```
+
+## RPM Tests
+
+RPM tests deploy the FDO servers using RPM packages. These tests support multiple installation sources controlled by environment variables.
+
+### Installation Sources
+
+The RPM tests support the following installation sources:
+
+1. **distro-repos** - Install from standard distribution repositories
+2. **fedora-iot-copr** - Install from the fedora-iot COPR repository
+3. **compose** - Install from a specific compose URL
+
+### Environment Variables
+
+Control which installation source to use with these environment variables:
+
+- `INSTALLATION_SOURCE` - Sets the installation source for both client and server
+- `CLIENT_INSTALLATION_SOURCE` - Override installation source for the client only
+- `SERVER_INSTALLATION_SOURCE` - Override installation source for the server only
+
+### Running RPM Tests with Different Installation Sources
+
+#### Using distribution repositories
+```bash
+➜ INSTALLATION_SOURCE=distro-repos ./test/rpm/test-onboarding.sh
+```
+
+#### Using fedora-iot COPR repository
+```bash
+➜ INSTALLATION_SOURCE=fedora-iot-copr ./test/rpm/test-onboarding.sh
+```
+
+#### Using a compose
+
+##### Fedora and CentOS Stream (automatic compose URL detection)
+For Fedora and CentOS Stream, the compose URL is automatically detected based on the OS version:
+
+```bash
+➜ INSTALLATION_SOURCE=compose ./test/rpm/test-onboarding.sh
+```
+
+##### RHEL (requires explicit compose URL)
+For RHEL, you must specify the compose base URL:
+
+```bash
+➜ INSTALLATION_SOURCE=compose \
+  COMPOSE_BASE_URL="http://download.host/.../latest-RHEL-Compose/compose/" \
+  ./test/rpm/test-onboarding.sh
+```
+
+##### Custom compose URL and streams
+You can override the compose URL and streams for any distribution:
+
+```bash
+# Custom compose URL
+➜ INSTALLATION_SOURCE=compose \
+  COMPOSE_BASE_URL="http://custom.host/compose/path/" \
+  ./test/rpm/test-onboarding.sh
+
+# Custom streams (default: "Everything" for Fedora, "BaseOS AppStream" for CentOS/RHEL)
+➜ INSTALLATION_SOURCE=compose \
+  COMPOSE_STREAMS="BaseOS AppStream" \
+  ./test/rpm/test-onboarding.sh
+
+# Both custom URL and streams
+➜ INSTALLATION_SOURCE=compose \
+  COMPOSE_BASE_URL="http://custom.host/compose/path/" \
+  COMPOSE_STREAMS="BaseOS AppStream CRB" \
+  ./test/rpm/test-onboarding.sh
+```
+
+### Running All RPM Tests
+
+You can run any RPM test from the `test/rpm/` directory:
+
+```bash
+# List available RPM tests
+➜ ls test/rpm/test-*.sh
+
+# Run specific tests
+➜ INSTALLATION_SOURCE=compose ./test/rpm/test-device-ca-api.sh
+➜ INSTALLATION_SOURCE=compose ./test/rpm/test-fsim-wget.sh
+➜ INSTALLATION_SOURCE=compose ./test/rpm/test-resale.sh
+```
+
+### Default Behavior (without INSTALLATION_SOURCE)
+
+When `INSTALLATION_SOURCE` is not set:
+- If running in a development environment with spec files present, RPMs are built locally from the current git commit
+- Otherwise, packages are installed from the fedora-iot COPR repository

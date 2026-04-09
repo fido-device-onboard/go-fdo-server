@@ -1,0 +1,24 @@
+summary: FDO end-to-end testing with PostgreSQL backend
+description: |
+    Comprehensive FDO testing with PostgreSQL database covering:
+    - Certificate infrastructure setup
+    - Multi-server orchestration (manufacturer, rendezvous, owner)
+    - PostgreSQL database integration
+    - Device initialization and onboarding
+    - ServiceInfo module testing
+    - Protocol validation with database persistence
+
+test: ../../rpm/test-onboarding-postgres.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - e2e
+  - protocol
+  - onboarding
+  - postgres
+  - database
+  - rpm
