@@ -112,6 +112,7 @@ func Execute() {
 
 // Setup the root command line. Used by the unit tests to reset state between tests.
 func rootCmdInit() {
+	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().String("config", "", "Pathname of the configuration file")
 	rootCmd.PersistentFlags().String("log-level", "info", "Set logging level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().String("db-type", "sqlite", "Database type (sqlite or postgres)")
