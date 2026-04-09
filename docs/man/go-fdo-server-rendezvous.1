@@ -24,7 +24,7 @@ directs devices to their Owner server during the TO1 protocol.
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
-	help for rendezvous
+	Help for Rendezvous server
 
 .PP
 \fB--initial-cleanup-delay\fP=300
@@ -36,11 +36,11 @@ directs devices to their Owner server during the TO1 protocol.
 
 .PP
 \fB--to0-max-wait\fP=86400
-	Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: 86400 seconds)
+	Maximum wait time the Rendezvous server will keep an entry registered by the Owner server during TO0 protocol before it expires. If the Owner server requests a longer wait time, it is capped to this value (default: 86400 seconds)
 
 .PP
 \fB--to0-min-wait\fP=0
-	Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)
+	Minimum wait time the Rendezvous server will accept for an entry registered by the Owner server during TO0 protocol. If the Owner server requests a shorter wait time, it is rejected (default: 0 = no minimum)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

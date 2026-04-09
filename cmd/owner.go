@@ -570,6 +570,7 @@ func ownerCmdInit() {
 	ownerCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	ownerCmd.Flags().String("owner-key", "", "Owner private key path")
 	ownerCmd.Flags().Bool("to0-insecure-tls", false, "Use insecure TLS (skip rendezvous certificate verification) for the TO0 protocol")
+	ownerCmd.Flags().BoolP("help", "h", false, "Help for Owner server")
 }
 
 func init() {

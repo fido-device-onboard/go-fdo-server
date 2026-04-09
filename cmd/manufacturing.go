@@ -294,6 +294,7 @@ func manufacturingCmdInit() {
 	manufacturingCmd.Flags().String("owner-cert", "", "Owner certificate path")
 	manufacturingCmd.Flags().String("device-ca-cert", "", "Device CA certificate path")
 	manufacturingCmd.Flags().String("device-ca-key", "", "Device CA private key path")
+	manufacturingCmd.Flags().BoolP("help", "h", false, "Help for Manufacturing server")
 }
 
 func init() {

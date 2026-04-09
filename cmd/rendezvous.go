@@ -118,13 +118,13 @@ var rendezvousFlags = []rendezvousFlagConfig{
 		name:         "to0-min-wait",
 		viperKey:     "rendezvous.to0_min_wait",
 		defaultValue: defaultMinWaitSecs,
-		description:  "Minimum wait time in seconds for TO0 rendezvous entries (requests below this are rejected, default: 0 = no minimum)",
+		description:  "Minimum wait time the Rendezvous server will accept for an entry registered by the Owner server during TO0 protocol. If the Owner server requests a shorter wait time, it is rejected (default: 0 = no minimum)",
 	},
 	{
 		name:         "to0-max-wait",
 		viperKey:     "rendezvous.to0_max_wait",
 		defaultValue: defaultMaxWaitSecs,
-		description:  "Maximum wait time in seconds for TO0 rendezvous entries (requests above this are capped, default: %d seconds)",
+		description:  "Maximum wait time the Rendezvous server will keep an entry registered by the Owner server during TO0 protocol before it expires. If the Owner server requests a longer wait time, it is capped to this value (default: %d seconds)",
 	},
 	{
 		name:         "cleanup-interval",
@@ -303,6 +303,8 @@ func serveRendezvous(config *RendezvousServerConfig) error {
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
+
+	rendezvousCmd.Flags().BoolP("help", "h", false, "Help for Rendezvous server")
 
 	// Register all flags and set viper defaults in a single loop
 	for _, flag := range rendezvousFlags {
