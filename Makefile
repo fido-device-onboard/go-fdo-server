@@ -17,7 +17,7 @@ all: build test
 
 # Build the Go project
 .PHONY: build
-build: generate tidy fmt vet
+build: generate tidy fmt vet man
 	go build $(GOFLAGS) -ldflags="-X github.com/fido-device-onboard/go-fdo-server/internal/version.VERSION=${VERSION}"
 
 .PHONY: oapi-codegen
@@ -48,6 +48,10 @@ vet:
 .PHONY: test
 test:
 	go test -v ./...
+
+.PHONY: man
+man:
+	go run ./internal/tools/docgen -format man
 
 .PHONY: shfmt
 shfmt:
