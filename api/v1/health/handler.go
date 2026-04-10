@@ -1,29 +1,33 @@
 // SPDX-FileCopyrightText: (C) 2024 Intel Corporation
 // SPDX-License-Identifier: Apache 2.0
 
-package handlers
+package health
 
 import (
-	"net/http"
+	"context"
+	"log/slog"
+
+	"github.com/fido-device-onboard/go-fdo-server/api/v1/components"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
+	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 )
 
-type HealthResponse struct {
-	Version string `json:"version"`
-	Status  string `json:"status"`
+type Server struct {
+	State *state.HealthState
 }
 
-// HealthHandler responds with the version and status
-func HealthHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeResponse(w, []byte("Method not allowed"))
-		return
+func NewServer(state *state.HealthState) Server {
+	return Server{State: state}
+}
+
+// Make sure we conform to StrictServerInterface
+var _ StrictServerInterface = (*Server)(nil)
+
+// GetHealth responds with the version and status
+func (s *Server) GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error) {
+	if err := s.State.Ping(); err != nil {
+		slog.Error("database error", "err", err)
+		return GetHealth500JSONResponse{components.InternalServerError{Message: "database error"}}, nil
 	}
-	response := HealthResponse{
-		Version: "1.1",
-		Status:  "OK",
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	encodeJSONResponse(w, response)
+	return GetHealth200JSONResponse{HealthStatusJSONResponse{Version: version.VERSION, Status: "OK", Message: "the service is up and running"}}, nil
 }

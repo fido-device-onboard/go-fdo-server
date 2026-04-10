@@ -1,48 +1,72 @@
-// SPDX-FileCopyrightText: (C) 2024 Intel Corporation
+// SPDX-FileCopyrightText: (C) 2025 Red Hat Inc.
 // SPDX-License-Identifier: Apache 2.0
 
-package handlers
+package device
 
 import (
+	"context"
 	"encoding/hex"
 	"log/slog"
-	"net/http"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
-// OwnerDevicesHandler returns the list of devices known to the owner service,
-// combining voucher metadata with onboarding (TO2) state.
-// Exposed as GET /api/v1/owner/devices.
-func OwnerDevicesHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+// Server implements the StrictServerInterface for Device listing (v1 - legacy behavior)
+type Server struct {
+	VoucherState *state.VoucherPersistentState
+}
+
+func NewServer(voucherState *state.VoucherPersistentState) Server {
+	return Server{
+		VoucherState: voucherState,
 	}
+}
+
+var _ StrictServerInterface = (*Server)(nil)
+
+// ListDevices implements GET /v1/owner/devices
+func (s *Server) ListDevices(ctx context.Context, request ListDevicesRequestObject) (ListDevicesResponseObject, error) {
 	slog.Debug("Listing owner devices")
 
 	filters := make(map[string]interface{})
-	if guidHex := r.URL.Query().Get("old_guid"); guidHex != "" {
+
+	// Handle old_guid filter
+	if request.Params.OldGuid != nil {
+		guidHex := *request.Params.OldGuid
 		if !utils.IsValidGUID(guidHex) {
-			http.Error(w, "Invalid GUID", http.StatusBadRequest)
-			return
+			return ListDevices400TextResponse("Invalid GUID"), nil
 		}
+
 		decoded, err := hex.DecodeString(guidHex)
 		if err != nil {
-			http.Error(w, "Invalid GUID format", http.StatusBadRequest)
-			return
+			return ListDevices400TextResponse("Invalid GUID format"), nil
 		}
 		filters["old_guid"] = decoded
 	}
 
-	devices, err := db.ListDevices(filters)
+	devices, err := s.VoucherState.ListDevices(ctx, filters)
 	if err != nil {
 		slog.Error("Error listing devices", "err", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return ListDevices500TextResponse("Internal server error"), nil
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	encodeJSONResponse(w, devices)
+	// Convert state.Device to generated Device type
+	result := make([]Device, len(devices))
+	for i, d := range devices {
+		device := Device{
+			Guid:         hex.EncodeToString(d.GUID),
+			OldGuid:      hex.EncodeToString(d.OldGUID),
+			DeviceInfo:   d.DeviceInfo,
+			CreatedAt:    d.CreatedAt,
+			UpdatedAt:    d.UpdatedAt,
+			To2Completed: d.TO2Completed,
+		}
+		if d.TO2CompletedAt != nil {
+			device.To2CompletedAt = d.TO2CompletedAt
+		}
+		result[i] = device
+	}
+
+	return ListDevices200JSONResponse(result), nil
 }

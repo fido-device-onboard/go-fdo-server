@@ -1,32 +1,40 @@
 // SPDX-FileCopyrightText: (C) 2024 Intel Corporation
 // SPDX-License-Identifier: Apache 2.0
 
-package handlersTest
+package voucher
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"net/http"
-	"net/http/httptest"
+	"io"
 	"testing"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/testdata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func setupTestDB(t *testing.T) {
-	_, err := db.InitDb("sqlite", ":memory:")
+func setupTestDB(t *testing.T) *state.VoucherPersistentState {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
-		t.Fatalf("Failed to initialize test database: %v", err)
+		t.Fatalf("Failed to open test database: %v", err)
 	}
+
+	// Auto-migrate the voucher table
+	if err := database.AutoMigrate(&state.Voucher{}); err != nil {
+		t.Fatalf("Failed to migrate voucher schema: %v", err)
+	}
+
+	return &state.VoucherPersistentState{DB: database}
 }
 
 type testData struct {
@@ -114,85 +122,102 @@ func setupTestData(t *testing.T) *testData {
 }
 
 type voucherTestCase struct {
-	name               string
-	voucherData        []byte
-	ownerKey           crypto.PublicKey // Owner key to configure handler with
-	expectedStatusCode int
-	expectedBodyOneOf  []string
+	name              string
+	voucherData       []byte
+	ownerKey          crypto.PublicKey // Owner key to configure handler with
+	expectSuccess     bool
+	expectedBodyOneOf []string
 }
 
 func TestInsertVoucherHandler(t *testing.T) {
-	setupTestDB(t)
+	voucherState := setupTestDB(t)
 	testData := setupTestData(t)
+	ctx := context.Background()
 
 	testCases := []voucherTestCase{
 		{
 			// Valid unextended voucher
-			name:               "Valid voucher is accepted",
-			voucherData:        testData.validVoucherPEM,
-			ownerKey:           testData.ownerPublicKey, // Manufacturer key
-			expectedStatusCode: http.StatusOK,
+			name:          "Valid voucher is accepted",
+			voucherData:   testData.validVoucherPEM,
+			ownerKey:      testData.ownerPublicKey, // Manufacturer key
+			expectSuccess: true,
 		},
 		{
 			// Extended voucher with corrupted signature
-			name:               "Corrupted signature is rejected",
-			voucherData:        testData.corruptedPEM,
-			ownerKey:           testData.extendedOwnerPublicKey, // Next owner key
-			expectedStatusCode: http.StatusBadRequest,
+			name:          "Corrupted signature is rejected",
+			voucherData:   testData.corruptedPEM,
+			ownerKey:      testData.extendedOwnerPublicKey, // Next owner key
+			expectSuccess: false,
 			expectedBodyOneOf: []string{
-				"Invalid ownership voucher\n",
+				"Invalid ownership voucher",
 			},
 		},
 		{
 			// Verify voucher CBOR encoding integrity
-			name:               "Invalid CBOR is rejected",
-			voucherData:        testData.invalidCBORPEM,
-			ownerKey:           testData.ownerPublicKey, // Doesn't matter, fails before key check
-			expectedStatusCode: http.StatusBadRequest,
+			name:          "Invalid CBOR is rejected",
+			voucherData:   testData.invalidCBORPEM,
+			ownerKey:      testData.ownerPublicKey, // Doesn't matter, fails before key check
+			expectSuccess: false,
 			expectedBodyOneOf: []string{
-				"Unable to decode cbor\n",
+				"Unable to decode cbor",
 			},
 		},
 		{
 			// Verify PEM encoding integrity
-			name:               "Invalid PEM is rejected",
-			voucherData:        testData.invalidPEM,
-			ownerKey:           testData.ownerPublicKey, // Doesn't matter, fails before key check
-			expectedStatusCode: http.StatusBadRequest,
+			name:          "Invalid PEM is rejected",
+			voucherData:   testData.invalidPEM,
+			ownerKey:      testData.ownerPublicKey, // Doesn't matter, fails before key check
+			expectSuccess: false,
 			expectedBodyOneOf: []string{
-				"Unable to decode PEM content\n",
+				"Unable to decode PEM content",
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create HTTP request
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(tc.voucherData))
-			rec := httptest.NewRecorder()
+			// Create server with appropriate owner key for this test case
+			server := NewServer(voucherState, []crypto.PublicKey{tc.ownerKey})
 
-			// Create handler with appropriate owner key for this test case
-			handler := handlers.InsertVoucherHandler([]crypto.PublicKey{tc.ownerKey})
-
-			// Call handler
-			handler(rec, req)
-
-			// Verify status code
-			if rec.Code != tc.expectedStatusCode {
-				t.Errorf("Expected status %d, got %d: %s", tc.expectedStatusCode, rec.Code, rec.Body.String())
+			// Create request object
+			request := InsertVoucherRequestObject{
+				Body: io.NopCloser(bytes.NewReader(tc.voucherData)),
 			}
 
-			if len(tc.expectedBodyOneOf) > 0 {
-				body := rec.Body.String()
-				found := false
-				for _, expected := range tc.expectedBodyOneOf {
-					if body == expected {
-						found = true
-						break
-					}
+			// Call handler
+			response, err := server.InsertVoucher(ctx, request)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Check response type
+			if tc.expectSuccess {
+				if _, ok := response.(InsertVoucher200TextResponse); !ok {
+					t.Errorf("Expected 200 response, got %T", response)
 				}
-				if !found {
-					t.Errorf("Expected one of %v, got: %s", tc.expectedBodyOneOf, body)
+			} else {
+				// For error cases, check the response body contains expected message
+				var body string
+				switch resp := response.(type) {
+				case InsertVoucher400TextResponse:
+					body = string(resp)
+				case InsertVoucher500TextResponse:
+					body = string(resp)
+				default:
+					t.Fatalf("Expected error response (400 or 500), got %T", response)
+				}
+
+				if len(tc.expectedBodyOneOf) > 0 {
+					found := false
+					for _, expected := range tc.expectedBodyOneOf {
+						if body == expected {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("Expected one of %v, got: %s", tc.expectedBodyOneOf, body)
+					}
 				}
 			}
 		})
@@ -201,7 +226,8 @@ func TestInsertVoucherHandler(t *testing.T) {
 
 // Valid voucher with wrong/fake owner key should be rejected.
 func TestInsertVoucherHandler_WrongOwnerKey(t *testing.T) {
-	setupTestDB(t)
+	voucherState := setupTestDB(t)
+	ctx := context.Background()
 
 	voucherPEM, err := testdata.Files.ReadFile("ov.pem")
 	if err != nil {
@@ -211,15 +237,29 @@ func TestInsertVoucherHandler_WrongOwnerKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate wrong owner key: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(voucherPEM))
-	rec := httptest.NewRecorder()
-	handler := handlers.InsertVoucherHandler([]crypto.PublicKey{wrongOwnerKey.Public()})
-	handler(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400 Bad Request for wrong owner key, got %d", rec.Code)
+
+	// Create server with wrong owner key
+	server := NewServer(voucherState, []crypto.PublicKey{wrongOwnerKey.Public()})
+
+	// Create request object
+	request := InsertVoucherRequestObject{
+		Body: io.NopCloser(bytes.NewReader(voucherPEM)),
 	}
-	body := rec.Body.String()
-	expectedError := "Invalid ownership voucher\n"
+
+	// Call handler
+	response, err := server.InsertVoucher(ctx, request)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify it's a 400 error response
+	resp400, ok := response.(InsertVoucher400TextResponse)
+	if !ok {
+		t.Errorf("Expected 400 Bad Request for wrong owner key, got %T", response)
+	}
+
+	body := string(resp400)
+	expectedError := "Invalid ownership voucher"
 	if body != expectedError {
 		t.Errorf("Expected error '%s', got: '%s'", expectedError, body)
 	}
@@ -227,7 +267,8 @@ func TestInsertVoucherHandler_WrongOwnerKey(t *testing.T) {
 
 // Test vouchers with invalid header fields are rejected.
 func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
-	setupTestDB(t)
+	voucherState := setupTestDB(t)
+	ctx := context.Background()
 
 	// Load valid voucher as base
 	voucherPEM, err := testdata.Files.ReadFile("ov.pem")
@@ -248,7 +289,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 	}
 
 	// TODO: This should reference a common constant once FDOProtocolVersion is moved to a common package
-	// See: api/handlers/vouchers.go VerifyOwnershipVoucher function for related TODO
+	// See: api/v1/voucher/handler.go verifyOwnershipVoucher function for related TODO
 	const fdoProtocolVersion uint16 = 101 // FDO spec v1.1
 
 	testCases := []struct {
@@ -262,7 +303,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 				v.Version = 999 // Invalid version
 				v.Header.Val.Version = 999
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 		{
 			name: "Protocol version mismatch",
@@ -270,7 +311,7 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 				v.Version = fdoProtocolVersion
 				v.Header.Val.Version = 100 // Mismatch
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 		{
 			name: "Zero GUID",
@@ -280,28 +321,28 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 					v.Header.Val.GUID[i] = 0
 				}
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 		{
 			name: "Empty DeviceInfo",
 			modifyVoucher: func(v *fdo.Voucher) {
 				v.Header.Val.DeviceInfo = ""
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 		{
 			name: "Invalid ManufacturerKey",
 			modifyVoucher: func(v *fdo.Voucher) {
 				v.Header.Val.ManufacturerKey.Type = 0 // Invalid type
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 		{
 			name: "Empty RvInfo",
 			modifyVoucher: func(v *fdo.Voucher) {
 				v.Header.Val.RvInfo = nil
 			},
-			expectedError: "Invalid ownership voucher\n",
+			expectedError: "Invalid ownership voucher",
 		},
 	}
 
@@ -321,17 +362,27 @@ func TestInsertVoucherHandler_InvalidHeaderFields(t *testing.T) {
 				Type:  "OWNERSHIP VOUCHER",
 				Bytes: modifiedBytes,
 			})
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/owner/vouchers", bytes.NewReader(modifiedPEM))
-			rec := httptest.NewRecorder()
 
-			// Create handler with correct owner key and verify response for each invalid voucher
-			handler := handlers.InsertVoucherHandler([]crypto.PublicKey{ownerPubKey})
-			handler(rec, req)
+			// Create server with correct owner key
+			server := NewServer(voucherState, []crypto.PublicKey{ownerPubKey})
 
-			if rec.Code != http.StatusBadRequest {
-				t.Errorf("Expected status 400 Bad Request, got %d: %s", rec.Code, rec.Body.String())
+			// Create request object
+			request := InsertVoucherRequestObject{
+				Body: io.NopCloser(bytes.NewReader(modifiedPEM)),
 			}
-			body := rec.Body.String()
+
+			// Call handler
+			response, err := server.InsertVoucher(ctx, request)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Verify it's a 400 error response
+			resp400, ok := response.(InsertVoucher400TextResponse)
+			if !ok {
+				t.Errorf("Expected status 400 Bad Request, got %T", response)
+			}
+			body := string(resp400)
 			if body != tc.expectedError {
 				t.Errorf("Expected error '%s', got: '%s'", tc.expectedError, body)
 			}
