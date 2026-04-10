@@ -1,96 +1,249 @@
-// SPDX-FileCopyrightText: (C) 2024 Intel Corporation
+// SPDX-FileCopyrightText: (C) 2025 Red Hat Inc.
 // SPDX-License-Identifier: Apache 2.0
-package handlersTest
+
+package rvinfo
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/fido-device-onboard/go-fdo-server/api/handlers"
+	"github.com/fido-device-onboard/go-fdo-server/api/v1/components"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func TestRvInfo_PostConflictOnDuplicate(t *testing.T) {
-	setupTestDB(t)
-
-	handler := handlers.RvInfoHandler()
-	body := []byte(`[{"dns":"rv.example","device_port":"8082","owner_port":"8082","protocol":"http"}]`)
-
-	// First POST should create (201)
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/rv", bytes.NewReader(body))
-	rec1 := httptest.NewRecorder()
-	handler.ServeHTTP(rec1, req1)
-	if rec1.Code != http.StatusCreated {
-		t.Fatalf("expected 201 on first POST, got %d", rec1.Code)
+func setupTestDB(t *testing.T) *state.RvInfoState {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
 	}
 
-	// Second POST should conflict (409)
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/rv", bytes.NewReader(body))
-	rec2 := httptest.NewRecorder()
-	handler.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusConflict {
-		t.Fatalf("expected 409 on second POST, got %d", rec2.Code)
+	rvInfoState, err := state.InitRvInfoDB(db)
+	if err != nil {
+		t.Fatalf("Failed to initialize RvInfo database: %v", err)
+	}
+
+	return rvInfoState
+}
+
+// TestGetRendezvousInfo_NotFound verifies that GET returns 404 when no config exists
+func TestGetRendezvousInfo_NotFound(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
+
+	resp, err := server.GetRendezvousInfo(context.Background(), GetRendezvousInfoRequestObject{})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should return 404 when no config exists (v1 behavior)
+	if _, ok := resp.(GetRendezvousInfo404TextResponse); !ok {
+		t.Errorf("Expected GetRendezvousInfo404TextResponse, got: %T", resp)
+	}
+
+	// Verify error message
+	if resp404, ok := resp.(GetRendezvousInfo404TextResponse); ok {
+		if string(resp404) != "No rvInfo found" {
+			t.Errorf("Expected 'No rvInfo found', got: %s", string(resp404))
+		}
 	}
 }
 
-func TestRvInfo_CRUDLifecycle(t *testing.T) {
-	setupTestDB(t)
+// TestGetRendezvousInfo_Success verifies that GET returns 200 with data when config exists
+func TestGetRendezvousInfo_Success(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
 
-	get := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/rv", nil)
-		rec := httptest.NewRecorder()
-		handlers.RvInfoHandler()(rec, req)
-		return rec
-	}
-	put := func(body []byte) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/rv", bytes.NewReader(body))
-		rec := httptest.NewRecorder()
-		handlers.RvInfoHandler()(rec, req)
-		return rec
-	}
-	post := func(body []byte) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/rv", bytes.NewReader(body))
-		rec := httptest.NewRecorder()
-		handlers.RvInfoHandler()(rec, req)
-		return rec
+	// Create a test configuration using V1 components type
+	testData := []byte(`[
+		{
+			"dns": "rv.example.com",
+			"protocol": "https",
+			"owner_port": "8443"
+		}
+	]`)
+
+	// Unmarshal to V1 components.RVInfo
+	var rvInfo components.RVInfo
+	if err := json.Unmarshal(testData, &rvInfo); err != nil {
+		t.Fatalf("Failed to unmarshal test data: %v", err)
 	}
 
-	// PUT before create -> 404
-	putBody := []byte(`[{"dns":"rv.example","device_port":"8082","owner_port":"8082","protocol":"http"}]`)
-	if rec := put(putBody); rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 on PUT before create, got %d", rec.Code)
+	// Convert V1 format to protocol instructions
+	rvInstructions, err := RVInfoV1ToProtocol(rvInfo)
+	if err != nil {
+		t.Fatalf("Failed to convert to protocol format: %v", err)
 	}
 
-	// POST create -> 201
-	postBody := []byte(`[{"dns":"rv.example","device_port":"8082","owner_port":"8082","protocol":"http"}]`)
-	if rec := post(postBody); rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201 on POST create, got %d", rec.Code)
+	// Insert the converted data
+	err = rvInfoState.CreateRVInfo(context.Background(), rvInstructions)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
 	}
 
-	// PUT update -> 200
-	updateBody := []byte(`[{"dns":"rv-updated","device_port":"9090","owner_port":"9090","protocol":"http"}]`)
-	if rec := put(updateBody); rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on PUT update, got %d", rec.Code)
+	resp, err := server.GetRendezvousInfo(context.Background(), GetRendezvousInfoRequestObject{})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// GET -> updated value present
-	rec := get()
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on GET, got %d", rec.Code)
+	// Should return 200 when config exists
+	_, ok := resp.(GetRendezvousInfo200JSONResponse)
+	if !ok {
+		t.Errorf("Expected GetRendezvousInfo200JSONResponse, got: %T", resp)
 	}
-	// Compare JSON content semantically (field order may vary after CBOR conversion)
-	var expected, got interface{}
-	if err := json.Unmarshal(updateBody, &expected); err != nil {
-		t.Fatalf("failed to unmarshal expected body: %v", err)
+}
+
+// TestCreateRendezvousInfo_Success verifies that POST creates new config
+func TestCreateRendezvousInfo_Success(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
+
+	// Create request body from raw JSON
+	testJSON := []byte(`[
+		{
+			"dns": "rv.example.com",
+			"protocol": "https",
+			"owner_port": "8443"
+		}
+	]`)
+
+	var requestBody components.RVInfo
+	if err := json.Unmarshal(testJSON, &requestBody); err != nil {
+		t.Fatalf("Failed to unmarshal test JSON: %v", err)
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("failed to unmarshal response body: %v", err)
+
+	resp, err := server.CreateRendezvousInfo(context.Background(), CreateRendezvousInfoRequestObject{
+		Body: &requestBody,
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
 	}
-	expectedJSON, _ := json.Marshal(expected)
-	gotJSON, _ := json.Marshal(got)
-	if string(expectedJSON) != string(gotJSON) {
-		t.Fatalf("expected body %s, got %s", string(expectedJSON), string(gotJSON))
+
+	// Should return 201 on successful create
+	_, ok := resp.(CreateRendezvousInfo201JSONResponse)
+	if !ok {
+		t.Errorf("Expected CreateRendezvousInfo201JSONResponse, got: %T", resp)
+	}
+}
+
+// TestCreateRendezvousInfo_Conflict verifies that POST returns 409 when config already exists
+func TestCreateRendezvousInfo_Conflict(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
+
+	// Create initial configuration
+	testData := []byte(`[{"dns":"rv.example.com","protocol":"https","owner_port":"8443"}]`)
+	var rvInfo components.RVInfo
+	if err := json.Unmarshal(testData, &rvInfo); err != nil {
+		t.Fatalf("Failed to unmarshal test data: %v", err)
+	}
+	rvInstructions, err := RVInfoV1ToProtocol(rvInfo)
+	if err != nil {
+		t.Fatalf("Failed to convert to protocol format: %v", err)
+	}
+	err = rvInfoState.CreateRVInfo(context.Background(), rvInstructions)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Try to create again - should fail with 409
+	testJSON := []byte(`[{"dns":"rv2.example.com","protocol":"http","owner_port":"8080"}]`)
+	var requestBody components.RVInfo
+	if err := json.Unmarshal(testJSON, &requestBody); err != nil {
+		t.Fatalf("Failed to unmarshal test JSON: %v", err)
+	}
+
+	resp, err := server.CreateRendezvousInfo(context.Background(), CreateRendezvousInfoRequestObject{
+		Body: &requestBody,
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should return 409 when config already exists
+	if _, ok := resp.(CreateRendezvousInfo409TextResponse); !ok {
+		t.Errorf("Expected CreateRendezvousInfo409TextResponse, got: %T", resp)
+	}
+
+	// Verify error message
+	if resp409, ok := resp.(CreateRendezvousInfo409TextResponse); ok {
+		if string(resp409) != "rvInfo already exists" {
+			t.Errorf("Expected 'rvInfo already exists', got: %s", string(resp409))
+		}
+	}
+}
+
+// TestUpdateRendezvousInfo_Success verifies that PUT updates existing config
+func TestUpdateRendezvousInfo_Success(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
+
+	// Create initial configuration
+	testData := []byte(`[{"dns":"rv.example.com","protocol":"http","owner_port":"8080"}]`)
+	var rvInfo components.RVInfo
+	if err := json.Unmarshal(testData, &rvInfo); err != nil {
+		t.Fatalf("Failed to unmarshal test data: %v", err)
+	}
+	rvInstructions, err := RVInfoV1ToProtocol(rvInfo)
+	if err != nil {
+		t.Fatalf("Failed to convert to protocol format: %v", err)
+	}
+	err = rvInfoState.CreateRVInfo(context.Background(), rvInstructions)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Update with new data
+	testJSON := []byte(`[{"dns":"rv-new.example.com","protocol":"https","owner_port":"8443"}]`)
+	var requestBody components.RVInfo
+	if err := json.Unmarshal(testJSON, &requestBody); err != nil {
+		t.Fatalf("Failed to unmarshal test JSON: %v", err)
+	}
+
+	resp, err := server.UpdateRendezvousInfo(context.Background(), UpdateRendezvousInfoRequestObject{
+		Body: &requestBody,
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should return 200 on successful update
+	_, ok := resp.(UpdateRendezvousInfo200JSONResponse)
+	if !ok {
+		t.Errorf("Expected UpdateRendezvousInfo200JSONResponse, got: %T", resp)
+	}
+}
+
+// TestUpdateRendezvousInfo_NotFound verifies that PUT returns 404 when config doesn't exist
+func TestUpdateRendezvousInfo_NotFound(t *testing.T) {
+	rvInfoState := setupTestDB(t)
+	server := NewServer(rvInfoState)
+
+	// Try to update without creating first - should fail with 404
+	testJSON := []byte(`[{"dns":"rv.example.com","protocol":"https","owner_port":"8443"}]`)
+	var requestBody components.RVInfo
+	if err := json.Unmarshal(testJSON, &requestBody); err != nil {
+		t.Fatalf("Failed to unmarshal test JSON: %v", err)
+	}
+
+	resp, err := server.UpdateRendezvousInfo(context.Background(), UpdateRendezvousInfoRequestObject{
+		Body: &requestBody,
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should return 404 when config doesn't exist (v1 behavior - requires POST first)
+	if _, ok := resp.(UpdateRendezvousInfo404TextResponse); !ok {
+		t.Errorf("Expected UpdateRendezvousInfo404TextResponse, got: %T", resp)
+	}
+
+	// Verify error message
+	if resp404, ok := resp.(UpdateRendezvousInfo404TextResponse); ok {
+		if string(resp404) != "rvInfo does not exist" {
+			t.Errorf("Expected 'rvInfo does not exist', got: %s", string(resp404))
+		}
 	}
 }

@@ -1,117 +1,127 @@
-// SPDX-FileCopyrightText: (C) 2024 Intel Corporation
+// SPDX-FileCopyrightText: (C) 2025 Red Hat Inc.
 // SPDX-License-Identifier: Apache 2.0
 
-package handlers
+package rvinfo
 
 import (
+	"context"
 	"errors"
-	"io"
 	"log/slog"
-	"net/http"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"gorm.io/gorm"
 )
 
-func RvInfoHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Debug("Received RV request", "method", r.Method, "path", r.URL.Path)
-		switch r.Method {
-		case http.MethodGet:
-			getRvInfo(w, r)
-		case http.MethodPost:
-			createRvInfo(w, r)
-		case http.MethodPut:
-			updateRvInfo(w, r)
-		default:
-			slog.Error("Method not allowed", "method", r.Method, "path", r.URL.Path)
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	}
+// Server implements the StrictServerInterface for RvInfo management (v1 - legacy behavior)
+type Server struct {
+	RvInfoState *state.RvInfoState
 }
 
-func getRvInfo(w http.ResponseWriter, _ *http.Request) {
+func NewServer(rvInfoState *state.RvInfoState) Server {
+	return Server{RvInfoState: rvInfoState}
+}
+
+var _ StrictServerInterface = (*Server)(nil)
+
+// GetRendezvousInfo retrieves the current RvInfo configuration
+// Returns 404 if no configuration exists (v1 legacy behavior)
+func (s *Server) GetRendezvousInfo(ctx context.Context, request GetRendezvousInfoRequestObject) (GetRendezvousInfoResponseObject, error) {
 	slog.Debug("Fetching rvInfo")
-	rvInfo, err := db.FetchRvInfo()
+
+	rvInstructions, err := s.RvInfoState.GetRVInfo(ctx)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, state.ErrRvInfoNotFound) {
 			slog.Error("No rvInfo found")
-			http.Error(w, "No rvInfo found", http.StatusNotFound)
-		} else {
-			slog.Error("Error fetching rvInfo", "error", err)
-			http.Error(w, "Error fetching rvInfo", http.StatusInternalServerError)
+			return GetRendezvousInfo404TextResponse("No rvInfo found"), nil
 		}
-		return
+		slog.Error("Error fetching rvInfo", "error", err)
+		return GetRendezvousInfo500TextResponse("Error fetching rvInfo"), nil
 	}
 
-	rvInfoJSON, err := db.ConvertRvInstructionsToV1JSON(rvInfo)
+	// Convert protocol format to V1 API format
+	rvInfo, err := RVInfoV1FromProtocol(rvInstructions)
 	if err != nil {
-		slog.Error("Error converting rvInfo to JSON", "error", err)
-		http.Error(w, "Error converting rvInfo", http.StatusInternalServerError)
-		return
+		slog.Error("Error converting rvInfo from protocol format", "error", err)
+		return GetRendezvousInfo500TextResponse("Error fetching rvInfo"), nil
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	writeResponse(w, rvInfoJSON)
+	return GetRendezvousInfo200JSONResponse(rvInfo), nil
 }
 
-func createRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
-		return
+// CreateRendezvousInfo creates the RvInfo configuration
+// Returns 409 if configuration already exists (v1 legacy behavior)
+func (s *Server) CreateRendezvousInfo(ctx context.Context, request CreateRendezvousInfoRequestObject) (CreateRendezvousInfoResponseObject, error) {
+	slog.Debug("Creating rvInfo")
+	if request.Body == nil {
+		slog.Error("no rvInfo received")
+		return CreateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
 	}
 
-	if err := db.InsertRvInfo(rvInfo); err != nil {
+	// Convert V1 API format to protocol format
+	rvInstructions, err := RVInfoV1ToProtocol(*request.Body)
+	if err != nil {
+		slog.Error("Error converting to protocol instructions", "error", err)
+		return CreateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
+	}
+
+	// Try to create (will fail if already exists)
+	err = s.RvInfoState.CreateRVInfo(ctx, rvInstructions)
+	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			slog.Error("rvInfo already exists (constraint)", "error", err)
-			http.Error(w, "rvInfo already exists", http.StatusConflict)
-			return
+			return CreateRendezvousInfo409TextResponse("rvInfo already exists"), nil
 		}
-		if errors.Is(err, db.ErrInvalidRvInfo) {
+		if errors.Is(err, state.ErrInvalidRvInfo) {
 			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
-			return
+			return CreateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
 		}
 		slog.Error("Error inserting rvInfo", "error", err)
-		http.Error(w, "Error inserting rvInfo", http.StatusInternalServerError)
-		return
+		return CreateRendezvousInfo500TextResponse("Error inserting rvInfo"), nil
 	}
 
 	slog.Debug("rvInfo created")
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	writeResponse(w, rvInfo)
+	return CreateRendezvousInfo201JSONResponse(*request.Body), nil
 }
 
-func updateRvInfo(w http.ResponseWriter, r *http.Request) {
-	rvInfo, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("Error reading body", "error", err)
-		http.Error(w, "Error reading body", http.StatusInternalServerError)
-		return
+// UpdateRendezvousInfo updates the RvInfo configuration
+// Returns 404 if configuration doesn't exist (v1 legacy behavior - requires POST first)
+func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezvousInfoRequestObject) (UpdateRendezvousInfoResponseObject, error) {
+	slog.Debug("Updating rvInfo")
+	if request.Body == nil {
+		return UpdateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
 	}
 
-	if err := db.UpdateRvInfo(rvInfo); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	// Check if exists first (v1 behavior: PUT fails if doesn't exist)
+	_, err := s.RvInfoState.GetRVInfo(ctx)
+	if err != nil {
+		if errors.Is(err, state.ErrRvInfoNotFound) {
 			slog.Error("rvInfo does not exist, cannot update")
-			http.Error(w, "rvInfo does not exist", http.StatusNotFound)
-			return
+			return UpdateRendezvousInfo404TextResponse("rvInfo does not exist"), nil
 		}
-		if errors.Is(err, db.ErrInvalidRvInfo) {
+		slog.Error("Error checking rvInfo", "error", err)
+		return UpdateRendezvousInfo500TextResponse("Error updating rvInfo"), nil
+	}
+
+	// Convert V1 API format to protocol format
+	rvInstructions, err := RVInfoV1ToProtocol(*request.Body)
+	if err != nil {
+		slog.Error("Error converting to protocol instructions", "error", err)
+		return UpdateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
+	}
+
+	// Update the configuration
+	err = s.RvInfoState.UpdateRVInfo(ctx, rvInstructions)
+	if err != nil {
+		if errors.Is(err, state.ErrInvalidRvInfo) {
 			slog.Error("Invalid rvInfo payload", "error", err)
-			http.Error(w, "Invalid rvInfo", http.StatusBadRequest)
-			return
+			return UpdateRendezvousInfo400TextResponse("Invalid rvInfo"), nil
 		}
 		slog.Error("Error updating rvInfo", "error", err)
-		http.Error(w, "Error updating rvInfo", http.StatusInternalServerError)
-		return
+		return UpdateRendezvousInfo500TextResponse("Error updating rvInfo"), nil
 	}
 
 	slog.Debug("rvInfo updated")
 
-	w.Header().Set("Content-Type", "application/json")
-	writeResponse(w, rvInfo)
+	return UpdateRendezvousInfo200JSONResponse(*request.Body), nil
 }
