@@ -1,19 +1,20 @@
 openapi: 3.0.0
 info:
-  title: FDO Manufacturer Server API
-  version: 1.0.0
+  title: FDO Owner Server API (Deprecated)
+  version: 1.1.0
   description: |
-    API for the FDO Manufacturer Server role. The Manufacturer Server is responsible
-    for device initialization, creating ownership vouchers, and configuring rendezvous
-    information for newly manufactured devices.
+    API for the FDO Owner Server role. The Owner Server is responsible for managing
+    device ownership, including ownership vouchers, trusted device CA certificates,
+    and rendezvous TO2 addresses for device onboarding.
 
     This specification aggregates the following management APIs:
-    - Ownership Voucher Management (/v1/vouchers)
-    - Rendezvous Info Configuration (/v1/rvinfo)
+    - Ownership Voucher Management (/api/v1/vouchers)
+    - Trusted Device CA Certificates (/api/v1/device-ca)
+    - RVTO2 Address Configuration (/api/v1/rvto2addr)
 
     ## API Versioning
     This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major
-    version in the URL path (e.g., `/v1/vouchers`).
+    version in the URL path (e.g., `/api/v1/vouchers`).
 
     - **MAJOR version** changes indicate breaking changes (incompatible API changes)
     - **MINOR version** changes add functionality in a backward-compatible manner
@@ -54,18 +55,20 @@ info:
 tags:
   - name: health
     description: Server's health monitoring
-  - name: rvinfo
-    description: Operations related to rendezvous info management
+  - name: device-ca
+    description: Operations related to trusted device CA certificates management
+  - name: rvto2addr
+    description: Operations related to rendezvous TO2 address management
   - name: voucher
     description: Operations related to ownership voucher management
 paths:
   /health:
-    $ref: 'health.yaml#/paths/~1health'
-  /v1/vouchers:
-    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers'
-  /v1/vouchers/{guid}:
-    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers~1{guid}'
-  /v1/rvinfo:
-    $ref: '../v1/rvinfo/openapi.yaml#/paths/~1rvinfo'
-  /v2/rvinfo:
-    $ref: 'rvinfo.yaml#/paths/~1rvinfo'
+    $ref: ../health/openapi.yaml#/paths/~1health
+  /api/v1/owner/vouchers:
+    $ref: ../voucher/openapi.yaml#/paths/~1vouchers
+  /api/v1/owner/vouchers/{guid}:
+    $ref: ../voucher/openapi.yaml#/paths/~1vouchers~1{guid}
+  /api/v1/owner/resell/{guid}:
+    $ref: ../resell/openapi.yaml#/paths/~1resell~1{guid}
+  /api/v1/owner/redirect:
+    $ref: ../ownerinfo/openapi.yaml#/paths/~1owner~1redirect

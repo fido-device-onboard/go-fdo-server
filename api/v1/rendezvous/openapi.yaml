@@ -1,19 +1,18 @@
 openapi: 3.0.0
 info:
-  title: FDO Manufacturer Server API
+  title: FDO Rendezvous Server API
   version: 1.0.0
   description: |
-    API for the FDO Manufacturer Server role. The Manufacturer Server is responsible
-    for device initialization, creating ownership vouchers, and configuring rendezvous
-    information for newly manufactured devices.
+    API for the FDO Rendezvous Server role. The Rendezvous Server acts as an intermediary
+    between devices and owners during the device onboarding process (TO2 protocol).
+    It manages trusted device CA certificates to verify device authenticity.
 
     This specification aggregates the following management APIs:
-    - Ownership Voucher Management (/v1/vouchers)
-    - Rendezvous Info Configuration (/v1/rvinfo)
+    - Trusted Device CA Certificates (/api/v1/device-ca)
 
     ## API Versioning
     This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major
-    version in the URL path (e.g., `/v1/vouchers`).
+    version in the URL path (e.g., `/api/v1/device-ca`).
 
     - **MAJOR version** changes indicate breaking changes (incompatible API changes)
     - **MINOR version** changes add functionality in a backward-compatible manner
@@ -54,18 +53,12 @@ info:
 tags:
   - name: health
     description: Server's health monitoring
-  - name: rvinfo
-    description: Operations related to rendezvous info management
-  - name: voucher
-    description: Operations related to ownership voucher management
+  - name: device-ca
+    description: Operations related to trusted device CA certificates management
 paths:
   /health:
-    $ref: 'health.yaml#/paths/~1health'
-  /v1/vouchers:
-    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers'
-  /v1/vouchers/{guid}:
-    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers~1{guid}'
-  /v1/rvinfo:
-    $ref: '../v1/rvinfo/openapi.yaml#/paths/~1rvinfo'
-  /v2/rvinfo:
-    $ref: 'rvinfo.yaml#/paths/~1rvinfo'
+    $ref: ../health/openapi.yaml#/paths/~1health
+  /api/v1/device-ca:
+    $ref: ../deviceca/openapi.yaml#/paths/~1device-ca'
+  /api/v1/device-ca/{fingerprint}:
+    $ref: ../deviceca/openapi.yaml#/paths/~1device-ca~1{fingerprint}
