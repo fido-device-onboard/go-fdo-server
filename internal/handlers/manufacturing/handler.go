@@ -98,10 +98,8 @@ func (m *Manufacturing) Handler() http.Handler {
 				*ov = *extended
 				return nil
 			},
-			RvInfo: func(ctx context.Context, _ *fdo_lib.Voucher) ([][]protocol.RvInstruction, error) {
-				// Use unified rvinfo table (supports both V1 and V2 APIs)
-				// Handles automatic migration from JSON to CBOR format
-				return db.FetchRvInfo()
+			RvInfo: func(ctx context.Context, voucher *fdo_lib.Voucher) ([][]protocol.RvInstruction, error) {
+				return voucher.Header.Val.RvInfo, nil
 			},
 		},
 	}
