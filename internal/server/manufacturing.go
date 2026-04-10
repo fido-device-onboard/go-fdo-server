@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fido-device-onboard/go-fdo-server/api/v1/manufacturer"
 	"github.com/fido-device-onboard/go-fdo-server/internal/config"
+	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/manufacturing"
 	"gorm.io/gorm"
 )
 
@@ -38,7 +38,7 @@ func NewManufacturingServer(config config.ManufacturingServerConfig) (*Manufactu
 	}
 
 	// Create manufacturer handler
-	mfg := manufacturer.NewManufacturer(gormDB, &config)
+	mfg := manufacturing.NewManufacturing(gormDB, &config)
 	if err := mfg.InitDB(); err != nil {
 		return nil, fmt.Errorf("failed to initialize manufacturing state: %w", err)
 	}
