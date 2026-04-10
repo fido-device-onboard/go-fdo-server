@@ -62,10 +62,10 @@ paths:
   /health:
     $ref: 'health.yaml#/paths/~1health'
   /v1/vouchers:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers'
+    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers'
   /v1/vouchers/{guid}:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}'
-  /v1/vouchers/{guid}/extend:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}~1extend'
+    $ref: '../v1/voucher/openapi.yaml#/paths/~1vouchers~1{guid}'
   /v1/rvinfo:
+    $ref: '../v1/rvinfo/openapi.yaml#/paths/~1rvinfo'
+  /v2/rvinfo:
     $ref: 'rvinfo.yaml#/paths/~1rvinfo'

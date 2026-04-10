@@ -5,7 +5,6 @@ package rvinfo
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 
@@ -29,7 +28,7 @@ func (s *Server) GetRendezvousInfo(ctx context.Context, request GetRendezvousInf
 	slog.Debug("GetRendezvousInfo called")
 
 	// Fetch RV info from state (returns [][]protocol.RvInstruction)
-	rvInstructions, err := s.RvInfo.FetchRvInfo(ctx)
+	rvInstructions, err := s.RvInfo.GetRVInfo(ctx)
 	if err != nil {
 		if errors.Is(err, state.ErrRvInfoNotFound) {
 			// Return empty array if no configuration set
@@ -42,21 +41,12 @@ func (s *Server) GetRendezvousInfo(ctx context.Context, request GetRendezvousInf
 		}, nil
 	}
 
-	// Convert to V2 JSON format (API layer responsibility)
-	rvInfoJSON, err := convertToV2JSON(rvInstructions)
+	// Convert protocol format to V2 API format
+	rvInfo, err := RVInfoV2FromProtocol(rvInstructions)
 	if err != nil {
-		slog.Error("failed to convert RV info to JSON", "error", err)
+		slog.Error("failed to convert RV info from protocol format", "error", err)
 		return GetRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to format rendezvous info"},
-		}, nil
-	}
-
-	// Unmarshal JSON to components.RVInfo
-	var rvInfo components.RVInfo
-	if err := json.Unmarshal(rvInfoJSON, &rvInfo); err != nil {
-		slog.Error("failed to unmarshal RV info", "error", err)
-		return GetRendezvousInfo500JSONResponse{
-			components.InternalServerError{Message: "failed to parse rendezvous info"},
 		}, nil
 	}
 
@@ -74,17 +64,8 @@ func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezv
 		}, nil
 	}
 
-	// Marshal request body to JSON
-	rvInfoJSON, err := json.Marshal(request.Body)
-	if err != nil {
-		slog.Error("failed to marshal RV info", "error", err)
-		return UpdateRendezvousInfo400JSONResponse{
-			components.BadRequest{Message: "invalid rendezvous info format"},
-		}, nil
-	}
-
-	// Parse and validate the RV info (API layer responsibility)
-	rvInstructions, err := parseV2JSON(rvInfoJSON)
+	// Convert V2 API format to protocol format
+	rvInstructions, err := RVInfoV2ToProtocol(*request.Body)
 	if err != nil {
 		slog.Warn("invalid RV info format", "error", err)
 		return UpdateRendezvousInfo400JSONResponse{
@@ -93,7 +74,7 @@ func (s *Server) UpdateRendezvousInfo(ctx context.Context, request UpdateRendezv
 	}
 
 	// Atomically insert or update (prevents race conditions)
-	if err := s.RvInfo.UpsertRvInfo(ctx, rvInstructions); err != nil {
+	if err := s.RvInfo.CreateOrUpdateRVInfo(ctx, rvInstructions); err != nil {
 		slog.Error("failed to save RV info", "error", err)
 		return UpdateRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to save rendezvous info"},
@@ -109,7 +90,7 @@ func (s *Server) DeleteRendezvousInfo(ctx context.Context, request DeleteRendezv
 	slog.Debug("DeleteRendezvousInfo called")
 
 	// Fetch current RV info before deletion (to return it)
-	rvInstructions, err := s.RvInfo.FetchRvInfo(ctx)
+	rvInstructions, err := s.RvInfo.GetRVInfo(ctx)
 	if err != nil {
 		if errors.Is(err, state.ErrRvInfoNotFound) {
 			// No configuration set, return empty array
@@ -122,21 +103,12 @@ func (s *Server) DeleteRendezvousInfo(ctx context.Context, request DeleteRendezv
 		}, nil
 	}
 
-	// Convert to V2 JSON format (API layer responsibility)
-	rvInfoJSON, err := convertToV2JSON(rvInstructions)
+	// Convert protocol format to V2 API format
+	rvInfo, err := RVInfoV2FromProtocol(rvInstructions)
 	if err != nil {
-		slog.Error("failed to convert RV info to JSON", "error", err)
+		slog.Error("failed to convert RV info from protocol format", "error", err)
 		return DeleteRendezvousInfo500JSONResponse{
 			components.InternalServerError{Message: "failed to format rendezvous info"},
-		}, nil
-	}
-
-	// Unmarshal to return in response
-	var rvInfo components.RVInfo
-	if err := json.Unmarshal(rvInfoJSON, &rvInfo); err != nil {
-		slog.Error("failed to unmarshal RV info", "error", err)
-		return DeleteRendezvousInfo500JSONResponse{
-			components.InternalServerError{Message: "failed to parse rendezvous info"},
 		}, nil
 	}
 

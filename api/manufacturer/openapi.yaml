@@ -75,414 +75,393 @@ paths:
         - health
   /v1/vouchers:
     get:
-      operationId: ListOwnershipVouchers
-      summary: List all ownership vouchers
+      operationId: ListVouchers
+      summary: Query ownership vouchers (Deprecated)
       description: |
-        Retrieves a paginated, filterable, and sortable list of all ownership vouchers.
+        Returns a list of ownership vouchers matching optional filter criteria.
 
-        Use the Accept header to specify the response format:
-        - `application/json` - Returns voucher metadata as JSON (default)
-        - `application/x-pem-file` - Returns vouchers as concatenated PEM file
-
-        If no Accept header is provided, the response defaults to `application/json`.
+        Results are ordered by updated_at timestamp in descending order.
+        The CBOR field is omitted from results (use GET /vouchers/{guid} to retrieve full voucher).
       parameters:
-        - name: limit
-          in: query
-          description: The number of items to return per page.
-          required: false
-          schema:
-            type: integer
-            default: 20
-            maximum: 100
-            minimum: 1
-        - name: offset
-          in: query
-          description: The number of items to skip before starting to collect the result set.
-          required: false
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
         - name: guid
           in: query
-          description: Filters the results by the exact device GUID.
-          required: false
+          description: Filter by device GUID (hex-encoded)
           schema:
             type: string
-            example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
-        - name: deviceInfo
+            example: 3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c
+            pattern: '^[0-9a-fA-F]{32}$'
+        - name: device_info
           in: query
-          description: Filters the results by device information (case-insensitive partial match).
-          required: false
+          description: Filter by device info string
           schema:
             type: string
-        - name: search
-          in: query
-          description: Searches within device info and GUID fields (case-insensitive).
-          required: false
-          schema:
-            type: string
-        - name: sortBy
-          in: query
-          description: Sorts the results by the specified field.
-          required: false
-          schema:
-            type: string
-            default: createdAt
-            enum:
-              - createdAt
-              - updatedAt
-              - guid
-              - deviceInfo
-        - name: sortOrder
-          in: query
-          description: Specifies the sorting order.
-          required: false
-          schema:
-            type: string
-            default: asc
-            enum:
-              - asc
-              - desc
+            example: MyDevice
       responses:
         '200':
-          description: A paginated list of ownership vouchers.
+          description: Successfully retrieved voucher list
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OwnershipVouchersPaginated'
+                type: array
+                items:
+                  $ref: '#/components/schemas/VoucherMetadata'
               examples:
-                success:
-                  summary: Example of a successful response
-                  description: |
-                    Shows page 1 of results (items 0-19 of 2 total).
-                    To navigate pages:
-                    - Next page: GET /vouchers?limit=20&offset=20
-                    - Previous page: GET /vouchers?limit=20&offset=0 (already at first page)
-                    - Total pages: ceil(total / limit) = ceil(2 / 20) = 1
+                emptyList:
+                  summary: No vouchers found
+                  value: []
+                voucherList:
+                  summary: List of vouchers
                   value:
-                    total: 2
-                    limit: 20
-                    offset: 0
-                    vouchers:
-                      - voucher:
-                          guid: d21d841a3f54f4e89a60ed9b9779e9e8
-                          protocolVersion: 101
-                          deviceInfo: Intel Device
-                          numEntries: 1
-                        createdAt: '2025-05-10T10:30:00Z'
-                        updatedAt: '2025-05-10T10:30:00Z'
-                      - voucher:
-                          guid: a1b2c3d4e5f6789012345678abcdef01
-                          protocolVersion: 101
-                          deviceInfo: ARM IoT Device
-                          numEntries: 2
-                        createdAt: '2025-06-20T12:00:00Z'
-                        updatedAt: '2025-06-21T08:15:00Z'
-            application/x-pem-file:
-              schema:
-                type: string
-              examples:
-                getPEMVouchers:
-                  summary: Example of a successful response
-                  value: |
-                    -----BEGIN OWNERSHIP VOUCHER-----
-                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
-                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
-                    ...
-                    -----END OWNERSHIP VOUCHER-----
-                    -----BEGIN OWNERSHIP VOUCHER-----
-                    oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
-                    GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
-                    ...
-                    -----END OWNERSHIP VOUCHER-----
+                    - guid: 3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c
+                      device_info: Device 1
+                      created_at: '2024-01-15T10:30:00Z'
+                      updated_at: '2024-01-15T10:30:00Z'
+                    - guid: a1b2c3d4e5f6789012345678abcdef01
+                      device_info: Device 2
+                      created_at: '2024-01-14T09:20:00Z'
+                      updated_at: '2024-01-14T09:20:00Z'
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Invalid query parameters
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: 'Invalid GUID: xyz'
         '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Internal server error occurred while querying vouchers
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
       tags:
-        - voucher
+        - vouchers
     post:
-      operationId: ImportOwnershipVouchers
-      summary: Import ownership voucher(s)
+      operationId: InsertVoucher
+      summary: Insert ownership voucher(s) (Deprecated)
       description: |
-        Imports one or more ownership vouchers into the system.
+        Inserts one or more ownership vouchers into the database.
 
-        This operation is idempotent:
-        - Valid vouchers that don't exist in the database are imported
-        - Vouchers that already exist (duplicate GUID) are rejected with a 409 error
-        - Malformed or invalid vouchers are rejected with a 400 error
+        The request body should contain PEM-encoded ownership voucher(s).
+        Each voucher is verified for:
+        - Ownership (voucher owner key matches server's configured keys)
+        - Cryptographic integrity (signature chain, certificate chains, etc.)
+        - Protocol version and header field validity
 
-        Ownership vouchers can be provided in PEM or JSON format.
-        You can import a single voucher or an array of vouchers.
+        Duplicate vouchers (same GUID with same CBOR data) are silently skipped.
+        Existing vouchers (same GUID with different CBOR data) are not overwritten and are silently skipped.
+
+        The operation succeeds (200 OK) even if all vouchers were duplicates/skipped.
       requestBody:
-        description: One or more ownership vouchers in PEM or JSON format.
+        description: PEM-encoded ownership voucher(s)
         required: true
         content:
           application/x-pem-file:
             schema:
               type: string
-              maxLength: 1048576
-            examples:
-              importFromPEM:
-                summary: Example of importing vouchers from PEM
-                value: |
-                  -----BEGIN OWNERSHIP VOUCHER-----
-                  oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
-                  AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg
-                  ...
-                  -----END OWNERSHIP VOUCHER-----
-                  -----BEGIN OWNERSHIP VOUCHER-----
-                  oWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB
-                  GQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy
-                  ...
-                  -----END OWNERSHIP VOUCHER-----
+              format: binary
+            example: |
+              -----BEGIN OWNERSHIP VOUCHER-----
+              [base64-encoded CBOR data]
+              -----END OWNERSHIP VOUCHER-----
       responses:
-        '201':
-          description: Ownership voucher(s) imported successfully.
+        '200':
+          description: Voucher(s) successfully inserted or were duplicates
           content:
-            application/json:
+            text/plain:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
-                  - type: array
-                    items:
-                      $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
-              examples:
-                success:
-                  summary: Vouchers successfully imported
-                  value:
-                    - voucher:
-                        guid: d21d841a3f54f4e89a60ed9b9779e9e8
-                        protocolVersion: 101
-                        deviceInfo: Intel Device
-                        numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
-                    - voucher:
-                        guid: a1b2c3d4e5f6789012345678abcdef01
-                        protocolVersion: 101
-                        deviceInfo: ARM IoT Device
-                        numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
+                type: string
+                example: ''
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          description: Conflict - A voucher with this GUID already exists.
+          description: Invalid voucher data or verification failed
           content:
-            application/json:
+            text/plain:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorString'
+              examples:
+                decodeCborError:
+                  summary: Unable to decode CBOR
+                  value: Unable to decode cbor
+                invalidVoucher:
+                  summary: Voucher verification failed
+                  value: Invalid ownership voucher
+                decodePemError:
+                  summary: Unable to decode PEM
+                  value: Unable to decode PEM content
         '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Internal server error occurred while inserting voucher
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              examples:
+                readBodyError:
+                  summary: Error reading request body
+                  value: Failure to read the request body
+                insertError:
+                  summary: Error inserting into database
+                  value: Internal server error
       tags:
-        - voucher
+        - vouchers
   '/v1/vouchers/{guid}':
     get:
-      operationId: GetOwnershipVoucherByGuid
-      summary: Get an ownership voucher by GUID
+      operationId: GetVoucherByGUID
+      summary: Get ownership voucher by GUID (Deprecated)
       description: |
         Retrieves a specific ownership voucher by its device GUID.
 
-        Use the Accept header to specify the response format:
-        - `application/json` - Returns voucher metadata as JSON (default)
-        - `application/x-pem-file` - Returns voucher as PEM file
-
-        If no Accept header is provided, the response defaults to `application/json`.
+        Returns the voucher in PEM format with full CBOR data.
       parameters:
         - name: guid
           in: path
-          description: The device GUID (32 hexadecimal characters).
+          description: 'Device GUID (hex-encoded, 32 characters)'
           required: true
           schema:
             type: string
-            example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            example: 3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c
+            pattern: '^[0-9a-fA-F]{32}$'
       responses:
         '200':
-          description: The requested ownership voucher.
+          description: Successfully retrieved the ownership voucher
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+              example: |
+                -----BEGIN OWNERSHIP VOUCHER-----
+                [base64-encoded CBOR data]
+                -----END OWNERSHIP VOUCHER-----
+        '400':
+          description: Invalid GUID format
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              examples:
+                invalidGuid:
+                  summary: Invalid GUID
+                  value: Invalid GUID
+                invalidFormat:
+                  summary: Invalid GUID format
+                  value: Invalid GUID format
+        '404':
+          description: Voucher not found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: Voucher not found
+        '500':
+          description: Internal server error occurred
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+      tags:
+        - vouchers
+  /v1/rvinfo:
+    get:
+      operationId: GetRendezvousInfo
+      summary: Get the current RendezvousInfo (Deprecated)
+      description: Retrieves the current rendezvous information configuration that devices will use to connect to the rendezvous server.
+      responses:
+        '200':
+          description: Successfully retrieved the RendezvousInfo configuration.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OwnershipVoucher'
+                $ref: '#/components/schemas/RVInfo'
               examples:
-                getVoucherJson:
-                  summary: Example JSON voucher response
+                simpleHttpRendezvous:
+                  summary: Simple HTTP rendezvous configuration
                   value:
-                    guid: d21d841a3f54f4e89a60ed9b9779e9e8
-                    protocolVersion: 101
-                    deviceInfo: Intel Device
-                    numEntries: 1
-                    header:
-                      version: 101
-                      guid: d21d841a3f54f4e89a60ed9b9779e9e8
-                      rvInfo:
-                        - - dns: rendezvous.example.com
-                          - protocol: http
-                          - owner_port: 8080
-                      deviceInfo: Intel Device
-                      manufacturerKey:
-                        type: SECP256R1
-                        value: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
-                      certChainHash:
-                        algorithm: SHA-384
-                        value: a1b2c3d4...
-                    hmac:
-                      algorithm: HMAC-SHA-384
-                      value: e5f6a7b8...
-                    certChain:
-                      - '-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'
-                    entries:
-                      - previousHash:
-                          algorithm: SHA-384
-                          value: 00000000...
-                        headerHash:
-                          algorithm: SHA-384
-                          value: c3d4e5f6...
-                        publicKey:
-                          type: SECP256R1
-                          value: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
-            application/x-pem-file:
+                    - dns: rendezvous.example.com
+                      protocol: http
+                      owner_port: '8080'
+                httpsRendezvousWithCertHash:
+                  summary: HTTPS rendezvous with certificate hash validation
+                  value:
+                    - dns: rv.example.com
+                      protocol: https
+                      owner_port: '8443'
+                      sv_cert_hash: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01
+                multipleRendezvousServers:
+                  summary: Multiple rendezvous servers with fallback
+                  value:
+                    - dns: rv-primary.example.com
+                      protocol: https
+                      owner_port: '8443'
+                    - dns: rv-fallback.example.com
+                      protocol: https
+                      owner_port: '8443'
+                      delay_seconds: 30
+        '404':
+          description: No RendezvousInfo configuration has been created yet.
+          content:
+            text/plain:
               schema:
-                description: The voucher content in PEM format.
-                type: string
-              examples:
-                getVoucherPem:
-                  summary: Example PEM voucher response
-                  value: |
-                    -----BEGIN OWNERSHIP VOUCHER-----
-                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
-                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
-                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
-                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
-                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXk=
-                    -----END OWNERSHIP VOUCHER-----
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                $ref: '#/components/schemas/ErrorString'
+              example: No rvInfo found
         '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Internal server error occurred while fetching the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: Error fetching rvInfo
       tags:
-        - voucher
-    delete:
-      operationId: DeleteOwnershipVoucher
-      summary: Delete an ownership voucher by GUID
-      description: Deletes a specific ownership voucher by its device GUID.
-      parameters:
-        - name: guid
-          in: path
-          description: The device GUID (32 hexadecimal characters).
-          required: true
-          schema:
-            type: string
-            example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
-      responses:
-        '204':
-          description: Ownership voucher deleted successfully.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-      tags:
-        - voucher
-  '/v1/vouchers/{guid}/extend':
+        - rvinfo
     post:
-      operationId: ExtendOwnershipVoucher
-      summary: Extend an ownership voucher
+      operationId: CreateRendezvousInfo
+      summary: Create the RendezvousInfo configuration (Deprecated)
       description: |
-        Extends an ownership voucher by adding a new ownership entry. This operation
-        is used to transfer ownership of a device from one owner to another.
+        Creates the rendezvous information configuration.
 
-        The request must include the new owner's public key and will be signed
-        with the current owner's private key.
-      parameters:
-        - name: guid
-          in: path
-          description: The device GUID (32 hexadecimal characters).
-          required: true
-          schema:
-            type: string
-            example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+        This operation will fail if a configuration already exists. Use PUT to update an existing configuration.
       requestBody:
-        description: New owner's public key or certificate in PEM format.
+        description: The new RendezvousInfo configuration
         required: true
         content:
-          application/x-pem-file:
+          application/json:
             schema:
-              type: string
+              $ref: '#/components/schemas/RVInfo'
             examples:
-              extendWithPublicKey:
-                summary: Extend voucher with PEM encoded public key
-                value: |
-                  -----BEGIN PUBLIC KEY-----
-                  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaXhXuQUiGqKv5VqJ3VZqDz7XJ8v5
-                  KxMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8Pw==
-                  -----END PUBLIC KEY-----
-              extendWithCertificate:
-                summary: Extend voucher with PEM encoded certificate
-                value: |
-                  -----BEGIN CERTIFICATE-----
-                  MIICljCCAX4CCQDqJ0HQqh0W5jANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV
-                  UzAeFw0yNTEwMjcxNDAwMDBaFw0yNjEwMjcxNDAwMDBaMA0xCzAJBgNVBAYTAlVT
-                  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx2q5VqJ3VZqDz7XJ8v5K
-                  xMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PwIDAQAB
-                  MA0GCSqGSIb3DQEBCwUAA4IBAQBqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3Yq
-                  N8PzGqKJ5vZ3YqN8Pw==
-                  -----END CERTIFICATE-----
+              createHttps:
+                summary: Create HTTPS rendezvous
+                value:
+                  - dns: rv-new.example.com
+                    protocol: https
+                    owner_port: '8443'
+              createMultipleServers:
+                summary: Create with primary and fallback servers
+                value:
+                  - dns: rv-primary.example.com
+                    protocol: https
+                    owner_port: '8443'
+                  - dns: rv-fallback.example.com
+                    protocol: https
+                    owner_port: '8443'
+                    delay_seconds: 60
+      responses:
+        '201':
+          description: Successfully created the RendezvousInfo configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RVInfo'
+              examples:
+                createdHttpsConfiguration:
+                  summary: Successfully created HTTPS configuration
+                  value:
+                    - dns: rv-new.example.com
+                      protocol: https
+                      owner_port: '8443'
+        '400':
+          description: Invalid RendezvousInfo configuration provided in the request body.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: Invalid rvInfo
+        '409':
+          description: RendezvousInfo configuration already exists. Use PUT to update instead.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: rvInfo already exists
+        '500':
+          description: Internal server error occurred while creating the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              examples:
+                readError:
+                  summary: Error reading request body
+                  value: Error reading body
+                insertError:
+                  summary: Error inserting into database
+                  value: Error inserting rvInfo
+      tags:
+        - rvinfo
+    put:
+      operationId: UpdateRendezvousInfo
+      summary: Update the RendezvousInfo configuration (Deprecated)
+      description: |
+        Updates the rendezvous information configuration.
+
+        This operation will fail if no configuration exists. Use POST to create a new configuration.
+        The new configuration will be used by newly manufactured or initialized devices.
+        Existing devices will continue using their current rendezvous information.
+      requestBody:
+        description: The updated RendezvousInfo configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RVInfo'
+            examples:
+              updateToHttps:
+                summary: Update to HTTPS rendezvous
+                value:
+                  - dns: rv-secure.example.com
+                    protocol: https
+                    owner_port: '8443'
+              updateWithMultipleServers:
+                summary: Update with primary and fallback servers
+                value:
+                  - dns: rv-primary.example.com
+                    protocol: https
+                    owner_port: '8443'
+                  - dns: rv-fallback.example.com
+                    protocol: https
+                    owner_port: '8443'
+                    delay_seconds: 60
       responses:
         '200':
-          description: Ownership voucher extended successfully.
+          description: Successfully updated the RendezvousInfo configuration.
           content:
-            application/x-pem-file:
+            application/json:
               schema:
-                description: The extended voucher in PEM format.
-                type: string
+                $ref: '#/components/schemas/RVInfo'
               examples:
-                extendedVoucher:
-                  summary: Extended voucher in PEM format
-                  value: |
-                    -----BEGIN OWNERSHIP VOUCHER-----
-                    oWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB
-                    AligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2
-                    aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD
-                    aGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2
-                    b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlY
-                    a6EBAmhta2V5dmFsdWUGaGNlcnRDaGFpbkhhc2ihaEFsZ29yaXRobUhTSEEt
-                    Mzg0aVZhbHVlWDCwkz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNl
-                    IGluZm9ybWF0aW9uBWJtZnJLZXk=
-                    -----END OWNERSHIP VOUCHER-----
+                updatedHttpsConfiguration:
+                  summary: Successfully updated to HTTPS configuration
+                  value:
+                    - dns: rv-secure.example.com
+                      protocol: https
+                      owner_port: '8443'
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Invalid RendezvousInfo configuration provided in the request body.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: Invalid rvInfo
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: RendezvousInfo configuration does not exist. Use POST to create it first.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              example: rvInfo does not exist
         '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Internal server error occurred while updating the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorString'
+              examples:
+                readError:
+                  summary: Error reading request body
+                  value: Error reading body
+                updateError:
+                  summary: Error updating in database
+                  value: Error updating rvInfo
       tags:
-        - voucher
-  /v1/rvinfo:
+        - rvinfo
+  /v2/rvinfo:
     get:
       operationId: GetRendezvousInfo
       summary: Get the current RendezvousInfo
@@ -493,7 +472,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RVInfo'
+                $ref: '#/components/schemas/RVInfo1'
               examples:
                 simpleHttpRendezvous:
                   summary: Simple HTTP rendezvous configuration
@@ -566,7 +545,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RVInfo'
+              $ref: '#/components/schemas/RVInfo1'
             examples:
               updateToHttps:
                 summary: Update to HTTPS rendezvous
@@ -607,7 +586,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RVInfo'
+                $ref: '#/components/schemas/RVInfo1'
               examples:
                 updatedHttpsConfiguration:
                   summary: Successfully updated to HTTPS configuration
@@ -658,7 +637,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RVInfo'
+                $ref: '#/components/schemas/RVInfo1'
               examples:
                 deletedHttpsConfiguration:
                   summary: Deleted HTTPS rendezvous configuration
@@ -716,84 +695,174 @@ components:
           type: string
       required:
         - message
-    VoucherGuid:
-      description: The device GUID (32 hexadecimal characters).
-      type: string
-      example: d21d841a3f54f4e89a60ed9b9779e9e8
-      pattern: '^[a-f0-9]{32}$'
-    VoucherProtocolVersion:
-      description: 'The FDO protocol version (e.g., 101 for version 1.1).'
-      type: integer
-      example: 101
-    VoucherDeviceInfo:
-      description: Device information string.
-      type: string
-      example: Intel Device
-      maxLength: 256
-    VoucherNumEntries:
-      description: Number of ownership entries in the voucher.
-      type: integer
-      example: 1
-      minimum: 0
-    OwnershipVoucherSummary:
+    VoucherMetadata:
+      description: Ownership voucher metadata (excludes CBOR data)
       type: object
       properties:
         guid:
-          $ref: '#/components/schemas/VoucherGuid'
-        protocolVersion:
-          $ref: '#/components/schemas/VoucherProtocolVersion'
-        deviceInfo:
-          $ref: '#/components/schemas/VoucherDeviceInfo'
-        numEntries:
-          $ref: '#/components/schemas/VoucherNumEntries'
+          description: Device GUID (hex-encoded)
+          type: string
+          example: 3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c
+        device_info:
+          description: Device information string
+          type: string
+          example: Intel NUC Model XYZ
+        created_at:
+          description: Timestamp when voucher was first inserted
+          type: string
+          format: date-time
+          example: '2024-01-15T10:30:00Z'
+        updated_at:
+          description: Timestamp when voucher was last updated
+          type: string
+          format: date-time
+          example: '2024-01-15T10:30:00Z'
       required:
         - guid
-        - protocolVersion
-        - deviceInfo
-        - numEntries
-    OwnershipVoucherCreatedAt:
-      description: The timestamp when the voucher was created.
+        - device_info
+        - created_at
+        - updated_at
+    ErrorString:
+      description: A human-readable error message.
       type: string
-      format: date-time
-    OwnershipVoucherUpdatedAt:
-      description: The timestamp when the voucher was last updated.
-      type: string
-      format: date-time
-    OwnershipVoucherSummaryInfo:
-      type: object
-      properties:
-        voucher:
-          $ref: '#/components/schemas/OwnershipVoucherSummary'
-        createdAt:
-          $ref: '#/components/schemas/OwnershipVoucherCreatedAt'
-        updatedAt:
-          $ref: '#/components/schemas/OwnershipVoucherUpdatedAt'
-      required:
-        - voucher
-        - createdAt
-        - updatedAt
-    OwnershipVouchersPaginated:
-      type: object
-      properties:
-        total:
-          description: Total number of ownership vouchers available.
-          type: integer
-        limit:
-          description: The number of items returned in this response.
-          type: integer
-        offset:
-          description: The offset from the beginning of the collection.
-          type: integer
-        vouchers:
-          type: array
-          items:
-            $ref: '#/components/schemas/OwnershipVoucherSummaryInfo'
-      required:
-        - total
-        - limit
-        - offset
-        - vouchers
     DNSHostname:
+      type: string
+      format: hostname
+      example: rendezvous.example.com
+    IPv4Address:
+      type: string
+      format: ipv4
+      example: 192.168.1.100
+    ProtocolType:
+      description: |
+        Protocol to use for communication:
+        - `rest` - RESTful HTTP/HTTPS
+        - `http` - HTTP protocol
+        - `https` - HTTPS protocol (recommended for production)
+        - `tcp` - Raw TCP connection
+        - `tls` - TLS-secured TCP connection
+        - `coap+tcp` - CoAP over TCP
+        - `coap` - Constrained Application Protocol
+      type: string
+      example: https
+      enum:
+        - rest
+        - http
+        - https
+        - tcp
+        - tls
+        - coap+tcp
+        - coap
+    PortString:
+      type: string
+      example: '8443'
+    RVDirective:
+      description: |
+        A single rendezvous directive containing connection parameters.
+        At least one of `dns` or `ip` must be specified.
+      type: object
+      properties:
+        dns:
+          description: DNS hostname for the server
+          $ref: '#/components/schemas/DNSHostname'
+        ip:
+          description: IPv4 address for the server
+          $ref: '#/components/schemas/IPv4Address'
+        protocol:
+          description: Communication protocol specification
+          $ref: '#/components/schemas/ProtocolType'
+        medium:
+          description: |
+            Network medium/interface to use for communication.
+            Options: eth_all, wifi_all
+          type: string
+          example: wifi_all
+          enum:
+            - eth_all
+            - wifi_all
+        device_port:
+          description: Port number on the device side
+          $ref: '#/components/schemas/PortString'
+        owner_port:
+          description: Port number on the owner/server side
+          $ref: '#/components/schemas/PortString'
+        wifi_ssid:
+          description: WiFi network SSID (Service Set Identifier)
+          type: string
+          example: FDO-Network
+          maxLength: 32
+          minLength: 1
+        wifi_pw:
+          description: WiFi network password
+          type: string
+          format: password
+          example: SecurePassword123
+        dev_only:
+          description: Instruction applies to device only (not owner)
+          type: boolean
+          example: true
+        owner_only:
+          description: Instruction applies to owner only (not device)
+          type: boolean
+          example: true
+        rv_bypass:
+          description: Bypass rendezvous server and connect directly to owner
+          type: boolean
+          example: true
+        delay_seconds:
+          description: Delay in seconds before attempting connection (with up to 25% randomization)
+          type: integer
+          format: uint32
+          example: 30
+          minimum: 0
+        sv_cert_hash:
+          description: Server certificate hash for validation (SHA-256 or SHA-384 hex string)
+          type: string
+          example: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+        cl_cert_hash:
+          description: Client certificate hash for validation (SHA-256 or SHA-384 hex string)
+          type: string
+          example: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
+          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+        user_input:
+          description: User input configuration
+          type: string
+          example: prompt
+        ext_rv:
+          description: Extended rendezvous information for custom device-specific instructions
+          type: string
+          example: custom-data
+      example:
+        dns: rendezvous.example.com
+        protocol: https
+        owner_port: '8443'
+        device_port: '8041'
+    RVInfo:
+      description: |
+        Rendezvous information array containing one or more rendezvous directive objects.
+        Each object contains fields that guide devices and owners on how to connect to
+        the rendezvous server, including network configuration, protocols, and connection parameters.
+
+        Processing behavior (FDO specification section 3.7):
+        - Directives are processed in order (index 0 first, then 1, etc.)
+        - The first successful connection to a rendezvous server MAY be used
+        - Multiple directives provide fallback options for device connectivity
+        - At least one of `dns` or `ip` must be specified for each directive
+
+        Format: Array of objects with flat key-value pairs (legacy v1 format for backward compatibility).
+      type: array
+      items:
+        $ref: '#/components/schemas/RVDirective'
+      example:
+        - dns: rendezvous.example.com
+          protocol: https
+          owner_port: '8443'
+        - dns: rv-fallback.example.com
+          protocol: https
+          owner_port: '8443'
+          delay_seconds: 30
+    DNSHostname1:
       type: string
       format: hostname
       example: rendezvous.example.com
@@ -802,10 +871,10 @@ components:
       type: object
       properties:
         dns:
-          $ref: '#/components/schemas/DNSHostname'
+          $ref: '#/components/schemas/DNSHostname1'
       example:
         dns: rendezvous.example.com
-    IPv4Address:
+    IPv4Address1:
       type: string
       format: ipv4
       example: 192.168.1.100
@@ -814,10 +883,10 @@ components:
       type: object
       properties:
         ip:
-          $ref: '#/components/schemas/IPv4Address'
+          $ref: '#/components/schemas/IPv4Address1'
       example:
         ip: 192.168.1.100
-    ProtocolType:
+    ProtocolType1:
       description: |
         Protocol to use for communication:
         - `rest` - RESTful HTTP/HTTPS
@@ -842,7 +911,7 @@ components:
       type: object
       properties:
         protocol:
-          $ref: '#/components/schemas/ProtocolType'
+          $ref: '#/components/schemas/ProtocolType1'
       example:
         protocol: https
     Medium:
@@ -1011,7 +1080,7 @@ components:
           - $ref: '#/components/schemas/ClCertHash'
           - $ref: '#/components/schemas/UserInput'
           - $ref: '#/components/schemas/ExtRV'
-    RVInfo:
+    RVInfo1:
       description: |
         Rendezvous information array containing one or more instruction sets
         (RendezvousDirective). Each instruction set guides devices and owners on how
@@ -1029,137 +1098,6 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/RVInstruction'
-    PublicKey:
-      type: object
-      properties:
-        type:
-          description: Public key algorithm type.
-          type: string
-          example: SECP256R1
-          enum:
-            - RSA2048RESTR
-            - RSAPKCS
-            - SECP256R1
-            - SECP384R1
-        value:
-          description: Base64-encoded public key.
-          type: string
-          example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
-      required:
-        - type
-        - value
-    Hash:
-      type: object
-      properties:
-        algorithm:
-          description: Hash algorithm.
-          type: string
-          example: SHA-384
-          enum:
-            - SHA-256
-            - SHA-384
-            - SHA-512
-            - HMAC-SHA-256
-            - HMAC-SHA-384
-            - HMAC-SHA-512
-        value:
-          description: |
-            Hexadecimal hash value. The length must match the algorithm:
-            - SHA-256/HMAC-SHA-256: 64 hexadecimal characters (32 bytes)
-            - SHA-384/HMAC-SHA-384: 96 hexadecimal characters (48 bytes)
-            - SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)
-          type: string
-          example: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$'
-      required:
-        - algorithm
-        - value
-    VoucherHeader:
-      type: object
-      properties:
-        version:
-          description: Header version.
-          type: integer
-          example: 101
-        guid:
-          description: The device GUID (32 hexadecimal characters).
-          type: string
-          example: d21d841a3f54f4e89a60ed9b9779e9e8
-          pattern: '^[a-f0-9]{32}$'
-        rvInfo:
-          $ref: '#/components/schemas/RVInfo'
-        deviceInfo:
-          description: Device information string.
-          type: string
-        manufacturerKey:
-          $ref: '#/components/schemas/PublicKey'
-        certChainHash:
-          description: Hash of the certificate chain (required when certChain is present).
-          allOf:
-            - $ref: '#/components/schemas/Hash'
-          nullable: true
-      required:
-        - version
-        - guid
-        - rvInfo
-        - deviceInfo
-        - manufacturerKey
-    VoucherEntry:
-      type: object
-      properties:
-        previousHash:
-          description: Hash of the previous entry (all zeros for first entry).
-          $ref: '#/components/schemas/Hash'
-        headerHash:
-          description: Hash of the voucher header.
-          $ref: '#/components/schemas/Hash'
-        publicKey:
-          description: Public key of the owner.
-          $ref: '#/components/schemas/PublicKey'
-        extra:
-          description: Additional optional data.
-          type: object
-          additionalProperties: true
-          nullable: true
-      required:
-        - previousHash
-        - headerHash
-        - publicKey
-    OwnershipVoucher:
-      type: object
-      properties:
-        guid:
-          $ref: '#/components/schemas/VoucherGuid'
-        protocolVersion:
-          $ref: '#/components/schemas/VoucherProtocolVersion'
-        deviceInfo:
-          $ref: '#/components/schemas/VoucherDeviceInfo'
-        numEntries:
-          $ref: '#/components/schemas/VoucherNumEntries'
-        header:
-          $ref: '#/components/schemas/VoucherHeader'
-        hmac:
-          $ref: '#/components/schemas/Hash'
-        certChain:
-          description: X.509 certificate chain in PEM format (null for Intel EPID).
-          type: array
-          items:
-            type: string
-            format: pem
-          nullable: true
-        entries:
-          description: Ownership entry chain.
-          type: array
-          items:
-            $ref: '#/components/schemas/VoucherEntry'
-      required:
-        - guid
-        - protocolVersion
-        - deviceInfo
-        - numEntries
-        - header
-        - hmac
-        - entries
   responses:
     HealthStatus:
       description: Server health status
@@ -1185,17 +1123,6 @@ components:
               summary: Example of a server error
               value:
                 message: An unexpected error occurred.
-    BadRequest:
-      description: Bad Request - The request was malformed or invalid.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          examples:
-            badRequest:
-              summary: Example of a bad request error
-              value:
-                message: Invalid Request.
     Unauthorized:
       description: 'Unauthorized - Authentication credentials missing, invalid, or expired.'
       content:
@@ -1218,17 +1145,17 @@ components:
               summary: Example of a forbidden error
               value:
                 message: User does not have the right access level.
-    NotFound:
-      description: Not Found - The requested resource does not exist.
+    BadRequest:
+      description: Bad Request - The request was malformed or invalid.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
-            notFound:
-              summary: Example of a not found error
+            badRequest:
+              summary: Example of a bad request error
               value:
-                message: Object not found.
+                message: Invalid Request.
 tags:
   - name: health
     description: Server's health monitoring

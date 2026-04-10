@@ -10,11 +10,10 @@ import (
 	"log/slog"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
 // Sentinel errors for RV info operations
@@ -56,9 +55,9 @@ func InitRvInfoDB(database *gorm.DB) (*RvInfoState, error) {
 	return state, nil
 }
 
-// FetchRvInfo retrieves the current rendezvous information as [][]protocol.RvInstruction
+// GetRVInfo retrieves the current rendezvous information as [][]protocol.RvInstruction
 // State layer returns protocol structs - JSON conversion is API layer's responsibility
-func (s *RvInfoState) FetchRvInfo(ctx context.Context) ([][]protocol.RvInstruction, error) {
+func (s *RvInfoState) GetRVInfo(ctx context.Context) ([][]protocol.RvInstruction, error) {
 	var rvInfoRow RvInfo
 	if err := s.DB.WithContext(ctx).Where("id = ?", 1).First(&rvInfoRow).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -75,28 +74,60 @@ func (s *RvInfoState) FetchRvInfo(ctx context.Context) ([][]protocol.RvInstructi
 	return rvInfo, nil
 }
 
-// InsertRvInfo creates new rendezvous information configuration
+// CreateRVInfo creates new rendezvous information configuration
 // Accepts pre-parsed RvInstructions - JSON parsing is the API layer's responsibility
-func (s *RvInfoState) InsertRvInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
-	return db.InsertRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
+func (s *RvInfoState) CreateRVInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
+	cborData, err := cbor.Marshal(rvInstructions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
+	}
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: cborData,
+	}
+	tx := s.DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&rvInfo)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrDuplicatedKey
+	}
+	return nil
 }
 
-// UpdateRvInfo updates existing rendezvous information configuration
+// UpdateRVInfo updates existing rendezvous information configuration
 // Accepts pre-parsed RvInstructions - JSON parsing is the API layer's responsibility
-func (s *RvInfoState) UpdateRvInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
-	err := db.UpdateRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
-	// Map gorm.ErrRecordNotFound to our custom error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+func (s *RvInfoState) UpdateRVInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
+	cborData, err := cbor.Marshal(rvInstructions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
+	}
+
+	tx := s.DB.WithContext(ctx).Model(&RvInfo{}).Where("id = ?", 1).Update("value", cborData)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
 		return ErrRvInfoNotFound
 	}
-	return err
+	return nil
 }
 
-// UpsertRvInfo atomically inserts or updates rendezvous information configuration
+// CreateOrUpdateRVInfo atomically inserts or updates rendezvous information configuration
 // Accepts pre-parsed RvInstructions - JSON parsing is the API layer's responsibility
 // This method is race-condition safe for concurrent requests
-func (s *RvInfoState) UpsertRvInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
-	return db.UpsertRvInfoCBOR(s.DB.WithContext(ctx), rvInstructions)
+func (s *RvInfoState) CreateOrUpdateRVInfo(ctx context.Context, rvInstructions [][]protocol.RvInstruction) error {
+	cborData, err := cbor.Marshal(rvInstructions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rvinfo to CBOR: %w", err)
+	}
+
+	rvInfo := RvInfo{
+		ID:    1,
+		Value: cborData,
+	}
+	return s.DB.WithContext(ctx).Save(&rvInfo).Error
 }
 
 // DeleteRvInfo removes the rendezvous information configuration

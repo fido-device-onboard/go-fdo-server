@@ -14,8 +14,6 @@ import (
 
 	"github.com/fido-device-onboard/go-fdo/cbor"
 	"github.com/fido-device-onboard/go-fdo/protocol"
-
-	"github.com/fido-device-onboard/go-fdo-server/internal/db"
 )
 
 // setupTestDB creates a temporary SQLite database for testing
@@ -61,8 +59,8 @@ func mustCBORMarshal(t *testing.T, v interface{}) []byte {
 	return data
 }
 
-// TestInsertRvInfo_StoresCBOR verifies state layer stores CBOR, not JSON
-func TestInsertRvInfo_StoresCBOR(t *testing.T) {
+// TestCreateRVInfo_StoresCBOR verifies state layer stores CBOR, not JSON
+func TestCreateRVInfo_StoresCBOR(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
@@ -76,8 +74,8 @@ func TestInsertRvInfo_StoresCBOR(t *testing.T) {
 	}}
 
 	// Insert via state layer
-	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Read raw bytes from database
@@ -107,8 +105,8 @@ func TestInsertRvInfo_StoresCBOR(t *testing.T) {
 	}
 }
 
-// TestFetchRvInfo_RetrievesProtocolStructs tests fetching RV info as protocol.RvInstruction
-func TestFetchRvInfo_RetrievesProtocolStructs(t *testing.T) {
+// TestGetRVInfo_RetrievesProtocolStructs tests fetching RV info as protocol.RvInstruction
+func TestGetRVInfo_RetrievesProtocolStructs(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
@@ -121,14 +119,14 @@ func TestFetchRvInfo_RetrievesProtocolStructs(t *testing.T) {
 		{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
 	}}
 
-	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Fetch it back
-	retrieved, err := state.FetchRvInfo(ctx)
+	retrieved, err := state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
+		t.Fatalf("GetRVInfo failed: %v", err)
 	}
 
 	// Verify structure
@@ -168,21 +166,21 @@ func TestFetchRvInfo_RetrievesProtocolStructs(t *testing.T) {
 	}
 }
 
-// TestFetchRvInfo_NotFound tests fetching when no data exists
-func TestFetchRvInfo_NotFound(t *testing.T) {
+// TestGetRVInfo_NotFound tests fetching when no data exists
+func TestGetRVInfo_NotFound(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	_, err := state.FetchRvInfo(ctx)
+	_, err := state.GetRVInfo(ctx)
 	if err != ErrRvInfoNotFound {
 		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
 	}
 }
 
-// TestUpdateRvInfo_UpdatesExistingData tests updating RV info
-func TestUpdateRvInfo_UpdatesExistingData(t *testing.T) {
+// TestUpdateRVInfo_UpdatesExistingData tests updating RV info
+func TestUpdateRVInfo_UpdatesExistingData(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
@@ -192,8 +190,8 @@ func TestUpdateRvInfo_UpdatesExistingData(t *testing.T) {
 	initial := [][]protocol.RvInstruction{{
 		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv1.example.com")},
 	}}
-	if err := state.InsertRvInfo(ctx, initial); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, initial); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Update with new data
@@ -201,14 +199,14 @@ func TestUpdateRvInfo_UpdatesExistingData(t *testing.T) {
 		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv2.example.com")},
 		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTP))},
 	}}
-	if err := state.UpdateRvInfo(ctx, updated); err != nil {
-		t.Fatalf("UpdateRvInfo failed: %v", err)
+	if err := state.UpdateRVInfo(ctx, updated); err != nil {
+		t.Fatalf("UpdateRVInfo failed: %v", err)
 	}
 
 	// Fetch and verify
-	retrieved, err := state.FetchRvInfo(ctx)
+	retrieved, err := state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
+		t.Fatalf("GetRVInfo failed: %v", err)
 	}
 
 	if len(retrieved) != 1 || len(retrieved[0]) != 2 {
@@ -225,8 +223,8 @@ func TestUpdateRvInfo_UpdatesExistingData(t *testing.T) {
 	}
 }
 
-// TestUpdateRvInfo_NotFound tests updating when no data exists
-func TestUpdateRvInfo_NotFound(t *testing.T) {
+// TestUpdateRVInfo_NotFound tests updating when no data exists
+func TestUpdateRVInfo_NotFound(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
@@ -235,7 +233,7 @@ func TestUpdateRvInfo_NotFound(t *testing.T) {
 	updated := [][]protocol.RvInstruction{{
 		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
 	}}
-	err := state.UpdateRvInfo(ctx, updated)
+	err := state.UpdateRVInfo(ctx, updated)
 	if err != ErrRvInfoNotFound {
 		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
 	}
@@ -252,8 +250,8 @@ func TestDeleteRvInfo_RemovesData(t *testing.T) {
 	rvInstructions := [][]protocol.RvInstruction{{
 		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
 	}}
-	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Delete it
@@ -262,7 +260,7 @@ func TestDeleteRvInfo_RemovesData(t *testing.T) {
 	}
 
 	// Verify it's gone
-	_, err := state.FetchRvInfo(ctx)
+	_, err := state.GetRVInfo(ctx)
 	if err != ErrRvInfoNotFound {
 		t.Errorf("Expected ErrRvInfoNotFound, got %v", err)
 	}
@@ -281,57 +279,59 @@ func TestDeleteRvInfo_NotFound(t *testing.T) {
 	}
 }
 
-// TestCrossAPI_V1InsertV2Read tests inserting via V1 API and reading via V2 state layer
-// This verifies both APIs use the same CBOR storage format
-func TestCrossAPI_V1InsertV2Read(t *testing.T) {
+// TestCreateOrUpdateRVInfo_AtomicInsertOrUpdate tests atomic upsert operation
+func TestCreateOrUpdateRVInfo_AtomicInsertOrUpdate(t *testing.T) {
 	state, cleanup := setupCBORTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Insert via V1 API (flat array, string ports, multi-key objects)
-	v1JSON := []byte(`[{"dns":"rv.example.com", "protocol":"https", "owner_port":"8443"}]`)
+	// First upsert - should create new record
+	initial := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv.example.com")},
+		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTPS))},
+		{Variable: protocol.RVOwnerPort, Value: mustCBORMarshal(t, uint16(8443))},
+	}}
 
-	// Parse V1 JSON using V1 parser
-	rvInstructions, err := db.ParseHumanReadableRvJSON(v1JSON)
+	if err := state.CreateOrUpdateRVInfo(ctx, initial); err != nil {
+		t.Fatalf("First CreateOrUpdateRVInfo failed: %v", err)
+	}
+
+	// Verify it was created
+	retrieved, err := state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("V1 parser failed: %v", err)
+		t.Fatalf("GetRVInfo failed: %v", err)
+	}
+	if len(retrieved) != 1 || len(retrieved[0]) != 3 {
+		t.Fatalf("Expected 1 directive with 3 instructions, got %d directives", len(retrieved))
 	}
 
-	// Use the shared CBOR storage function (which both V1 and V2 use)
-	if err := db.InsertRvInfoCBOR(state.DB, rvInstructions); err != nil {
-		t.Fatalf("V1 InsertRvInfo failed: %v", err)
+	// Second upsert - should update existing record
+	updated := [][]protocol.RvInstruction{{
+		{Variable: protocol.RVDns, Value: mustCBORMarshal(t, "rv2.example.com")},
+		{Variable: protocol.RVProtocol, Value: mustCBORMarshal(t, uint8(protocol.RVProtHTTP))},
+	}}
+
+	if err := state.CreateOrUpdateRVInfo(ctx, updated); err != nil {
+		t.Fatalf("Second CreateOrUpdateRVInfo failed: %v", err)
 	}
 
-	// Read via V2 state layer - should get protocol structs
-	retrieved, err := state.FetchRvInfo(ctx)
+	// Verify it was updated
+	retrieved, err = state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
+		t.Fatalf("GetRVInfo after update failed: %v", err)
+	}
+	if len(retrieved) != 1 || len(retrieved[0]) != 2 {
+		t.Fatalf("Expected 1 directive with 2 instructions, got %d directives", len(retrieved))
 	}
 
-	// Verify structure
-	if len(retrieved) != 1 {
-		t.Fatalf("Expected 1 directive, got %d", len(retrieved))
-	}
-	if len(retrieved[0]) != 3 {
-		t.Errorf("Expected 3 instructions in directive, got %d", len(retrieved[0]))
-	}
-
-	// Verify values
+	// Verify updated DNS value
 	var dns string
 	if err := cbor.Unmarshal(retrieved[0][0].Value, &dns); err != nil {
 		t.Fatalf("Failed to unmarshal DNS: %v", err)
 	}
-	if dns != "rv.example.com" {
-		t.Errorf("Expected DNS 'rv.example.com', got %q", dns)
-	}
-
-	var port uint16
-	if err := cbor.Unmarshal(retrieved[0][2].Value, &port); err != nil {
-		t.Fatalf("Failed to unmarshal port: %v", err)
-	}
-	if port != 8443 {
-		t.Errorf("Expected port 8443, got %d", port)
+	if dns != "rv2.example.com" {
+		t.Errorf("Expected DNS 'rv2.example.com', got %q", dns)
 	}
 }
 
@@ -356,14 +356,14 @@ func TestMultipleDirectives(t *testing.T) {
 		},
 	}
 
-	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Fetch and verify
-	retrieved, err := state.FetchRvInfo(ctx)
+	retrieved, err := state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
+		t.Fatalf("GetRVInfo failed: %v", err)
 	}
 
 	if len(retrieved) != 2 {
@@ -415,14 +415,14 @@ func TestAllInstructionTypes(t *testing.T) {
 		{Variable: protocol.RVClCertHash, Value: mustCBORMarshal(t, []byte{0xDD, 0xEE, 0xFF})},
 	}}
 
-	if err := state.InsertRvInfo(ctx, rvInstructions); err != nil {
-		t.Fatalf("InsertRvInfo failed: %v", err)
+	if err := state.CreateRVInfo(ctx, rvInstructions); err != nil {
+		t.Fatalf("CreateRVInfo failed: %v", err)
 	}
 
 	// Fetch and verify
-	retrieved, err := state.FetchRvInfo(ctx)
+	retrieved, err := state.GetRVInfo(ctx)
 	if err != nil {
-		t.Fatalf("FetchRvInfo failed: %v", err)
+		t.Fatalf("GetRVInfo failed: %v", err)
 	}
 
 	if len(retrieved) != 1 {
