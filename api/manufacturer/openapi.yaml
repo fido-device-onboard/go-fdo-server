@@ -50,7 +50,7 @@ info:
     When rate limits are exceeded, the API returns a 429 Too Many Requests status code.
   contact:
     name: Go FDO Server API Support
-    url: 'https://github.com/fido-device-onboard/go-fdo-server/issues'
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
 paths:
   /health:
     get:
@@ -110,7 +110,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
         - name: deviceInfo
           in: query
           description: Filters the results by device information (case-insensitive partial match).
@@ -171,15 +171,15 @@ paths:
                           protocolVersion: 101
                           deviceInfo: Intel Device
                           numEntries: 1
-                        createdAt: '2025-05-10T10:30:00Z'
-                        updatedAt: '2025-05-10T10:30:00Z'
+                        createdAt: 2025-05-10T10:30:00Z
+                        updatedAt: 2025-05-10T10:30:00Z
                       - voucher:
                           guid: a1b2c3d4e5f6789012345678abcdef01
                           protocolVersion: 101
                           deviceInfo: ARM IoT Device
                           numEntries: 2
-                        createdAt: '2025-06-20T12:00:00Z'
-                        updatedAt: '2025-06-21T08:15:00Z'
+                        createdAt: 2025-06-20T12:00:00Z
+                        updatedAt: 2025-06-21T08:15:00Z
             application/x-pem-file:
               schema:
                 type: string
@@ -262,15 +262,15 @@ paths:
                         protocolVersion: 101
                         deviceInfo: Intel Device
                         numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
+                      createdAt: 2025-10-27T14:00:00Z
+                      updatedAt: 2025-10-27T14:00:00Z
                     - voucher:
                         guid: a1b2c3d4e5f6789012345678abcdef01
                         protocolVersion: 101
                         deviceInfo: ARM IoT Device
                         numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
+                      createdAt: 2025-10-27T14:00:00Z
+                      updatedAt: 2025-10-27T14:00:00Z
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -287,7 +287,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
       tags:
         - voucher
-  '/v1/vouchers/{guid}':
+  /v1/vouchers/{guid}:
     get:
       operationId: GetOwnershipVoucherByGuid
       summary: Get an ownership voucher by GUID
@@ -307,7 +307,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       responses:
         '200':
           description: The requested ownership voucher.
@@ -341,7 +341,7 @@ paths:
                       algorithm: HMAC-SHA-384
                       value: e5f6a7b8...
                     certChain:
-                      - '-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'
+                      - -----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----
                     entries:
                       - previousHash:
                           algorithm: SHA-384
@@ -389,7 +389,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       responses:
         '204':
           description: Ownership voucher deleted successfully.
@@ -403,7 +403,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
       tags:
         - voucher
-  '/v1/vouchers/{guid}/extend':
+  /v1/vouchers/{guid}/extend:
     post:
       operationId: ExtendOwnershipVoucher
       summary: Extend an ownership voucher
@@ -421,7 +421,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       requestBody:
         description: New owner's public key or certificate in PEM format.
         required: true
@@ -720,9 +720,9 @@ components:
       description: The device GUID (32 hexadecimal characters).
       type: string
       example: d21d841a3f54f4e89a60ed9b9779e9e8
-      pattern: '^[a-f0-9]{32}$'
+      pattern: ^[a-f0-9]{32}$
     VoucherProtocolVersion:
-      description: 'The FDO protocol version (e.g., 101 for version 1.1).'
+      description: The FDO protocol version (e.g., 101 for version 1.1).
       type: integer
       example: 101
     VoucherDeviceInfo:
@@ -959,7 +959,7 @@ components:
       properties:
         sv_cert_hash:
           type: string
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
       example:
         sv_cert_hash: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01
     ClCertHash:
@@ -968,7 +968,7 @@ components:
       properties:
         cl_cert_hash:
           type: string
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
       example:
         cl_cert_hash: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
     UserInput:
@@ -1070,7 +1070,7 @@ components:
             - SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)
           type: string
           example: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$
       required:
         - algorithm
         - value
@@ -1085,7 +1085,7 @@ components:
           description: The device GUID (32 hexadecimal characters).
           type: string
           example: d21d841a3f54f4e89a60ed9b9779e9e8
-          pattern: '^[a-f0-9]{32}$'
+          pattern: ^[a-f0-9]{32}$
         rvInfo:
           $ref: '#/components/schemas/RVInfo'
         deviceInfo:
@@ -1197,7 +1197,7 @@ components:
               value:
                 message: Invalid Request.
     Unauthorized:
-      description: 'Unauthorized - Authentication credentials missing, invalid, or expired.'
+      description: Unauthorized - Authentication credentials missing, invalid, or expired.
       content:
         application/json:
           schema:
