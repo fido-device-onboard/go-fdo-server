@@ -51,7 +51,7 @@ info:
     When rate limits are exceeded, the API returns a 429 Too Many Requests status code.
   contact:
     name: Go FDO Server API Support
-    url: 'https://github.com/fido-device-onboard/go-fdo-server/issues'
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
 paths:
   /health:
     get:
@@ -111,7 +111,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
         - name: deviceInfo
           in: query
           description: Filters the results by device information (case-insensitive partial match).
@@ -172,15 +172,15 @@ paths:
                           protocolVersion: 101
                           deviceInfo: Intel Device
                           numEntries: 1
-                        createdAt: '2025-05-10T10:30:00Z'
-                        updatedAt: '2025-05-10T10:30:00Z'
+                        createdAt: 2025-05-10T10:30:00Z
+                        updatedAt: 2025-05-10T10:30:00Z
                       - voucher:
                           guid: a1b2c3d4e5f6789012345678abcdef01
                           protocolVersion: 101
                           deviceInfo: ARM IoT Device
                           numEntries: 2
-                        createdAt: '2025-06-20T12:00:00Z'
-                        updatedAt: '2025-06-21T08:15:00Z'
+                        createdAt: 2025-06-20T12:00:00Z
+                        updatedAt: 2025-06-21T08:15:00Z
             application/x-pem-file:
               schema:
                 type: string
@@ -263,15 +263,15 @@ paths:
                         protocolVersion: 101
                         deviceInfo: Intel Device
                         numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
+                      createdAt: 2025-10-27T14:00:00Z
+                      updatedAt: 2025-10-27T14:00:00Z
                     - voucher:
                         guid: a1b2c3d4e5f6789012345678abcdef01
                         protocolVersion: 101
                         deviceInfo: ARM IoT Device
                         numEntries: 1
-                      createdAt: '2025-10-27T14:00:00Z'
-                      updatedAt: '2025-10-27T14:00:00Z'
+                      createdAt: 2025-10-27T14:00:00Z
+                      updatedAt: 2025-10-27T14:00:00Z
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -288,7 +288,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
       tags:
         - voucher
-  '/v1/vouchers/{guid}':
+  /v1/vouchers/{guid}:
     get:
       operationId: GetOwnershipVoucherByGuid
       summary: Get an ownership voucher by GUID
@@ -308,7 +308,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       responses:
         '200':
           description: The requested ownership voucher.
@@ -342,7 +342,7 @@ paths:
                       algorithm: HMAC-SHA-384
                       value: e5f6a7b8...
                     certChain:
-                      - '-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'
+                      - -----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----
                     entries:
                       - previousHash:
                           algorithm: SHA-384
@@ -390,7 +390,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       responses:
         '204':
           description: Ownership voucher deleted successfully.
@@ -404,7 +404,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
       tags:
         - voucher
-  '/v1/vouchers/{guid}/extend':
+  /v1/vouchers/{guid}/extend:
     post:
       operationId: ExtendOwnershipVoucher
       summary: Extend an ownership voucher
@@ -422,7 +422,7 @@ paths:
           schema:
             type: string
             example: d21d841a3f54f4e89a60ed9b9779e9e8
-            pattern: '^[a-f0-9]{32}$'
+            pattern: ^[a-f0-9]{32}$
       requestBody:
         description: New owner's public key or certificate in PEM format.
         required: true
@@ -517,14 +517,14 @@ paths:
           required: false
           schema:
             type: string
-            example: 'CN=Example Device CA, O=Example Inc, C=US'
+            example: CN=Example Device CA, O=Example Inc, C=US
         - name: subject
           in: query
           description: Filters the results by the exact subject distinguished name.
           required: false
           schema:
             type: string
-            example: 'CN=Example Device CA, O=Example Inc, C=US'
+            example: CN=Example Device CA, O=Example Inc, C=US
         - name: validityStatus
           in: query
           description: Filters certificates by their validity status.
@@ -584,21 +584,21 @@ paths:
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-01-01T00:00:00Z'
-                        notAfter: '2026-01-01T00:00:00Z'
-                        createdAt: '2025-05-10T10:30:00Z'
+                        subject: CN=Example Device CA One, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-01-01T00:00:00Z
+                        notAfter: 2026-01-01T00:00:00Z
+                        createdAt: 2025-05-10T10:30:00Z
                       - fingerprint: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
                         pem: |
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-02-15T00:00:00Z'
-                        notAfter: '2026-02-15T00:00:00Z'
-                        createdAt: '2025-06-20T12:00:00Z'
+                        subject: CN=Example Device CA Two, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-02-15T00:00:00Z
+                        notAfter: 2026-02-15T00:00:00Z
+                        createdAt: 2025-06-20T12:00:00Z
             application/x-pem-file:
               schema:
                 type: string
@@ -678,31 +678,31 @@ paths:
                     skipped: 0
                     malformed: 0
                     messages:
-                      - 'the certificate at position 1 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was imported successfully'
-                      - 'the certificate at position 2 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was imported successfully'
+                      - the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully
+                      - the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully
                     certs:
                       - fingerprint: c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012
                         pem: |
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-10-01T00:00:00Z'
-                        notAfter: '2026-10-01T00:00:00Z'
-                        createdAt: '2025-10-27T14:00:00Z'
+                        subject: CN=Example Device CA One, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-10-01T00:00:00Z
+                        notAfter: 2026-10-01T00:00:00Z
+                        createdAt: 2025-10-27T14:00:00Z
                       - fingerprint: d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123
                         pem: |
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-10-01T00:00:00Z'
-                        notAfter: '2026-10-01T00:00:00Z'
-                        createdAt: '2025-10-27T14:00:00Z'
+                        subject: CN=Example Device CA Two, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-10-01T00:00:00Z
+                        notAfter: 2026-10-01T00:00:00Z
+                        createdAt: 2025-10-27T14:00:00Z
                 partialImport:
-                  summary: 'Some certificates skipped (duplicates, expired or malformed)'
+                  summary: Some certificates skipped (duplicates, expired or malformed)
                   value:
                     detected: 4
                     imported: 2
@@ -710,30 +710,30 @@ paths:
                     malformed: 1
                     messages:
                       - the certificate at position 1 is malformed
-                      - 'the certificate at position 2 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was imported successfully'
-                      - 'the certificate at position 3 with subject ''CN=Example Device CA Expired, O=Example Corp, C=US'' was skipped because it is expired'
-                      - 'the certificate at position 4 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was imported successfully'
+                      - the certificate at position 2 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully
+                      - the certificate at position 3 with subject 'CN=Example Device CA Expired, O=Example Corp, C=US' was skipped because it is expired
+                      - the certificate at position 4 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully
                     certs:
                       - fingerprint: c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012
                         pem: |
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA One, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-10-01T00:00:00Z'
-                        notAfter: '2026-10-01T00:00:00Z'
-                        createdAt: '2025-10-27T14:00:00Z'
+                        subject: CN=Example Device CA One, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-10-01T00:00:00Z
+                        notAfter: 2026-10-01T00:00:00Z
+                        createdAt: 2025-10-27T14:00:00Z
                       - fingerprint: d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123
                         pem: |
                           -----BEGIN CERTIFICATE-----
                           MIID... (truncated) 
                           -----END CERTIFICATE-----
-                        subject: 'CN=Example Device CA Two, O=Example Corp, C=US'
-                        issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                        notBefore: '2025-10-01T00:00:00Z'
-                        notAfter: '2026-10-01T00:00:00Z'
-                        createdAt: '2025-10-27T14:00:00Z'
+                        subject: CN=Example Device CA Two, O=Example Corp, C=US
+                        issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                        notBefore: 2025-10-01T00:00:00Z
+                        notAfter: 2026-10-01T00:00:00Z
+                        createdAt: 2025-10-27T14:00:00Z
                 noneImported:
                   summary: All certificates already exist
                   value:
@@ -742,8 +742,8 @@ paths:
                     skipped: 2
                     malformed: 0
                     messages:
-                      - 'the certificate at position 1 with subject ''CN=Example Device CA One, O=Example Corp, C=US'' was skipped because it already exists'
-                      - 'the certificate at position 2 with subject ''CN=Example Device CA Two, O=Example Corp, C=US'' was skipped because it already exists'
+                      - the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was skipped because it already exists
+                      - the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was skipped because it already exists
                     certs: []
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -761,7 +761,7 @@ paths:
           $ref: '#/components/responses/InternalServerError'
       tags:
         - device-ca
-  '/v1/device-ca/{fingerprint}':
+  /v1/device-ca/{fingerprint}:
     get:
       operationId: GetTrustedDeviceCACertByFingerprint
       summary: Get a trusted device CA certificate by fingerprint
@@ -779,7 +779,7 @@ paths:
           schema:
             type: string
             example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
-            pattern: '^[a-f0-9]{64}$'
+            pattern: ^[a-f0-9]{64}$
       responses:
         '200':
           description: The requested trusted device CA certificate.
@@ -796,11 +796,11 @@ paths:
                       -----BEGIN CERTIFICATE-----
                       MIID... (truncated) 
                       -----END CERTIFICATE-----
-                    subject: 'CN=Example Device CA, O=Example Corp, C=US'
-                    issuer: 'CN=Example Intermediate CA, O=Example Corp, C=US'
-                    notBefore: '2025-01-01T00:00:00Z'
-                    notAfter: '2026-01-01T00:00:00Z'
-                    createdAt: '2025-05-10T10:30:00Z'
+                    subject: CN=Example Device CA, O=Example Corp, C=US
+                    issuer: CN=Example Intermediate CA, O=Example Corp, C=US
+                    notBefore: 2025-01-01T00:00:00Z
+                    notAfter: 2026-01-01T00:00:00Z
+                    createdAt: 2025-05-10T10:30:00Z
             application/x-pem-file:
               schema:
                 description: The certificate content in PEM format.
@@ -835,7 +835,7 @@ paths:
           schema:
             type: string
             example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
-            pattern: '^[a-f0-9]{64}$'
+            pattern: ^[a-f0-9]{64}$
       responses:
         '204':
           description: Trusted device CA certificate deleted successfully.
@@ -1069,9 +1069,9 @@ components:
       description: The device GUID (32 hexadecimal characters).
       type: string
       example: d21d841a3f54f4e89a60ed9b9779e9e8
-      pattern: '^[a-f0-9]{32}$'
+      pattern: ^[a-f0-9]{32}$
     VoucherProtocolVersion:
-      description: 'The FDO protocol version (e.g., 101 for version 1.1).'
+      description: The FDO protocol version (e.g., 101 for version 1.1).
       type: integer
       example: 101
     VoucherDeviceInfo:
@@ -1308,7 +1308,7 @@ components:
       properties:
         sv_cert_hash:
           type: string
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
       example:
         sv_cert_hash: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01
     ClCertHash:
@@ -1317,7 +1317,7 @@ components:
       properties:
         cl_cert_hash:
           type: string
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
       example:
         cl_cert_hash: b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1
     UserInput:
@@ -1419,7 +1419,7 @@ components:
             - SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)
           type: string
           example: a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01
-          pattern: '^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$'
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$
       required:
         - algorithm
         - value
@@ -1434,7 +1434,7 @@ components:
           description: The device GUID (32 hexadecimal characters).
           type: string
           example: d21d841a3f54f4e89a60ed9b9779e9e8
-          pattern: '^[a-f0-9]{32}$'
+          pattern: ^[a-f0-9]{32}$
         rvInfo:
           $ref: '#/components/schemas/RVInfo'
         deviceInfo:
@@ -1516,13 +1516,13 @@ components:
           description: The SHA-256 fingerprint of the certificate (64 hexadecimal characters).
           type: string
           example: a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
-          pattern: '^[a-f0-9]{64}$'
+          pattern: ^[a-f0-9]{64}$
         pem:
           description: The full certificate content in PEM format.
           type: string
           format: pem
           maxLength: 32768
-          pattern: '^-----BEGIN CERTIFICATE-----\n[\s\S]+\n-----END CERTIFICATE-----\n?$'
+          pattern: ^-----BEGIN CERTIFICATE-----\n[\s\S]+\n-----END CERTIFICATE-----\n?$
         subject:
           description: The subject distinguished name of the certificate.
           type: string
@@ -1598,12 +1598,12 @@ components:
             type: string
           example:
             - the certificate at position 1 is malformed
-            - 'the certificate at position 2 with subject ''CN=Device CA 2,O=Example Inc'' was imported successfully'
-            - 'the certificate at position 3 with subject ''CN=Device CA 3,O=Example Inc'' was skipped because it is expired'
-            - 'the certificate at position 4 with subject ''CN=Device CA 4,O=Example Inc'' was skipped because it already exists'
-            - 'the certificate at position 5 with subject ''CN=Device CA 5,O=Example Inc'' was imported successfully'
+            - the certificate at position 2 with subject 'CN=Device CA 2,O=Example Inc' was imported successfully
+            - the certificate at position 3 with subject 'CN=Device CA 3,O=Example Inc' was skipped because it is expired
+            - the certificate at position 4 with subject 'CN=Device CA 4,O=Example Inc' was skipped because it already exists
+            - the certificate at position 5 with subject 'CN=Device CA 5,O=Example Inc' was imported successfully
         certs:
-          description: 'Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).'
+          description: Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).
           type: array
           items:
             $ref: '#/components/schemas/TrustedDeviceCACert'
@@ -1688,7 +1688,7 @@ components:
               value:
                 message: Invalid Request.
     Unauthorized:
-      description: 'Unauthorized - Authentication credentials missing, invalid, or expired.'
+      description: Unauthorized - Authentication credentials missing, invalid, or expired.
       content:
         application/json:
           schema:
