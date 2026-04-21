@@ -1,0 +1,244 @@
+openapi: 3.0.0
+info:
+  title: Voucher Management API (Deprecated)
+  version: 1.1.0
+  description: |
+    Deprecated API for managing FDO (FIDO Device Onboard) ownership vouchers.
+
+    Ownership vouchers represent ownership of a device and are used during
+    the TO2 (Transfer of Ownership 2) protocol. This API allows querying,
+    retrieving, and inserting ownership vouchers.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: vouchers
+    description: |
+      Operations related to ownership voucher management.
+
+      Typical workflow: Insert vouchers (POST /vouchers) →
+      Query vouchers (GET /vouchers) →
+      Retrieve specific voucher (GET /vouchers/{guid}).
+paths:
+  /vouchers:
+    get:
+      tags:
+        - vouchers
+      summary: Query ownership vouchers (Deprecated)
+      description: |
+        Returns a list of ownership vouchers matching optional filter criteria.
+
+        Results are ordered by updated_at timestamp in descending order.
+        The CBOR field is omitted from results (use GET /vouchers/{guid} to retrieve full voucher).
+      operationId: ListVouchers
+      parameters:
+        - name: guid
+          in: query
+          description: Filter by device GUID (hex-encoded)
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{32}$
+            example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+        - name: device_info
+          in: query
+          description: Filter by device info string
+          schema:
+            type: string
+            example: "MyDevice"
+      responses:
+        "200":
+          description: Successfully retrieved voucher list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoucherMetadata"
+              examples:
+                emptyList:
+                  summary: No vouchers found
+                  value: []
+                voucherList:
+                  summary: List of vouchers
+                  value:
+                    - guid: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+                      device_info: "Device 1"
+                      created_at: "2024-01-15T10:30:00Z"
+                      updated_at: "2024-01-15T10:30:00Z"
+                    - guid: "a1b2c3d4e5f6789012345678abcdef01"
+                      device_info: "Device 2"
+                      created_at: "2024-01-14T09:20:00Z"
+                      updated_at: "2024-01-14T09:20:00Z"
+        "400":
+          description: Invalid query parameters
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Invalid GUID: xyz"
+        "500":
+          description: Internal server error occurred while querying vouchers
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+    post:
+      tags:
+        - vouchers
+      summary: Insert ownership voucher(s) (Deprecated)
+      description: |
+        Inserts one or more ownership vouchers into the database.
+
+        The request body should contain PEM-encoded ownership voucher(s).
+        Each voucher is verified for:
+        - Ownership (voucher owner key matches server's configured keys)
+        - Cryptographic integrity (signature chain, certificate chains, etc.)
+        - Protocol version and header field validity
+
+        Duplicate vouchers (same GUID with same CBOR data) are silently skipped.
+        Existing vouchers (same GUID with different CBOR data) are not overwritten and are silently skipped.
+
+        The operation succeeds (200 OK) even if all vouchers were duplicates/skipped.
+      operationId: InsertVoucher
+      requestBody:
+        description: PEM-encoded ownership voucher(s)
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+            example: |
+              -----BEGIN OWNERSHIP VOUCHER-----
+              [base64-encoded CBOR data]
+              -----END OWNERSHIP VOUCHER-----
+      responses:
+        "200":
+          description: Voucher(s) successfully inserted or were duplicates
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ""
+        "400":
+          description: Invalid voucher data or verification failed
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                decodeCborError:
+                  summary: Unable to decode CBOR
+                  value: "Unable to decode cbor"
+                invalidVoucher:
+                  summary: Voucher verification failed
+                  value: "Invalid ownership voucher"
+                decodePemError:
+                  summary: Unable to decode PEM
+                  value: "Unable to decode PEM content"
+        "413":
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "http: request body too large"
+        "500":
+          description: Internal server error occurred while inserting voucher
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                readBodyError:
+                  summary: Error reading request body
+                  value: "Failure to read the request body"
+                insertError:
+                  summary: Error inserting into database
+                  value: "Internal server error"
+  /vouchers/{guid}:
+    get:
+      tags:
+        - vouchers
+      summary: Get ownership voucher by GUID (Deprecated)
+      description: |
+        Retrieves a specific ownership voucher by its device GUID.
+
+        Returns the voucher in PEM format with full CBOR data.
+      operationId: GetVoucherByGUID
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          description: Device GUID (hex-encoded, 32 characters)
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{32}$
+            example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+      responses:
+        "200":
+          description: Successfully retrieved the ownership voucher
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+              example: |
+                -----BEGIN OWNERSHIP VOUCHER-----
+                [base64-encoded CBOR data]
+                -----END OWNERSHIP VOUCHER-----
+        "400":
+          description: Invalid GUID format
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                invalidGuid:
+                  summary: Invalid GUID
+                  value: "Invalid GUID"
+                invalidFormat:
+                  summary: Invalid GUID format
+                  value: "Invalid GUID format"
+        "404":
+          description: Voucher not found
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Voucher not found"
+        "500":
+          description: Internal server error occurred
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+components:
+  schemas:
+    VoucherMetadata:
+      type: object
+      description: Ownership voucher metadata (excludes CBOR data)
+      required:
+        - guid
+        - device_info
+        - created_at
+        - updated_at
+      properties:
+        guid:
+          type: string
+          description: Device GUID (hex-encoded)
+          example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+        device_info:
+          type: string
+          description: Device information string
+          example: "Intel NUC Model XYZ"
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when voucher was first inserted
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when voucher was last updated
+          example: "2024-01-15T10:30:00Z"

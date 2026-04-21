@@ -8,3 +8,6 @@ marshalling
 te
 ro
 CAs
+ErrorString
+HasTable
+whitelist

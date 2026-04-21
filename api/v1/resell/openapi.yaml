@@ -1,0 +1,118 @@
+openapi: 3.0.0
+info:
+  title: Voucher Resell API (Deprecated)
+  version: 1.1.0
+  description: |
+    API for reselling FDO (FIDO Device Onboard) ownership vouchers to new owners.
+
+    Extends an ownership voucher to a new owner by adding a new entry to the signature chain.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: resell
+    description: Operations related to voucher reselling
+paths:
+  /resell/{guid}:
+    post:
+      tags:
+        - resell
+      summary: Resell ownership voucher to new owner (Deprecated)
+      description: |
+        Extends an ownership voucher to a new owner by adding a new entry to the signature chain.
+
+        This operation:
+        1. Retrieves the current voucher by GUID
+        2. Extends it with the new owner's public key
+        3. Deletes the old voucher
+        4. Inserts the extended voucher
+        5. Returns the extended voucher in PEM format
+
+        The operation is atomic (wrapped in a database transaction).
+        If any step fails, the transaction is rolled back and the original voucher is preserved.
+      operationId: ResellVoucher
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          description: Device GUID (hex-encoded, 32 characters)
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{32}$
+            example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+      requestBody:
+        description: PEM-encoded public key of the new owner
+        required: true
+        content:
+          application/x-pem-file:
+            schema:
+              type: string
+              format: binary
+            example: |
+              -----BEGIN PUBLIC KEY-----
+              [base64-encoded public key]
+              -----END PUBLIC KEY-----
+      responses:
+        "200":
+          description: Successfully resold voucher to new owner
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+              example: |
+                -----BEGIN OWNERSHIP VOUCHER-----
+                [base64-encoded extended CBOR data]
+                -----END OWNERSHIP VOUCHER-----
+        "400":
+          description: Invalid GUID, request body, or unsupported key type
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                invalidGuid:
+                  summary: Invalid GUID
+                  value: "GUID is not a valid GUID"
+                invalidFormat:
+                  summary: Invalid GUID format
+                  value: "Invalid GUID format"
+                unsupportedKeyType:
+                  summary: Unsupported public key type
+                  value: "Unsupported public key type"
+        "404":
+          description: Voucher not found for the specified GUID
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Voucher not found for the specified GUID"
+        "413":
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "http: request body too large"
+        "500":
+          description: Internal server error occurred during resell operation
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                readBodyError:
+                  summary: Error reading request body
+                  value: "Failure to read the request body"
+                invalidPem:
+                  summary: Invalid PEM content
+                  value: "Invalid PEM content"
+                parseKeyError:
+                  summary: Error parsing public key
+                  value: "Error parsing x.509 public key"
+                resellError:
+                  summary: Error reselling voucher
+                  value: "Error reselling voucher"
+                marshalError:
+                  summary: Error marshaling voucher
+                  value: "Error marshaling voucher"

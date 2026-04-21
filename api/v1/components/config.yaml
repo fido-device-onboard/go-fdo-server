@@ -1,12 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
-package: rvinfo
+package: components
 generate:
-  std-http-server: true
-  strict-server: true
   models: true
-output: handlers/rvinfo/handler.gen.go
-import-mapping:
-  components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+output: models.gen.go
 output-options:
   # to make sure that all types are generated
   skip-prune: true
