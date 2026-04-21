@@ -1,20 +1,20 @@
 openapi: 3.0.0
 info:
-  title: FDO Owner Server API
-  version: 1.0.0
+  title: FDO Owner Server API (Deprecated)
+  version: 1.1.0
   description: |
     API for the FDO Owner Server role. The Owner Server is responsible for managing
     device ownership, including ownership vouchers, trusted device CA certificates,
     and rendezvous TO2 addresses for device onboarding.
 
     This specification aggregates the following management APIs:
-    - Ownership Voucher Management (/v1/vouchers)
-    - Trusted Device CA Certificates (/v1/device-ca)
-    - RVTO2 Address Configuration (/v1/rvto2addr)
+    - Ownership Voucher Management (/api/v1/vouchers)
+    - Trusted Device CA Certificates (/api/v1/device-ca)
+    - RVTO2 Address Configuration (/api/v1/rvto2addr)
 
     ## API Versioning
     This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major
-    version in the URL path (e.g., `/v1/vouchers`).
+    version in the URL path (e.g., `/api/v1/vouchers`).
 
     - **MAJOR version** changes indicate breaking changes (incompatible API changes)
     - **MINOR version** changes add functionality in a backward-compatible manner
@@ -49,6 +49,10 @@ info:
     - `X-RateLimit-Reset`: Time when the rate limit resets (Unix timestamp)
 
     When rate limits are exceeded, the API returns a 429 Too Many Requests status code.
+
+    ## Request Body Size Limit
+    All management API endpoints enforce a maximum request body size of 10MB.
+    Requests exceeding this limit will receive a `413 Payload Too Large` response.
   contact:
     name: Go FDO Server API Support
     url: https://github.com/fido-device-onboard/go-fdo-server/issues
@@ -63,16 +67,12 @@ tags:
     description: Operations related to ownership voucher management
 paths:
   /health:
-    $ref: 'health.yaml#/paths/~1health'
-  /v1/vouchers:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers'
-  /v1/vouchers/{guid}:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}'
-  /v1/vouchers/{guid}/extend:
-    $ref: 'voucher.yaml#/paths/~1v1~1vouchers~1{guid}~1extend'
-  /v1/device-ca:
-    $ref: 'device-ca.yaml#/paths/~1v1~1device-ca'
-  /v1/device-ca/{fingerprint}:
-    $ref: 'device-ca.yaml#/paths/~1v1~1device-ca~1{fingerprint}'
-  /v1/rvto2addr:
-    $ref: 'rvto2addr.yaml#/paths/~1v1~1rvto2addr'
+    $ref: ../health/openapi.yaml#/paths/~1health
+  /api/v1/owner/vouchers:
+    $ref: ../voucher/openapi.yaml#/paths/~1vouchers
+  /api/v1/owner/vouchers/{guid}:
+    $ref: ../voucher/openapi.yaml#/paths/~1vouchers~1{guid}
+  /api/v1/owner/resell/{guid}:
+    $ref: ../resell/openapi.yaml#/paths/~1resell~1{guid}
+  /api/v1/owner/redirect:
+    $ref: ../ownerinfo/openapi.yaml#/paths/~1owner~1redirect

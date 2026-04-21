@@ -1,8 +1,12 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
-package: components
+package: deviceca
 generate:
+  std-http-server: true
+  strict-server: true
   models: true
-output: handlers/components/models.gen.go
+output: handler.gen.go
+import-mapping:
+  ../components/openapi.yaml: "github.com/fido-device-onboard/go-fdo-server/api/v1/components"
 output-options:
   # to make sure that all types are generated
   skip-prune: true
