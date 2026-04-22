@@ -1,0 +1,3731 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "FDO Owner Server API",
+    "version": "2.0.0",
+    "description": "API for the FDO Owner Server role. The Owner Server is responsible for managing\ndevice ownership, including ownership vouchers, trusted device CA certificates,\nand rendezvous TO2 addresses for device onboarding.\n\nThis specification aggregates the following management APIs:\n- Ownership Voucher Management (/v1/vouchers) (Deprecated)\n- Ownership Voucher Management (/v2/vouchers)\n- Trusted Device CA Certificates (/v1/device-ca) (Deprecated) \n- Trusted Device CA Certificates (/v2/device-ca)\n- RVTO2 Address Configuration (/v1/owner/redirect) (Deprecated) \n- RVTO2 Address Configuration (/v2/rvto2addr)\n\n## API Versioning\nThis API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major\nversion in the URL path (e.g., `/api/v2/vouchers`).\n\n- **MAJOR version** changes indicate breaking changes (incompatible API changes)\n- **MINOR version** changes add functionality in a backward-compatible manner\n- **PATCH version** changes are backward-compatible bug fixes\n\n### Version Support Policy\n- The current major version (v2) is fully supported\n- When a new major version is released, the previous major version will be\n  supported for a minimum of 12 months\n- Deprecated endpoints or fields will be marked in the documentation and\n  supported for at least 6 months before removal\n- Deprecation notices will include the deprecation date, removal date, and\n  migration guidance\n\n### Breaking Changes\nBreaking changes that trigger a major version increment include:\n- Removing or renaming endpoints\n- Removing or renaming request/response fields\n- Changing field types or validation rules\n- Changing authentication mechanisms\n\n## Pagination\nList operations support pagination using `offset` and `limit` query parameters:\n- `offset`: Number of items to skip (default: 0, minimum: 0)\n- `limit`: Maximum number of items to return (default: 100, minimum: 1, maximum: 1000)\n\n## Rate Limiting\nAPI requests may be subject to rate limiting to ensure service stability.\nRate limit information is provided in response headers when applicable:\n- `X-RateLimit-Limit`: Maximum requests allowed in the time window\n- `X-RateLimit-Remaining`: Remaining requests in the current window\n- `X-RateLimit-Reset`: Time when the rate limit resets (Unix timestamp)\n\nWhen rate limits are exceeded, the API returns a 429 Too Many Requests status code.\n\n## Request Body Size Limit\nAll management API endpoints enforce a maximum request body size of 10MB.\nRequests exceeding this limit will receive a `413 Payload Too Large` response.\n",
+    "contact": {
+      "name": "Go FDO Server API Support",
+      "url": "https://github.com/fido-device-onboard/go-fdo-server/issues"
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "GetHealth",
+        "summary": "Get server health status",
+        "description": "Returns the server version and health status.\n\nNote: This endpoint does not require authentication and is intended\nfor health checks by monitoring systems and load balancers.\n",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthStatus"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError",
+            "examples": {
+              "error": {
+                "summary": "Example of an unhealthy server",
+                "value": {
+                  "message": "database error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/owner/vouchers": {
+      "get": {
+        "operationId": "ListVouchers",
+        "summary": "Query ownership vouchers (Deprecated)",
+        "description": "Returns a list of ownership vouchers matching optional filter criteria.\n\nResults are ordered by updated_at timestamp in descending order.\nThe CBOR field is omitted from results (use GET /vouchers/{guid} to retrieve full voucher).\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "query",
+            "description": "Filter by device GUID (hex-encoded)",
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          },
+          {
+            "name": "device_info",
+            "in": "query",
+            "description": "Filter by device info string",
+            "schema": {
+              "type": "string",
+              "example": "MyDevice"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved voucher list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoucherMetadata"
+                  }
+                },
+                "examples": {
+                  "emptyList": {
+                    "summary": "No vouchers found",
+                    "value": []
+                  },
+                  "voucherList": {
+                    "summary": "List of vouchers",
+                    "value": [
+                      {
+                        "guid": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+                        "device_info": "Device 1",
+                        "created_at": "2024-01-15T10:30:00Z",
+                        "updated_at": "2024-01-15T10:30:00Z"
+                      },
+                      {
+                        "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                        "device_info": "Device 2",
+                        "created_at": "2024-01-14T09:20:00Z",
+                        "updated_at": "2024-01-14T09:20:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid GUID: xyz"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while querying vouchers",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      },
+      "post": {
+        "operationId": "InsertVoucher",
+        "summary": "Insert ownership voucher(s) (Deprecated)",
+        "description": "Inserts one or more ownership vouchers into the database.\n\nThe request body should contain PEM-encoded ownership voucher(s).\nEach voucher is verified for:\n- Ownership (voucher owner key matches server's configured keys)\n- Cryptographic integrity (signature chain, certificate chains, etc.)\n- Protocol version and header field validity\n\nDuplicate vouchers (same GUID with same CBOR data) are silently skipped.\nExisting vouchers (same GUID with different CBOR data) are not overwritten and are silently skipped.\n\nThe operation succeeds (200 OK) even if all vouchers were duplicates/skipped.\n",
+        "requestBody": {
+          "description": "PEM-encoded ownership voucher(s)",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "example": "-----BEGIN OWNERSHIP VOUCHER-----\n[base64-encoded CBOR data]\n-----END OWNERSHIP VOUCHER-----\n"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Voucher(s) successfully inserted or were duplicates",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": ""
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid voucher data or verification failed",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "decodeCborError": {
+                    "summary": "Unable to decode CBOR",
+                    "value": "Unable to decode cbor"
+                  },
+                  "invalidVoucher": {
+                    "summary": "Voucher verification failed",
+                    "value": "Invalid ownership voucher"
+                  },
+                  "decodePemError": {
+                    "summary": "Unable to decode PEM",
+                    "value": "Unable to decode PEM content"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "http: request body too large"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while inserting voucher",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readBodyError": {
+                    "summary": "Error reading request body",
+                    "value": "Failure to read the request body"
+                  },
+                  "insertError": {
+                    "summary": "Error inserting into database",
+                    "value": "Internal server error"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      }
+    },
+    "/api/v1/owner/vouchers/{guid}": {
+      "get": {
+        "operationId": "GetVoucherByGUID",
+        "summary": "Get ownership voucher by GUID (Deprecated)",
+        "description": "Retrieves a specific ownership voucher by its device GUID.\n\nReturns the voucher in PEM format with full CBOR data.\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "Device GUID (hex-encoded, 32 characters)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the ownership voucher",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "-----BEGIN OWNERSHIP VOUCHER-----\n[base64-encoded CBOR data]\n-----END OWNERSHIP VOUCHER-----\n"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid GUID format",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "invalidGuid": {
+                    "summary": "Invalid GUID",
+                    "value": "Invalid GUID"
+                  },
+                  "invalidFormat": {
+                    "summary": "Invalid GUID format",
+                    "value": "Invalid GUID format"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Voucher not found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Voucher not found"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "vouchers"
+        ]
+      }
+    },
+    "/api/v1/owner/resell/{guid}": {
+      "post": {
+        "operationId": "ResellVoucher",
+        "summary": "Resell ownership voucher to new owner (Deprecated)",
+        "description": "Extends an ownership voucher to a new owner by adding a new entry to the signature chain.\n\nThis operation:\n1. Retrieves the current voucher by GUID\n2. Extends it with the new owner's public key\n3. Deletes the old voucher\n4. Inserts the extended voucher\n5. Returns the extended voucher in PEM format\n\nThe operation is atomic (wrapped in a database transaction).\nIf any step fails, the transaction is rolled back and the original voucher is preserved.\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "Device GUID (hex-encoded, 32 characters)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "PEM-encoded public key of the new owner",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "example": "-----BEGIN PUBLIC KEY-----\n[base64-encoded public key]\n-----END PUBLIC KEY-----\n"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully resold voucher to new owner",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "-----BEGIN OWNERSHIP VOUCHER-----\n[base64-encoded extended CBOR data]\n-----END OWNERSHIP VOUCHER-----\n"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid GUID, request body, or unsupported key type",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "invalidGuid": {
+                    "summary": "Invalid GUID",
+                    "value": "GUID is not a valid GUID"
+                  },
+                  "invalidFormat": {
+                    "summary": "Invalid GUID format",
+                    "value": "Invalid GUID format"
+                  },
+                  "unsupportedKeyType": {
+                    "summary": "Unsupported public key type",
+                    "value": "Unsupported public key type"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Voucher not found for the specified GUID",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Voucher not found for the specified GUID"
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "http: request body too large"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred during resell operation",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readBodyError": {
+                    "summary": "Error reading request body",
+                    "value": "Failure to read the request body"
+                  },
+                  "invalidPem": {
+                    "summary": "Invalid PEM content",
+                    "value": "Invalid PEM content"
+                  },
+                  "parseKeyError": {
+                    "summary": "Error parsing public key",
+                    "value": "Error parsing x.509 public key"
+                  },
+                  "resellError": {
+                    "summary": "Error reselling voucher",
+                    "value": "Error reselling voucher"
+                  },
+                  "marshalError": {
+                    "summary": "Error marshaling voucher",
+                    "value": "Error marshaling voucher"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "resell"
+        ]
+      }
+    },
+    "/api/v1/owner/redirect": {
+      "get": {
+        "operationId": "GetRVTO2Addr",
+        "summary": "Get the current owner redirect info (RVTO2Addr) configuration (Deprecated)",
+        "description": "Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address\nconfiguration that specifies where devices should connect to the owner server\nafter completing the rendezvous protocol.\n\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the owner redirect info (RVTO2Addr) configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr"
+                },
+                "examples": {
+                  "simpleHttpConfig": {
+                    "summary": "Simple HTTP configuration with DNS",
+                    "value": [
+                      {
+                        "protocol": "http",
+                        "dns": "owner.example.com",
+                        "port": "8080"
+                      }
+                    ]
+                  },
+                  "httpsWithDNS": {
+                    "summary": "HTTPS configuration with DNS",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-secure.example.com",
+                        "port": "8443"
+                      }
+                    ]
+                  },
+                  "httpsWithIP": {
+                    "summary": "HTTPS configuration with IP address",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "ip": "192.168.1.100",
+                        "port": "8443"
+                      }
+                    ]
+                  },
+                  "httpsWithBothDnsAndIP": {
+                    "summary": "HTTPS configuration with both DNS and IP",
+                    "description": "Both dns and ip can be provided together",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner.example.com",
+                        "ip": "192.168.1.100",
+                        "port": "8443"
+                      }
+                    ]
+                  },
+                  "multipleAddresses": {
+                    "summary": "Multiple addresses with primary and backup",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": "8443"
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": "8443"
+                      },
+                      {
+                        "protocol": "https",
+                        "ip": "192.168.1.100",
+                        "port": "8443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No RVTO2Addr configuration has been created yet.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "No ownerInfo found"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while fetching the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Error fetching ownerInfo"
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      },
+      "post": {
+        "operationId": "CreateRVTO2Addr",
+        "summary": "Create the owner redirect info (RVTOAddr) configuration (Deprecated)",
+        "description": "Creates the owner redirect info (RVTO2Addr) configuration.\n\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "requestBody": {
+          "description": "The new owner redirect info (RVTO2Addr) configuration",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RVTO2Addr"
+              },
+              "examples": {
+                "createHttps": {
+                  "summary": "Create HTTPS with DNS",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-new.example.com",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "createMultipleAddresses": {
+                  "summary": "Create with primary and backup addresses",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-primary.example.com",
+                      "port": "8443"
+                    },
+                    {
+                      "protocol": "https",
+                      "dns": "owner-backup.example.com",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "createIPBased": {
+                  "summary": "Create IP-based configuration",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "ip": "10.0.0.50",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "createWithBothDnsAndIP": {
+                  "summary": "Create with both DNS and IP address",
+                  "description": "Demonstrates that both dns and ip can be provided together",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-dual.example.com",
+                      "ip": "10.0.0.100",
+                      "port": "8443"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successfully created the owner redirect info (RVTO2Addr) configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr"
+                },
+                "examples": {
+                  "createdHttpsConfiguration": {
+                    "summary": "Successfully created to HTTPS configuration",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-new.example.com",
+                        "port": "8443"
+                      }
+                    ]
+                  },
+                  "createdMultipleAddresses": {
+                    "summary": "Successfully created with multiple addresses",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": "8443"
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": "8443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid owner redirect info (RVTO2Addr) configuration provided in the request body.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid ownerInfo"
+              }
+            }
+          },
+          "409": {
+            "description": "Owner redirect info (RVTO2Addr) configuration already exists. Use PUT to update instead.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "ownerInfo already exists"
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "http: request body too large"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while creating the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readError": {
+                    "summary": "Error reading request body",
+                    "value": "Error reading body"
+                  },
+                  "insertError": {
+                    "summary": "Error inserting into database",
+                    "value": "Error inserting ownerInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      },
+      "put": {
+        "operationId": "UpdateRVTO2Addr",
+        "summary": "Update the owner redirect info (RVTO2Addr) configuration (Deprecated)",
+        "description": "Updates the owner redirect info (RVTO2Addr) configuration.\n\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "requestBody": {
+          "description": "The new owner redirect info (RVTO2Addr) configuration",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RVTO2Addr"
+              },
+              "examples": {
+                "updateToHttps": {
+                  "summary": "Update to HTTPS with DNS",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-new.example.com",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "updateToMultipleAddresses": {
+                  "summary": "Update with primary and backup addresses",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-primary.example.com",
+                      "port": "8443"
+                    },
+                    {
+                      "protocol": "https",
+                      "dns": "owner-backup.example.com",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "updateToIPBased": {
+                  "summary": "Update to IP-based configuration",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "ip": "10.0.0.50",
+                      "port": "8443"
+                    }
+                  ]
+                },
+                "updateWithBothDnsAndIP": {
+                  "summary": "Update with both DNS and IP address",
+                  "description": "Demonstrates that both dns and ip can be provided together",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-dual.example.com",
+                      "ip": "10.0.0.100",
+                      "port": "8443"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully updated the owner redirect info (RVTO2Addr) configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr"
+                },
+                "examples": {
+                  "updatedHttpsConfiguration": {
+                    "summary": "Successfully updated to HTTPS configuration",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-new.example.com",
+                        "port": "8443"
+                      }
+                    ]
+                  },
+                  "updatedMultipleAddresses": {
+                    "summary": "Successfully updated with multiple addresses",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": "8443"
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": "8443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid owner redirect info (RVTO2Addr) configuration provided in the request body.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Invalid ownerInfo"
+              }
+            }
+          },
+          "404": {
+            "description": "Owner redirect info (RVTO2Addr) configuration does not exist. Use POST to create it first.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "ownerInfo does not exist"
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "http: request body too large"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while updating the configuration.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "readError": {
+                    "summary": "Error reading request body",
+                    "value": "Error reading body"
+                  },
+                  "updateError": {
+                    "summary": "Error updating in database",
+                    "value": "Error updating ownerInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      }
+    },
+    "/api/v1/device-ca": {
+      "get": {
+        "operationId": "ListTrustedDeviceCACerts",
+        "summary": "List all trusted device CA certificates",
+        "description": "Retrieves a paginated, filterable, and sortable list of all registered trusted device CA certificates.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns certificate metadata as JSON (default)\n- `application/x-pem-file` - Returns certificates as concatenated PEM file\n",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of items to return per page.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The number of items to skip before starting to collect the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "issuer",
+            "in": "query",
+            "description": "Filters the results by the exact issuer distinguished name.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "CN=Example Device CA, O=Example Inc, C=US"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "description": "Filters the results by the exact subject distinguished name.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "CN=Example Device CA, O=Example Inc, C=US"
+            }
+          },
+          {
+            "name": "validityStatus",
+            "in": "query",
+            "description": "Filters certificates by their validity status.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "valid",
+                "expired",
+                "not-yet-valid"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Searches within subject and issuer fields (case-insensitive).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "description": "Sorts the results by the specified field.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "createdAt",
+              "enum": [
+                "createdAt",
+                "notBefore",
+                "notAfter",
+                "subject",
+                "issuer"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "description": "Specifies the sorting order.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A paginated list of trusted device CA certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACertsPaginated"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Example of a successful response",
+                    "value": {
+                      "total": 2,
+                      "limit": 20,
+                      "offset": 0,
+                      "certs": [
+                        {
+                          "fingerprint": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-01-01T00:00:00Z",
+                          "notAfter": "2026-01-01T00:00:00Z",
+                          "createdAt": "2025-05-10T10:30:00Z"
+                        },
+                        {
+                          "fingerprint": "b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-02-15T00:00:00Z",
+                          "notAfter": "2026-02-15T00:00:00Z",
+                          "createdAt": "2025-06-20T12:00:00Z"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "getPEMCACerts": {
+                    "summary": "Example of a successful response",
+                    "value": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError1"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      },
+      "post": {
+        "operationId": "ImportTrustedDeviceCACerts",
+        "summary": "Import one or more trusted device CA certificates",
+        "description": "Uploads one or more PEM-encoded certificates for trusted device certificate authorities.\nA single PEM file may contain multiple certificates.\n\nThis operation is idempotent:\n- Valid, non-expired certificates that don't exist in the database are imported\n- Certificates that already exist (duplicate fingerprint) are silently skipped\n- Expired certificates are silently skipped\n- Malformed or invalid certificates are silently skipped\n\nThe response includes statistics and detailed messages about the operation:\n\n- `detected`:  Total number of parsable certificate blocks found in the PEM data.\n- `malformed`: Number of PEM blocks that could not be parsed as valid certificates.\n- `imported`:  Number of new, valid certificates successfully imported into the database.\n- `skipped`:   Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.\n- `messages`:  Array of detailed status messages for each certificate processed\n",
+        "requestBody": {
+          "description": "One or more PEM-encoded certificates. The file may contain multiple certificates.",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 1048576
+              },
+              "examples": {
+                "createCert": {
+                  "summary": "Example of creating new CA certificates",
+                  "value": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Certificate upload processed successfully. Returns statistics and details of imported certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACertsImportResult"
+                },
+                "examples": {
+                  "allImported": {
+                    "summary": "All certificates successfully imported",
+                    "value": {
+                      "detected": 2,
+                      "imported": 2,
+                      "skipped": 0,
+                      "malformed": 0,
+                      "messages": [
+                        "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully",
+                        "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                      ],
+                      "certs": [
+                        {
+                          "fingerprint": "c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        },
+                        {
+                          "fingerprint": "d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
+                  },
+                  "partialImport": {
+                    "summary": "Some certificates skipped (duplicates, expired or malformed)",
+                    "value": {
+                      "detected": 4,
+                      "imported": 2,
+                      "skipped": 1,
+                      "malformed": 1,
+                      "messages": [
+                        "the certificate at position 1 is malformed",
+                        "the certificate at position 2 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully",
+                        "the certificate at position 3 with subject 'CN=Example Device CA Expired, O=Example Corp, C=US' was skipped because it is expired",
+                        "the certificate at position 4 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                      ],
+                      "certs": [
+                        {
+                          "fingerprint": "c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        },
+                        {
+                          "fingerprint": "d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
+                  },
+                  "noneImported": {
+                    "summary": "All certificates already exist",
+                    "value": {
+                      "detected": 2,
+                      "imported": 0,
+                      "skipped": 2,
+                      "malformed": 0,
+                      "messages": [
+                        "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was skipped because it already exists",
+                        "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was skipped because it already exists"
+                      ],
+                      "certs": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error1"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError1"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      }
+    },
+    "/api/v1/device-ca/{fingerprint}": {
+      "get": {
+        "operationId": "GetTrustedDeviceCACertByFingerprint",
+        "summary": "Get a trusted device CA certificate by fingerprint",
+        "description": "Retrieves a specific trusted device CA certificate by its SHA-256 fingerprint.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns certificate metadata as JSON (default)\n- `application/x-pem-file` - Returns certificate as PEM file\n",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested trusted device CA certificate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACert"
+                },
+                "examples": {
+                  "getCertJson": {
+                    "summary": "Example JSON certificate response",
+                    "value": {
+                      "fingerprint": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+                      "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                      "subject": "CN=Example Device CA, O=Example Corp, C=US",
+                      "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                      "notBefore": "2025-01-01T00:00:00Z",
+                      "notAfter": "2026-01-01T00:00:00Z",
+                      "createdAt": "2025-05-10T10:30:00Z"
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "description": "The certificate content in PEM format.",
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "getCertPem": {
+                    "summary": "Example PEM certificate response",
+                    "value": "-----BEGIN CERTIFICATE-----\nMIIDzTCCArWgAwIBAgIQC+2PL2fUi... (truncated)\n-----END CERTIFICATE-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError1"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      },
+      "delete": {
+        "operationId": "DeleteTrustedDeviceCACert",
+        "summary": "Delete a trusted device CA certificate by fingerprint",
+        "description": "Deletes a specific trusted device CA certificate by its SHA-256 fingerprint.",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Trusted device CA certificate deleted successfully."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError1"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      }
+    },
+    "/api/v2/vouchers": {
+      "get": {
+        "operationId": "ListOwnershipVouchers",
+        "summary": "List all ownership vouchers",
+        "description": "Retrieves a paginated, filterable, and sortable list of all ownership vouchers.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns voucher metadata as JSON (default)\n- `application/x-pem-file` - Returns vouchers as concatenated PEM file\n\nIf no Accept header is provided, the response defaults to `application/json`.\n",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of items to return per page.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The number of items to skip before starting to collect the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "guid",
+            "in": "query",
+            "description": "Filters the results by the exact device GUID.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          },
+          {
+            "name": "deviceInfo",
+            "in": "query",
+            "description": "Filters the results by device information (case-insensitive partial match).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Searches within device info and GUID fields (case-insensitive).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "description": "Sorts the results by the specified field.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "createdAt",
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "guid",
+                "deviceInfo"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "description": "Specifies the sorting order.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A paginated list of ownership vouchers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVouchersPaginated"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Example of a successful response",
+                    "description": "Shows page 1 of results (items 0-19 of 2 total).\nTo navigate pages:\n- Next page: GET /vouchers?limit=20&offset=20\n- Previous page: GET /vouchers?limit=20&offset=0 (already at first page)\n- Total pages: ceil(total / limit) = ceil(2 / 20) = 1\n",
+                    "value": {
+                      "total": 2,
+                      "limit": 20,
+                      "offset": 0,
+                      "vouchers": [
+                        {
+                          "voucher": {
+                            "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                            "protocolVersion": 101,
+                            "deviceInfo": "Intel Device",
+                            "numEntries": 1
+                          },
+                          "createdAt": "2025-05-10T10:30:00Z",
+                          "updatedAt": "2025-05-10T10:30:00Z"
+                        },
+                        {
+                          "voucher": {
+                            "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                            "protocolVersion": 101,
+                            "deviceInfo": "ARM IoT Device",
+                            "numEntries": 2
+                          },
+                          "createdAt": "2025-06-20T12:00:00Z",
+                          "updatedAt": "2025-06-21T08:15:00Z"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                },
+                "examples": {
+                  "getPEMVouchers": {
+                    "summary": "Example of a successful response",
+                    "value": "-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB\nAligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg\n...\n-----END OWNERSHIP VOUCHER-----\n-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB\nGQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy\n...\n-----END OWNERSHIP VOUCHER-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "voucher"
+        ]
+      },
+      "post": {
+        "operationId": "ImportOwnershipVouchers",
+        "summary": "Import ownership voucher(s)",
+        "description": "Imports one or more ownership vouchers into the system.\n\nThis operation is idempotent:\n- Valid vouchers that don't exist in the database are imported\n- Vouchers that already exist (duplicate GUID) are rejected with a 409 error\n- Malformed or invalid vouchers are rejected with a 400 error\n\nOwnership vouchers can be provided in PEM or JSON format.\nYou can import a single voucher or an array of vouchers.\n",
+        "requestBody": {
+          "description": "One or more ownership vouchers in PEM or JSON format.",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "maxLength": 1048576
+              },
+              "examples": {
+                "importFromPEM": {
+                  "summary": "Example of importing vouchers from PEM",
+                  "value": "-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB\nAligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUg\n...\n-----END OWNERSHIP VOUCHER-----\n-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUKEb7z1bVQ1SjsqJD8yJsd7pgxEaGVhZGVyWEKhBRkBAQZYPKEB\nGQEBAKAZ2nHk+gLUA7xpNTyTPWYn2fUplDZvrEu8T+xaY9EEhVwRTeGFy\n...\n-----END OWNERSHIP VOUCHER-----\n"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ownership voucher(s) imported successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Vouchers successfully imported",
+                    "value": [
+                      {
+                        "voucher": {
+                          "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                          "protocolVersion": 101,
+                          "deviceInfo": "Intel Device",
+                          "numEntries": 1
+                        },
+                        "createdAt": "2025-10-27T14:00:00Z",
+                        "updatedAt": "2025-10-27T14:00:00Z"
+                      },
+                      {
+                        "voucher": {
+                          "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                          "protocolVersion": 101,
+                          "deviceInfo": "ARM IoT Device",
+                          "numEntries": 1
+                        },
+                        "createdAt": "2025-10-27T14:00:00Z",
+                        "updatedAt": "2025-10-27T14:00:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "Conflict - A voucher with this GUID already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "voucher"
+        ]
+      }
+    },
+    "/api/v2/vouchers/{guid}": {
+      "get": {
+        "operationId": "GetOwnershipVoucherByGuid",
+        "summary": "Get an ownership voucher by GUID",
+        "description": "Retrieves a specific ownership voucher by its device GUID.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns voucher metadata as JSON (default)\n- `application/x-pem-file` - Returns voucher as PEM file\n\nIf no Accept header is provided, the response defaults to `application/json`.\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "The device GUID (32 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested ownership voucher.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVoucher"
+                },
+                "examples": {
+                  "getVoucherJson": {
+                    "summary": "Example JSON voucher response",
+                    "value": {
+                      "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                      "protocolVersion": 101,
+                      "deviceInfo": "Intel Device",
+                      "numEntries": 1,
+                      "header": {
+                        "version": 101,
+                        "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                        "rvInfo": [
+                          [
+                            {
+                              "dns": "rendezvous.example.com"
+                            },
+                            {
+                              "protocol": "http"
+                            },
+                            {
+                              "owner_port": 8080
+                            }
+                          ]
+                        ],
+                        "deviceInfo": "Intel Device",
+                        "manufacturerKey": {
+                          "type": "SECP256R1",
+                          "value": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."
+                        },
+                        "certChainHash": {
+                          "algorithm": "SHA-384",
+                          "value": "a1b2c3d4..."
+                        }
+                      },
+                      "hmac": {
+                        "algorithm": "HMAC-SHA-384",
+                        "value": "e5f6a7b8..."
+                      },
+                      "certChain": [
+                        "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----"
+                      ],
+                      "entries": [
+                        {
+                          "previousHash": {
+                            "algorithm": "SHA-384",
+                            "value": "00000000..."
+                          },
+                          "headerHash": {
+                            "algorithm": "SHA-384",
+                            "value": "c3d4e5f6..."
+                          },
+                          "publicKey": {
+                            "type": "SECP256R1",
+                            "value": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "description": "The voucher content in PEM format.",
+                  "type": "string"
+                },
+                "examples": {
+                  "getVoucherPem": {
+                    "summary": "Example PEM voucher response",
+                    "value": "-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB\nAligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2\naWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD\naGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2\nb6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXk=\n-----END OWNERSHIP VOUCHER-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound1"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "voucher"
+        ]
+      },
+      "delete": {
+        "operationId": "DeleteOwnershipVoucher",
+        "summary": "Delete an ownership voucher by GUID",
+        "description": "Deletes a specific ownership voucher by its device GUID.",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "The device GUID (32 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ownership voucher deleted successfully."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound1"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "voucher"
+        ]
+      }
+    },
+    "/api/v2/vouchers/{guid}/extend": {
+      "post": {
+        "operationId": "ExtendOwnershipVoucher",
+        "summary": "Extend an ownership voucher",
+        "description": "Extends an ownership voucher by adding a new ownership entry. This operation\nis used to transfer ownership of a device from one owner to another.\n\nThe request must include the new owner's public key and will be signed\nwith the current owner's private key.\n",
+        "parameters": [
+          {
+            "name": "guid",
+            "in": "path",
+            "description": "The device GUID (32 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "New owner's public key or certificate in PEM format.",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string"
+              },
+              "examples": {
+                "extendWithPublicKey": {
+                  "summary": "Extend voucher with PEM encoded public key",
+                  "value": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaXhXuQUiGqKv5VqJ3VZqDz7XJ8v5\nKxMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8Pw==\n-----END PUBLIC KEY-----\n"
+                },
+                "extendWithCertificate": {
+                  "summary": "Extend voucher with PEM encoded certificate",
+                  "value": "-----BEGIN CERTIFICATE-----\nMIICljCCAX4CCQDqJ0HQqh0W5jANBgkqhkiG9w0BAQsFADANMQswCQYDVQQGEwJV\nUzAeFw0yNTEwMjcxNDAwMDBaFw0yNjEwMjcxNDAwMDBaMA0xCzAJBgNVBAYTAlVT\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx2q5VqJ3VZqDz7XJ8v5K\nxMfLgH5Z3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PwIDAQAB\nMA0GCSqGSIb3DQEBCwUAA4IBAQBqKJ5vZ3YqN8PzGqKJ5vZ3YqN8PzGqKJ5vZ3Yq\nN8PzGqKJ5vZ3YqN8Pw==\n-----END CERTIFICATE-----\n"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership voucher extended successfully.",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "description": "The extended voucher in PEM format.",
+                  "type": "string"
+                },
+                "examples": {
+                  "extendedVoucher": {
+                    "summary": "Extended voucher in PEM format",
+                    "value": "-----BEGIN OWNERSHIP VOUCHER-----\noWRndWlkUNIdhBo/VPTompDtm5d56egEaGVhZGVyWEKhBRkBAQZYPKEBGQEB\nAligGdpx5PoC1AO8aTU8kz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2\naWNlIGluZm9ybWF0aW9uBWJtZnJLZXlYa6EBAmhta2V5dmFsdWUGaGNlcnRD\naGFpbkhhc2ihaEFsZ29yaXRobUhTSEEtMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2\nb6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNlIGluZm9ybWF0aW9uBWJtZnJLZXlY\na6EBAmhta2V5dmFsdWUGaGNlcnRDaGFpbkhhc2ihaEFsZ29yaXRobUhTSEEt\nMzg0aVZhbHVlWDCwkz1mJ9n1KZQ2b6xLvE/sWmPRBIVcEU3hhcmUgZGV2aWNl\nIGluZm9ybWF0aW9uBWJtZnJLZXk=\n-----END OWNERSHIP VOUCHER-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound1"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "voucher"
+        ]
+      }
+    },
+    "/api/v2/device-ca": {
+      "get": {
+        "operationId": "ListTrustedDeviceCACerts",
+        "summary": "List all trusted device CA certificates",
+        "description": "Retrieves a paginated, filterable, and sortable list of all registered trusted device CA certificates.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns certificate metadata as JSON (default)\n- `application/x-pem-file` - Returns certificates as concatenated PEM file\n",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of items to return per page.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The number of items to skip before starting to collect the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "issuer",
+            "in": "query",
+            "description": "Filters the results by the exact issuer distinguished name.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "CN=Example Device CA, O=Example Inc, C=US"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "description": "Filters the results by the exact subject distinguished name.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "CN=Example Device CA, O=Example Inc, C=US"
+            }
+          },
+          {
+            "name": "validityStatus",
+            "in": "query",
+            "description": "Filters certificates by their validity status.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "valid",
+                "expired",
+                "not-yet-valid"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Searches within subject and issuer fields (case-insensitive).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "description": "Sorts the results by the specified field.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "createdAt",
+              "enum": [
+                "createdAt",
+                "notBefore",
+                "notAfter",
+                "subject",
+                "issuer"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "description": "Specifies the sorting order.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A paginated list of trusted device CA certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACertsPaginated1"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Example of a successful response",
+                    "value": {
+                      "total": 2,
+                      "limit": 20,
+                      "offset": 0,
+                      "certs": [
+                        {
+                          "fingerprint": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-01-01T00:00:00Z",
+                          "notAfter": "2026-01-01T00:00:00Z",
+                          "createdAt": "2025-05-10T10:30:00Z"
+                        },
+                        {
+                          "fingerprint": "b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-02-15T00:00:00Z",
+                          "notAfter": "2026-02-15T00:00:00Z",
+                          "createdAt": "2025-06-20T12:00:00Z"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "getPEMCACerts": {
+                    "summary": "Example of a successful response",
+                    "value": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      },
+      "post": {
+        "operationId": "ImportTrustedDeviceCACerts",
+        "summary": "Import one or more trusted device CA certificates",
+        "description": "Uploads one or more PEM-encoded certificates for trusted device certificate authorities.\nA single PEM file may contain multiple certificates.\n\nThis operation is idempotent:\n- Valid, non-expired certificates that don't exist in the database are imported\n- Certificates that already exist (duplicate fingerprint) are silently skipped\n- Expired certificates are silently skipped\n- Malformed or invalid certificates are silently skipped\n\nThe response includes statistics and detailed messages about the operation:\n\n- `detected`:  Total number of parsable certificate blocks found in the PEM data.\n- `malformed`: Number of PEM blocks that could not be parsed as valid certificates.\n- `imported`:  Number of new, valid certificates successfully imported into the database.\n- `skipped`:   Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.\n- `messages`:  Array of detailed status messages for each certificate processed\n",
+        "requestBody": {
+          "description": "One or more PEM-encoded certificates. The file may contain multiple certificates.",
+          "required": true,
+          "content": {
+            "application/x-pem-file": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 1048576
+              },
+              "examples": {
+                "createCert": {
+                  "summary": "Example of creating new CA certificates",
+                  "value": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIID... (truncated) ...\n-----END CERTIFICATE-----\n"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Certificate upload processed successfully. Returns statistics and details of imported certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACertsImportResult1"
+                },
+                "examples": {
+                  "allImported": {
+                    "summary": "All certificates successfully imported",
+                    "value": {
+                      "detected": 2,
+                      "imported": 2,
+                      "skipped": 0,
+                      "malformed": 0,
+                      "messages": [
+                        "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully",
+                        "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                      ],
+                      "certs": [
+                        {
+                          "fingerprint": "c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        },
+                        {
+                          "fingerprint": "d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
+                  },
+                  "partialImport": {
+                    "summary": "Some certificates skipped (duplicates, expired or malformed)",
+                    "value": {
+                      "detected": 4,
+                      "imported": 2,
+                      "skipped": 1,
+                      "malformed": 1,
+                      "messages": [
+                        "the certificate at position 1 is malformed",
+                        "the certificate at position 2 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was imported successfully",
+                        "the certificate at position 3 with subject 'CN=Example Device CA Expired, O=Example Corp, C=US' was skipped because it is expired",
+                        "the certificate at position 4 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was imported successfully"
+                      ],
+                      "certs": [
+                        {
+                          "fingerprint": "c3d4e5f6a7b890123456789abcdef012c3d4e5f6a7b890123456789abcdef012",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA One, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        },
+                        {
+                          "fingerprint": "d4e5f6a7b8c901234567890abcdef123d4e5f6a7b8c901234567890abcdef123",
+                          "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                          "subject": "CN=Example Device CA Two, O=Example Corp, C=US",
+                          "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                          "notBefore": "2025-10-01T00:00:00Z",
+                          "notAfter": "2026-10-01T00:00:00Z",
+                          "createdAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
+                  },
+                  "noneImported": {
+                    "summary": "All certificates already exist",
+                    "value": {
+                      "detected": 2,
+                      "imported": 0,
+                      "skipped": 2,
+                      "malformed": 0,
+                      "messages": [
+                        "the certificate at position 1 with subject 'CN=Example Device CA One, O=Example Corp, C=US' was skipped because it already exists",
+                        "the certificate at position 2 with subject 'CN=Example Device CA Two, O=Example Corp, C=US' was skipped because it already exists"
+                      ],
+                      "certs": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "Request payload too large (exceeds maximum allowed size).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      }
+    },
+    "/api/v2/device-ca/{fingerprint}": {
+      "get": {
+        "operationId": "GetTrustedDeviceCACertByFingerprint",
+        "summary": "Get a trusted device CA certificate by fingerprint",
+        "description": "Retrieves a specific trusted device CA certificate by its SHA-256 fingerprint.\n\nUse the Accept header to specify the response format:\n- `application/json` - Returns certificate metadata as JSON (default)\n- `application/x-pem-file` - Returns certificate as PEM file\n",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested trusted device CA certificate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDeviceCACert1"
+                },
+                "examples": {
+                  "getCertJson": {
+                    "summary": "Example JSON certificate response",
+                    "value": {
+                      "fingerprint": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+                      "pem": "-----BEGIN CERTIFICATE-----\nMIID... (truncated) \n-----END CERTIFICATE-----\n",
+                      "subject": "CN=Example Device CA, O=Example Corp, C=US",
+                      "issuer": "CN=Example Intermediate CA, O=Example Corp, C=US",
+                      "notBefore": "2025-01-01T00:00:00Z",
+                      "notAfter": "2026-01-01T00:00:00Z",
+                      "createdAt": "2025-05-10T10:30:00Z"
+                    }
+                  }
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "description": "The certificate content in PEM format.",
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "getCertPem": {
+                    "summary": "Example PEM certificate response",
+                    "value": "-----BEGIN CERTIFICATE-----\nMIIDzTCCArWgAwIBAgIQC+2PL2fUi... (truncated)\n-----END CERTIFICATE-----\n"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound1"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      },
+      "delete": {
+        "operationId": "DeleteTrustedDeviceCACert",
+        "summary": "Delete a trusted device CA certificate by fingerprint",
+        "description": "Deletes a specific trusted device CA certificate by its SHA-256 fingerprint.",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Trusted device CA certificate deleted successfully."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound1"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "device-ca"
+        ]
+      }
+    },
+    "/api/v2/rvto2addr": {
+      "get": {
+        "operationId": "GetRVTO2Addr",
+        "summary": "Get the current RVTO2 address configuration",
+        "description": "Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address\nconfiguration that specifies where devices should connect to the owner server\nafter completing the rendezvous protocol.\n",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the RVTO2 address configuration. Returns an empty array if no configuration has been set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr1"
+                },
+                "examples": {
+                  "simpleHttpConfig": {
+                    "summary": "Simple HTTP configuration with DNS",
+                    "value": [
+                      {
+                        "protocol": "http",
+                        "dns": "owner.example.com",
+                        "port": 8080
+                      }
+                    ]
+                  },
+                  "httpsWithDNS": {
+                    "summary": "HTTPS configuration with DNS",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-secure.example.com",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "httpsWithIP": {
+                    "summary": "HTTPS configuration with IP address",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "ip": "192.168.1.100",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "httpsWithBothDnsAndIP": {
+                    "summary": "HTTPS configuration with both DNS and IP",
+                    "description": "Both dns and ip can be provided together",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner.example.com",
+                        "ip": "192.168.1.100",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "multipleAddresses": {
+                    "summary": "Multiple addresses with primary and backup",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": 8443
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": 8443
+                      },
+                      {
+                        "protocol": "https",
+                        "ip": "192.168.1.100",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "emptyConfiguration": {
+                    "summary": "No configuration set",
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      },
+      "put": {
+        "operationId": "UpdateRVTO2Addr",
+        "summary": "Update the RVTO2 address configuration",
+        "description": "Updates the rendezvous TO2 address configuration.\n\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n",
+        "requestBody": {
+          "description": "The new RVTO2 address configuration",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RVTO2Addr1"
+              },
+              "examples": {
+                "updateToHttps": {
+                  "summary": "Update to HTTPS with DNS",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-new.example.com",
+                      "port": 8443
+                    }
+                  ]
+                },
+                "updateToMultipleAddresses": {
+                  "summary": "Update with primary and backup addresses",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-primary.example.com",
+                      "port": 8443
+                    },
+                    {
+                      "protocol": "https",
+                      "dns": "owner-backup.example.com",
+                      "port": 8443
+                    }
+                  ]
+                },
+                "updateToIPBased": {
+                  "summary": "Update to IP-based configuration",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "ip": "10.0.0.50",
+                      "port": 8443
+                    }
+                  ]
+                },
+                "updateWithBothDnsAndIP": {
+                  "summary": "Update with both DNS and IP address",
+                  "description": "Demonstrates that both dns and ip can be provided together",
+                  "value": [
+                    {
+                      "protocol": "https",
+                      "dns": "owner-dual.example.com",
+                      "ip": "10.0.0.100",
+                      "port": 8443
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully updated the RVTO2 address configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr1"
+                },
+                "examples": {
+                  "updatedHttpsConfiguration": {
+                    "summary": "Successfully updated to HTTPS configuration",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-new.example.com",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "updatedMultipleAddresses": {
+                    "summary": "Successfully updated with multiple addresses",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": 8443
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": 8443
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      },
+      "delete": {
+        "operationId": "DeleteRVTO2Addr",
+        "summary": "Delete the RVTO2 address configuration",
+        "description": "Deletes the current rendezvous TO2 address configuration.\n\nAfter deletion, devices will not have owner server address information\navailable until a new configuration is set via PUT. Returns the deleted\nconfiguration, or an empty array if no configuration was set.\n",
+        "responses": {
+          "200": {
+            "description": "Successfully deleted the RVTO2 address configuration. Returns the deleted configuration or an empty array if nothing was configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RVTO2Addr1"
+                },
+                "examples": {
+                  "deletedHttpsConfiguration": {
+                    "summary": "Deleted HTTPS configuration",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner.example.com",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "deletedMultipleAddresses": {
+                    "summary": "Deleted multiple address configuration",
+                    "value": [
+                      {
+                        "protocol": "https",
+                        "dns": "owner-primary.example.com",
+                        "port": 8443
+                      },
+                      {
+                        "protocol": "https",
+                        "dns": "owner-backup.example.com",
+                        "port": 8443
+                      }
+                    ]
+                  },
+                  "noConfigurationToDelete": {
+                    "summary": "No configuration was set",
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "tags": [
+          "rvto2addr"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "description": "The server version",
+            "type": "string",
+            "example": "0.0.1"
+          },
+          "status": {
+            "description": "The server health status",
+            "type": "string",
+            "example": "OK"
+          },
+          "message": {
+            "description": "Human-readable status message or error description",
+            "type": "string",
+            "example": "the service is up and running"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "message"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "A human-readable error message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "VoucherMetadata": {
+        "description": "Ownership voucher metadata (excludes CBOR data)",
+        "type": "object",
+        "properties": {
+          "guid": {
+            "description": "Device GUID (hex-encoded)",
+            "type": "string",
+            "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+          },
+          "device_info": {
+            "description": "Device information string",
+            "type": "string",
+            "example": "Intel NUC Model XYZ"
+          },
+          "created_at": {
+            "description": "Timestamp when voucher was first inserted",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "updated_at": {
+            "description": "Timestamp when voucher was last updated",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          }
+        },
+        "required": [
+          "guid",
+          "device_info",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "ErrorString": {
+        "description": "A human-readable error message.",
+        "type": "string"
+      },
+      "TransportProtocol": {
+        "description": "Transport protocol for TO2 owner server connections\n(FDO specification section 3.3.14, TransportProtocol).\n- `http` - HTTP protocol (code 3)\n- `https` - HTTPS protocol (code 5)\n- `tcp` - Raw TCP connection (code 1)\n- `tls` - TLS-secured TCP connection (code 2)\n- `coap` - CoAP over UDP (code 4)\n- `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)\n",
+        "type": "string",
+        "example": "https",
+        "enum": [
+          "rest",
+          "http",
+          "https",
+          "tcp",
+          "tls",
+          "coap"
+        ]
+      },
+      "DNSHostname": {
+        "type": "string",
+        "format": "hostname",
+        "example": "rendezvous.example.com"
+      },
+      "IPv4Address": {
+        "type": "string",
+        "format": "ipv4",
+        "example": "192.168.1.100"
+      },
+      "PortString": {
+        "type": "string",
+        "example": "8443"
+      },
+      "RVTO2AddrEntry": {
+        "description": "A single owner server address entry. Each entry specifies the protocol,\nnetwork location (DNS hostname and/or IP address), and port for connecting\nto the owner server during TO2 protocol.\n\nBoth 'dns' and 'ip' fields are optional and may be provided independently\nor together. However, at least one addressing method MUST be specified\n(non-null) as required by FDO specification section 3.3.14. Requests that\nomit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.\n\nWhen both 'dns' and 'ip' are provided, the device MUST attempt to connect\nusing the DNS address first. The device MUST only use the IP address after\nall DNS connection attempts have failed. This behavior is defined in the\nFDO specification section 3.3.14.\n",
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "$ref": "#/components/schemas/TransportProtocol"
+          },
+          "dns": {
+            "$ref": "#/components/schemas/DNSHostname"
+          },
+          "ip": {
+            "$ref": "#/components/schemas/IPv4Address"
+          },
+          "port": {
+            "$ref": "#/components/schemas/PortString"
+          }
+        },
+        "required": [
+          "protocol",
+          "port"
+        ]
+      },
+      "RVTO2Addr": {
+        "description": "Rendezvous TO2 address configuration. Specifies one or more owner server\naddresses that devices should use to connect during the TO2 (Transfer of\nOwnership 2) protocol after completing rendezvous. Multiple entries provide\nfallback options if the primary address is unreachable.\n",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RVTO2AddrEntry"
+        }
+      },
+      "TrustedDeviceCACert": {
+        "type": "object",
+        "properties": {
+          "fingerprint": {
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "type": "string",
+            "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "pem": {
+            "description": "The full certificate content in PEM format.",
+            "type": "string",
+            "format": "pem",
+            "maxLength": 32768,
+            "pattern": "^-----BEGIN CERTIFICATE-----\\n[\\s\\S]+\\n-----END CERTIFICATE-----\\n?$"
+          },
+          "subject": {
+            "description": "The subject distinguished name of the certificate.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "The issuer distinguished name of the certificate.",
+            "type": "string"
+          },
+          "notBefore": {
+            "description": "The start date of the certificate's validity period.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "notAfter": {
+            "description": "The end date of the certificate's validity period.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "description": "The timestamp when the certificate was added.",
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "pem",
+          "subject",
+          "issuer",
+          "notBefore",
+          "notAfter",
+          "createdAt"
+        ]
+      },
+      "TrustedDeviceCACerts": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/TrustedDeviceCACert"
+        }
+      },
+      "TrustedDeviceCACertsPaginated": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "description": "Total number of trusted device CA certificates available.",
+            "type": "integer"
+          },
+          "limit": {
+            "description": "The number of items returned in this response.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The offset from the beginning of the collection.",
+            "type": "integer"
+          },
+          "certs": {
+            "$ref": "#/components/schemas/TrustedDeviceCACerts"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "certs"
+        ]
+      },
+      "Error1": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "A human-readable error message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "TrustedDeviceCACertsImportResult": {
+        "type": "object",
+        "properties": {
+          "detected": {
+            "description": "Total number of certificate blocks found in the PEM data.",
+            "type": "integer",
+            "example": 5
+          },
+          "imported": {
+            "description": "Number of certificates successfully added to the database.",
+            "type": "integer",
+            "example": 2
+          },
+          "skipped": {
+            "description": "Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.",
+            "type": "integer",
+            "example": 2
+          },
+          "malformed": {
+            "description": "Number of certificate blocks that could not be parsed or validated.",
+            "type": "integer",
+            "example": 1
+          },
+          "messages": {
+            "description": "Detailed import result messages for each certificate found in the PEM data.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "the certificate at position 1 is malformed",
+              "the certificate at position 2 with subject 'CN=Device CA 2,O=Example Inc' was imported successfully",
+              "the certificate at position 3 with subject 'CN=Device CA 3,O=Example Inc' was skipped because it is expired",
+              "the certificate at position 4 with subject 'CN=Device CA 4,O=Example Inc' was skipped because it already exists",
+              "the certificate at position 5 with subject 'CN=Device CA 5,O=Example Inc' was imported successfully"
+            ]
+          },
+          "certs": {
+            "description": "Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustedDeviceCACert"
+            }
+          }
+        },
+        "required": [
+          "detected",
+          "imported",
+          "skipped",
+          "malformed",
+          "messages",
+          "certs"
+        ]
+      },
+      "VoucherGuid": {
+        "description": "The device GUID (32 hexadecimal characters).",
+        "type": "string",
+        "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+        "pattern": "^[a-f0-9]{32}$"
+      },
+      "VoucherProtocolVersion": {
+        "description": "The FDO protocol version (e.g., 101 for version 1.1).",
+        "type": "integer",
+        "example": 101
+      },
+      "VoucherDeviceInfo": {
+        "description": "Device information string.",
+        "type": "string",
+        "example": "Intel Device",
+        "maxLength": 256
+      },
+      "VoucherNumEntries": {
+        "description": "Number of ownership entries in the voucher.",
+        "type": "integer",
+        "example": 1,
+        "minimum": 0
+      },
+      "OwnershipVoucherSummary": {
+        "type": "object",
+        "properties": {
+          "guid": {
+            "$ref": "#/components/schemas/VoucherGuid"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/VoucherProtocolVersion"
+          },
+          "deviceInfo": {
+            "$ref": "#/components/schemas/VoucherDeviceInfo"
+          },
+          "numEntries": {
+            "$ref": "#/components/schemas/VoucherNumEntries"
+          }
+        },
+        "required": [
+          "guid",
+          "protocolVersion",
+          "deviceInfo",
+          "numEntries"
+        ]
+      },
+      "OwnershipVoucherCreatedAt": {
+        "description": "The timestamp when the voucher was created.",
+        "type": "string",
+        "format": "date-time"
+      },
+      "OwnershipVoucherUpdatedAt": {
+        "description": "The timestamp when the voucher was last updated.",
+        "type": "string",
+        "format": "date-time"
+      },
+      "OwnershipVoucherSummaryInfo": {
+        "type": "object",
+        "properties": {
+          "voucher": {
+            "$ref": "#/components/schemas/OwnershipVoucherSummary"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/OwnershipVoucherCreatedAt"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/OwnershipVoucherUpdatedAt"
+          }
+        },
+        "required": [
+          "voucher",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "OwnershipVouchersPaginated": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "description": "Total number of ownership vouchers available.",
+            "type": "integer"
+          },
+          "limit": {
+            "description": "The number of items returned in this response.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The offset from the beginning of the collection.",
+            "type": "integer"
+          },
+          "vouchers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "vouchers"
+        ]
+      },
+      "DNSHostname1": {
+        "type": "string",
+        "format": "hostname",
+        "example": "rendezvous.example.com"
+      },
+      "DNS": {
+        "description": "DNS hostname for the server",
+        "type": "object",
+        "properties": {
+          "dns": {
+            "$ref": "#/components/schemas/DNSHostname1"
+          }
+        },
+        "example": {
+          "dns": "rendezvous.example.com"
+        }
+      },
+      "IPv4Address1": {
+        "type": "string",
+        "format": "ipv4",
+        "example": "192.168.1.100"
+      },
+      "IP": {
+        "description": "IPv4 address for the server",
+        "type": "object",
+        "properties": {
+          "ip": {
+            "$ref": "#/components/schemas/IPv4Address1"
+          }
+        },
+        "example": {
+          "ip": "192.168.1.100"
+        }
+      },
+      "RVProtocol": {
+        "description": "Rendezvous protocol value (FDO specification Table 3.6, RVProtocolValue).\nSpecifies the protocol for communication with the rendezvous server:\n- `rest` - RESTful HTTP/HTTPS (code 0)\n- `http` - HTTP protocol (code 1)\n- `https` - HTTPS protocol (code 2)\n- `tcp` - Raw TCP connection (code 3)\n- `tls` - TLS-secured TCP connection (code 4)\n- `coap+tcp` - CoAP over TCP (code 5)\n- `coap` - CoAP over UDP (code 6)\n",
+        "type": "string",
+        "example": "https",
+        "enum": [
+          "rest",
+          "http",
+          "https",
+          "tcp",
+          "tls",
+          "coap+tcp",
+          "coap"
+        ]
+      },
+      "Protocol": {
+        "description": "Communication protocol specification",
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "$ref": "#/components/schemas/RVProtocol"
+          }
+        },
+        "example": {
+          "protocol": "https"
+        }
+      },
+      "Medium": {
+        "description": "Network medium/interface to use for communication:\n- `wired_1` through `wired_9` - Specific wired network interfaces\n- `wifi_1` through `wifi_9` - Specific WiFi network interfaces\n- `wired_all` - Any available wired interface\n- `wifi_all` - Any available WiFi interface\n",
+        "type": "object",
+        "properties": {
+          "medium": {
+            "type": "string",
+            "enum": [
+              "wired_1",
+              "wired_2",
+              "wired_3",
+              "wired_4",
+              "wired_5",
+              "wired_6",
+              "wired_7",
+              "wired_8",
+              "wired_9",
+              "wifi_1",
+              "wifi_2",
+              "wifi_3",
+              "wifi_4",
+              "wifi_5",
+              "wifi_6",
+              "wifi_7",
+              "wifi_8",
+              "wifi_9",
+              "wired_all",
+              "wifi_all"
+            ]
+          }
+        },
+        "example": {
+          "medium": "wifi_all"
+        }
+      },
+      "PortNumber": {
+        "type": "integer",
+        "example": 8443,
+        "maximum": 65535,
+        "minimum": 1
+      },
+      "DevicePort": {
+        "description": "Port number on the device side",
+        "type": "object",
+        "properties": {
+          "device_port": {
+            "$ref": "#/components/schemas/PortNumber"
+          }
+        },
+        "example": {
+          "device_port": 8080
+        }
+      },
+      "OwnerPort": {
+        "description": "Port number on the owner/server side",
+        "type": "object",
+        "properties": {
+          "owner_port": {
+            "$ref": "#/components/schemas/PortNumber"
+          }
+        },
+        "example": {
+          "owner_port": 8443
+        }
+      },
+      "WifiSSID": {
+        "description": "WiFi network SSID (Service Set Identifier)",
+        "type": "object",
+        "properties": {
+          "wifi_ssid": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1
+          }
+        },
+        "example": {
+          "wifi_ssid": "FDO-Network"
+        }
+      },
+      "WifiPW": {
+        "description": "WiFi network password",
+        "type": "object",
+        "properties": {
+          "wifi_pw": {
+            "type": "string",
+            "format": "password"
+          }
+        },
+        "example": {
+          "wifi_pw": "SecurePassword123"
+        }
+      },
+      "DevOnly": {
+        "description": "Instruction applies to device only (not owner)",
+        "type": "object",
+        "properties": {
+          "dev_only": {
+            "type": "boolean"
+          }
+        },
+        "example": {
+          "dev_only": true
+        }
+      },
+      "OwnerOnly": {
+        "description": "Instruction applies to owner only (not device)",
+        "type": "object",
+        "properties": {
+          "owner_only": {
+            "type": "boolean"
+          }
+        },
+        "example": {
+          "owner_only": true
+        }
+      },
+      "RVBypass": {
+        "description": "Bypass rendezvous server and connect directly to owner",
+        "type": "object",
+        "properties": {
+          "rv_bypass": {
+            "type": "boolean"
+          }
+        },
+        "example": {
+          "rv_bypass": true
+        }
+      },
+      "DelaySeconds": {
+        "description": "Delay in seconds before attempting connection (with up to 25% randomization)",
+        "type": "object",
+        "properties": {
+          "delay_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "example": {
+          "delay_seconds": 30
+        }
+      },
+      "SvCertHash": {
+        "description": "Server certificate hash for validation (SHA-256 or SHA-384)",
+        "type": "object",
+        "properties": {
+          "sv_cert_hash": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$"
+          }
+        },
+        "example": {
+          "sv_cert_hash": "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01"
+        }
+      },
+      "ClCertHash": {
+        "description": "Client certificate hash for validation (SHA-256 or SHA-384)",
+        "type": "object",
+        "properties": {
+          "cl_cert_hash": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$"
+          }
+        },
+        "example": {
+          "cl_cert_hash": "b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1"
+        }
+      },
+      "UserInput": {
+        "description": "Indicates whether user input is allowed to update rendezvous variables during device onboarding",
+        "type": "object",
+        "properties": {
+          "user_input": {
+            "type": "boolean"
+          }
+        },
+        "example": {
+          "user_input": true
+        }
+      },
+      "ExtRV": {
+        "description": "Extended rendezvous information for custom device-specific instructions",
+        "type": "object",
+        "properties": {
+          "ext_rv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "example": {
+          "ext_rv": [
+            "custom-instruction-1",
+            "custom-instruction-2"
+          ]
+        }
+      },
+      "RVInstruction": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/DNS"
+            },
+            {
+              "$ref": "#/components/schemas/IP"
+            },
+            {
+              "$ref": "#/components/schemas/Protocol"
+            },
+            {
+              "$ref": "#/components/schemas/Medium"
+            },
+            {
+              "$ref": "#/components/schemas/DevicePort"
+            },
+            {
+              "$ref": "#/components/schemas/OwnerPort"
+            },
+            {
+              "$ref": "#/components/schemas/WifiSSID"
+            },
+            {
+              "$ref": "#/components/schemas/WifiPW"
+            },
+            {
+              "$ref": "#/components/schemas/DevOnly"
+            },
+            {
+              "$ref": "#/components/schemas/OwnerOnly"
+            },
+            {
+              "$ref": "#/components/schemas/RVBypass"
+            },
+            {
+              "$ref": "#/components/schemas/DelaySeconds"
+            },
+            {
+              "$ref": "#/components/schemas/SvCertHash"
+            },
+            {
+              "$ref": "#/components/schemas/ClCertHash"
+            },
+            {
+              "$ref": "#/components/schemas/UserInput"
+            },
+            {
+              "$ref": "#/components/schemas/ExtRV"
+            }
+          ]
+        }
+      },
+      "RVInfo": {
+        "description": "Rendezvous information array containing one or more instruction sets\n(RendezvousDirective). Each instruction set guides devices and owners on how\nto connect to the rendezvous server, including network configuration, protocols,\nand connection parameters.\n\nProcessing behavior (FDO specification section 3.7):\n- Instruction sets are processed in order (index 0 first, then 1, etc.)\n- The first successful connection to a rendezvous server MAY be used\n- All DNS addresses within an instruction set MUST be processed before\n  moving to the next instruction set\n- Multiple instruction sets provide fallback options for device connectivity\n- Devices and owners may avoid redundant operations (e.g., contacting the\n  same IP address twice)\n",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RVInstruction"
+        }
+      },
+      "PublicKey": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "description": "Public key algorithm type.",
+            "type": "string",
+            "example": "SECP256R1",
+            "enum": [
+              "RSA2048RESTR",
+              "RSAPKCS",
+              "SECP256R1",
+              "SECP384R1"
+            ]
+          },
+          "value": {
+            "description": "Base64-encoded public key.",
+            "type": "string",
+            "example": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."
+          }
+        },
+        "required": [
+          "type",
+          "value"
+        ]
+      },
+      "Hash": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "description": "Hash algorithm.",
+            "type": "string",
+            "example": "SHA-384",
+            "enum": [
+              "SHA-256",
+              "SHA-384",
+              "SHA-512",
+              "HMAC-SHA-256",
+              "HMAC-SHA-384",
+              "HMAC-SHA-512"
+            ]
+          },
+          "value": {
+            "description": "Hexadecimal hash value. The length must match the algorithm:\n- SHA-256/HMAC-SHA-256: 64 hexadecimal characters (32 bytes)\n- SHA-384/HMAC-SHA-384: 96 hexadecimal characters (48 bytes)\n- SHA-512/HMAC-SHA-512: 128 hexadecimal characters (64 bytes)\n",
+            "type": "string",
+            "example": "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01",
+            "pattern": "^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$|^[a-fA-F0-9]{128}$"
+          }
+        },
+        "required": [
+          "algorithm",
+          "value"
+        ]
+      },
+      "VoucherHeader": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "description": "Header version.",
+            "type": "integer",
+            "example": 101
+          },
+          "guid": {
+            "description": "The device GUID (32 hexadecimal characters).",
+            "type": "string",
+            "example": "d21d841a3f54f4e89a60ed9b9779e9e8",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "rvInfo": {
+            "$ref": "#/components/schemas/RVInfo"
+          },
+          "deviceInfo": {
+            "description": "Device information string.",
+            "type": "string"
+          },
+          "manufacturerKey": {
+            "$ref": "#/components/schemas/PublicKey"
+          },
+          "certChainHash": {
+            "description": "Hash of the certificate chain (required when certChain is present).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Hash"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "version",
+          "guid",
+          "rvInfo",
+          "deviceInfo",
+          "manufacturerKey"
+        ]
+      },
+      "VoucherEntry": {
+        "type": "object",
+        "properties": {
+          "previousHash": {
+            "description": "Hash of the previous entry (all zeros for first entry).",
+            "$ref": "#/components/schemas/Hash"
+          },
+          "headerHash": {
+            "description": "Hash of the voucher header.",
+            "$ref": "#/components/schemas/Hash"
+          },
+          "publicKey": {
+            "description": "Public key of the owner.",
+            "$ref": "#/components/schemas/PublicKey"
+          },
+          "extra": {
+            "description": "Additional optional data.",
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "previousHash",
+          "headerHash",
+          "publicKey"
+        ]
+      },
+      "OwnershipVoucher": {
+        "type": "object",
+        "properties": {
+          "guid": {
+            "$ref": "#/components/schemas/VoucherGuid"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/VoucherProtocolVersion"
+          },
+          "deviceInfo": {
+            "$ref": "#/components/schemas/VoucherDeviceInfo"
+          },
+          "numEntries": {
+            "$ref": "#/components/schemas/VoucherNumEntries"
+          },
+          "header": {
+            "$ref": "#/components/schemas/VoucherHeader"
+          },
+          "hmac": {
+            "$ref": "#/components/schemas/Hash"
+          },
+          "certChain": {
+            "description": "X.509 certificate chain in PEM format (null for Intel EPID).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "pem"
+            },
+            "nullable": true
+          },
+          "entries": {
+            "description": "Ownership entry chain.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoucherEntry"
+            }
+          }
+        },
+        "required": [
+          "guid",
+          "protocolVersion",
+          "deviceInfo",
+          "numEntries",
+          "header",
+          "hmac",
+          "entries"
+        ]
+      },
+      "TrustedDeviceCACert1": {
+        "type": "object",
+        "properties": {
+          "fingerprint": {
+            "description": "The SHA-256 fingerprint of the certificate (64 hexadecimal characters).",
+            "type": "string",
+            "example": "a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "pem": {
+            "description": "The full certificate content in PEM format.",
+            "type": "string",
+            "format": "pem",
+            "maxLength": 32768,
+            "pattern": "^-----BEGIN CERTIFICATE-----\\n[\\s\\S]+\\n-----END CERTIFICATE-----\\n?$"
+          },
+          "subject": {
+            "description": "The subject distinguished name of the certificate.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "The issuer distinguished name of the certificate.",
+            "type": "string"
+          },
+          "notBefore": {
+            "description": "The start date of the certificate's validity period.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "notAfter": {
+            "description": "The end date of the certificate's validity period.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "description": "The timestamp when the certificate was added.",
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "pem",
+          "subject",
+          "issuer",
+          "notBefore",
+          "notAfter",
+          "createdAt"
+        ]
+      },
+      "TrustedDeviceCACerts1": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/TrustedDeviceCACert1"
+        }
+      },
+      "TrustedDeviceCACertsPaginated1": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "description": "Total number of trusted device CA certificates available.",
+            "type": "integer"
+          },
+          "limit": {
+            "description": "The number of items returned in this response.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The offset from the beginning of the collection.",
+            "type": "integer"
+          },
+          "certs": {
+            "$ref": "#/components/schemas/TrustedDeviceCACerts1"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "certs"
+        ]
+      },
+      "TrustedDeviceCACertsImportResult1": {
+        "type": "object",
+        "properties": {
+          "detected": {
+            "description": "Total number of certificate blocks found in the PEM data.",
+            "type": "integer",
+            "example": 5
+          },
+          "imported": {
+            "description": "Number of certificates successfully added to the database.",
+            "type": "integer",
+            "example": 2
+          },
+          "skipped": {
+            "description": "Number of parsable certificates that were not imported. This includes certificates that were expired or already exist in the database.",
+            "type": "integer",
+            "example": 2
+          },
+          "malformed": {
+            "description": "Number of certificate blocks that could not be parsed or validated.",
+            "type": "integer",
+            "example": 1
+          },
+          "messages": {
+            "description": "Detailed import result messages for each certificate found in the PEM data.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "the certificate at position 1 is malformed",
+              "the certificate at position 2 with subject 'CN=Device CA 2,O=Example Inc' was imported successfully",
+              "the certificate at position 3 with subject 'CN=Device CA 3,O=Example Inc' was skipped because it is expired",
+              "the certificate at position 4 with subject 'CN=Device CA 4,O=Example Inc' was skipped because it already exists",
+              "the certificate at position 5 with subject 'CN=Device CA 5,O=Example Inc' was imported successfully"
+            ]
+          },
+          "certs": {
+            "description": "Array of certificates that were successfully imported (does not include malformed, expired or already existing certificates).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustedDeviceCACert1"
+            }
+          }
+        },
+        "required": [
+          "detected",
+          "imported",
+          "skipped",
+          "malformed",
+          "messages",
+          "certs"
+        ]
+      },
+      "TransportProtocol1": {
+        "description": "Transport protocol for TO2 owner server connections\n(FDO specification section 3.3.14, TransportProtocol).\n- `http` - HTTP protocol (code 3)\n- `https` - HTTPS protocol (code 5)\n- `tcp` - Raw TCP connection (code 1)\n- `tls` - TLS-secured TCP connection (code 2)\n- `coap` - CoAP over UDP (code 4)\n- `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)\n",
+        "type": "string",
+        "example": "https",
+        "enum": [
+          "rest",
+          "http",
+          "https",
+          "tcp",
+          "tls",
+          "coap"
+        ]
+      },
+      "RVTO2AddrEntry1": {
+        "description": "A single owner server address entry. Each entry specifies the protocol,\nnetwork location (DNS hostname and/or IP address), and port for connecting\nto the owner server during TO2 protocol.\n\nBoth 'dns' and 'ip' fields are optional and may be provided independently\nor together. However, at least one addressing method MUST be specified\n(non-null) as required by FDO specification section 3.3.14. Requests that\nomit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.\n\nWhen both 'dns' and 'ip' are provided, the device MUST attempt to connect\nusing the DNS address first. The device MUST only use the IP address after\nall DNS connection attempts have failed. This behavior is defined in the\nFDO specification section 3.3.14.\n",
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "$ref": "#/components/schemas/TransportProtocol1"
+          },
+          "dns": {
+            "$ref": "#/components/schemas/DNSHostname1"
+          },
+          "ip": {
+            "$ref": "#/components/schemas/IPv4Address1"
+          },
+          "port": {
+            "$ref": "#/components/schemas/PortNumber"
+          }
+        },
+        "required": [
+          "protocol",
+          "port"
+        ]
+      },
+      "RVTO2Addr1": {
+        "description": "Rendezvous TO2 address configuration. Specifies one or more owner server\naddresses that devices should use to connect during the TO2 (Transfer of\nOwnership 2) protocol after completing rendezvous. Multiple entries provide\nfallback options if the primary address is unreachable.\n",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RVTO2AddrEntry1"
+        }
+      }
+    },
+    "responses": {
+      "HealthStatus": {
+        "description": "Server health status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Health"
+            },
+            "examples": {
+              "healthy": {
+                "summary": "Example of a healthy server",
+                "value": {
+                  "version": "0.0.1",
+                  "status": "OK",
+                  "message": "the service is up and running"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "serverError": {
+                "summary": "Example of a server error",
+                "value": {
+                  "message": "An unexpected error occurred."
+                }
+              }
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Bad Request - The request was malformed or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error1"
+            },
+            "examples": {
+              "badRequest": {
+                "summary": "Example of a bad request error",
+                "value": {
+                  "message": "Invalid Request."
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError1": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error1"
+            },
+            "examples": {
+              "serverError": {
+                "summary": "Example of a server error",
+                "value": {
+                  "message": "An unexpected error occurred."
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not Found - The requested resource does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error1"
+            },
+            "examples": {
+              "notFound": {
+                "summary": "Example of a not found error",
+                "value": {
+                  "message": "Object not found."
+                }
+              }
+            }
+          }
+        }
+      },
+      "BadRequest1": {
+        "description": "Bad Request - The request was malformed or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "badRequest": {
+                "summary": "Example of a bad request error",
+                "value": {
+                  "message": "Invalid Request."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized - Authentication credentials missing, invalid, or expired.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "unauthorized": {
+                "summary": "Example of an unauthorized error",
+                "value": {
+                  "message": "Authentication token is invalid or has expired."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Forbidden - The authenticated user does not have permission to perform this action.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "forbidden": {
+                "summary": "Example of a forbidden error",
+                "value": {
+                  "message": "User does not have the right access level."
+                }
+              }
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Payload Too Large - The request body exceeds the maximum allowed size (1MB).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "payloadTooLarge": {
+                "summary": "Example of a payload too large error",
+                "value": {
+                  "message": "http: request body too large"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound1": {
+        "description": "Not Found - The requested resource does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "notFound": {
+                "summary": "Example of a not found error",
+                "value": {
+                  "message": "Object not found."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Server's health monitoring"
+    },
+    {
+      "name": "device-ca",
+      "description": "Operations related to trusted device CA certificates management"
+    },
+    {
+      "name": "rvto2addr",
+      "description": "Operations related to rendezvous TO2 address management"
+    },
+    {
+      "name": "voucher",
+      "description": "Operations related to ownership voucher management"
+    }
+  ]
+}

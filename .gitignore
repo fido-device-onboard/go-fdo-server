@@ -9,3 +9,4 @@ rpmbuild
 test/workdir
 test/coverage
 /docgen
+.fastembed_cache
