@@ -340,10 +340,12 @@ type moduleStateMachines struct {
 }
 
 type moduleStateMachineState struct {
-	Name string
-	Impl serviceinfo.OwnerModule
-	Next func() (string, serviceinfo.OwnerModule, bool)
-	Stop func()
+	Name       string
+	Impl       serviceinfo.OwnerModule
+	Next       func() (string, serviceinfo.OwnerModule, bool)
+	Stop       func()
+	Completed  bool     // true when all modules have been yielded
+	UploadDirs []string // GUID-based upload directories created during this session
 }
 
 func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
@@ -370,16 +372,18 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(ctx, s.config, modules, s.DB))
-		module = &moduleStateMachineState{
-			Next: next,
-			Stop: stop,
-		}
+		module = &moduleStateMachineState{}
+		next, stop := iter.Pull2(ownerModules(ctx, s.config, modules, s.DB, &module.UploadDirs))
+		module.Next = next
+		module.Stop = stop
 		s.states[token] = module
 	}
 
 	var valid bool
 	module.Name, module.Impl, valid = module.Next()
+	if !valid {
+		module.Completed = true
+	}
 	return valid, nil
 }
 
@@ -393,10 +397,42 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 		return
 	}
 	module.Stop()
+	s.cleanupUploadDirs(module)
 	delete(s.states, token)
+
+	// Sweep orphaned states from previous sessions that were invalidated
+	// by the transport layer (e.g. client disconnect) without a
+	// CleanupModules call.
+	s.sweepStaleStates()
 }
 
-func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
+// cleanupUploadDirs removes GUID-based upload directories if modules
+// did not complete naturally (i.e. TO2 failed).
+func (s moduleStateMachines) cleanupUploadDirs(module *moduleStateMachineState) {
+	if module.Completed {
+		return
+	}
+	for _, dir := range module.UploadDirs {
+		slog.Info("fdo.upload: cleaning up upload directory after TO2 failure", "dir", dir)
+		if err := os.RemoveAll(dir); err != nil {
+			slog.Error("fdo.upload: failed to clean up upload directory", "dir", dir, "err", err)
+		}
+	}
+}
+
+// sweepStaleStates iterates the states map and cleans up entries whose
+// sessions no longer exist in the database.
+func (s moduleStateMachines) sweepStaleStates() {
+	for token, module := range s.states {
+		if !s.DB.SessionExists(token) {
+			module.Stop()
+			s.cleanupUploadDirs(module)
+			delete(s.states, token)
+		}
+	}
+}
+
+func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State, uploadDirs *[]string) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
 	return func(yield func(string, serviceinfo.OwnerModule) bool) {
 		if config == nil || len(config.Fsims) == 0 {
 			return
@@ -455,6 +491,11 @@ func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []stri
 						return
 					}
 					uploadDir = filepath.Join(uploadDir, hex.EncodeToString(replacementGUID[:]))
+
+					// Track the top-level GUID directory for cleanup on failure
+					if !slices.Contains(*uploadDirs, uploadDir) {
+						*uploadDirs = append(*uploadDirs, uploadDir)
+					}
 
 					// note: file.Dst has been validated as a relative path.
 					if file.Dst != "" {
