@@ -242,7 +242,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
 			return voucher.Header.Val.RvInfo, nil
 		},
-		Modules:         moduleStateMachines{DB: state.DB, config: &config.Owner.ServiceInfo, states: make(map[string]*moduleStateMachineState)},
+		Modules:         &moduleStateMachines{DB: state.DB, config: &config.Owner.ServiceInfo, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
 			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
@@ -332,11 +332,14 @@ func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.Ke
 	return state.ownerKey, state.chain, nil
 }
 
+const sweepInterval = 1 * time.Minute
+
 type moduleStateMachines struct {
 	DB     *db.State
 	config *ServiceInfoConfig
 	// current module state machine state for all sessions (indexed by token)
-	states map[string]*moduleStateMachineState
+	states    map[string]*moduleStateMachineState
+	lastSweep time.Time
 }
 
 type moduleStateMachineState struct {
@@ -348,7 +351,7 @@ type moduleStateMachineState struct {
 	UploadDirs []string // GUID-based upload directories created during this session
 }
 
-func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
+func (s *moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return "", nil, fmt.Errorf("invalid context: no token")
@@ -360,13 +363,20 @@ func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.Ow
 	return module.Name, module.Impl, nil
 }
 
-func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
+func (s *moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return false, fmt.Errorf("invalid context: no token")
 	}
 	module, ok := s.states[token]
 	if !ok {
+		// Sweep orphaned states from previous sessions before creating a
+		// new one. Throttled to avoid excessive DB queries under load.
+		if time.Since(s.lastSweep) >= sweepInterval {
+			s.sweepStaleStates()
+			s.lastSweep = time.Now()
+		}
+
 		// Create a new module state machine
 		_, modules, _, err := s.DB.Devmod(ctx)
 		if err != nil {
@@ -387,7 +397,7 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	return valid, nil
 }
 
-func (s moduleStateMachines) CleanupModules(ctx context.Context) {
+func (s *moduleStateMachines) CleanupModules(ctx context.Context) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return
@@ -399,16 +409,11 @@ func (s moduleStateMachines) CleanupModules(ctx context.Context) {
 	module.Stop()
 	s.cleanupUploadDirs(module)
 	delete(s.states, token)
-
-	// Sweep orphaned states from previous sessions that were invalidated
-	// by the transport layer (e.g. client disconnect) without a
-	// CleanupModules call.
-	s.sweepStaleStates()
 }
 
 // cleanupUploadDirs removes GUID-based upload directories if modules
 // did not complete naturally (i.e. TO2 failed).
-func (s moduleStateMachines) cleanupUploadDirs(module *moduleStateMachineState) {
+func (s *moduleStateMachines) cleanupUploadDirs(module *moduleStateMachineState) {
 	if module.Completed {
 		return
 	}
@@ -422,7 +427,7 @@ func (s moduleStateMachines) cleanupUploadDirs(module *moduleStateMachineState) 
 
 // sweepStaleStates iterates the states map and cleans up entries whose
 // sessions no longer exist in the database.
-func (s moduleStateMachines) sweepStaleStates() {
+func (s *moduleStateMachines) sweepStaleStates() {
 	for token, module := range s.states {
 		if !s.DB.SessionExists(token) {
 			module.Stop()

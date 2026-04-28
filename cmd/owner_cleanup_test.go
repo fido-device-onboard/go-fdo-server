@@ -92,22 +92,14 @@ func TestCleanupModules_NoStateNoPanic(t *testing.T) {
 	sm.CleanupModules(ctx)
 }
 
-func TestCleanupModules_SweepsOrphanedStates(t *testing.T) {
+func TestSweepStaleStates_CleansOrphanedSessions(t *testing.T) {
 	// Set up a real in-memory DB so SessionExists works
 	dbState, err := db.InitDb("sqlite", "file::memory:?cache=shared")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a session for the "active" token (the one being cleaned up normally)
-	activeToken, err := dbState.NewToken(context.Background(), protocol.TO2Protocol)
-	if err != nil {
-		t.Fatal(err)
-	}
-	activeCtx := dbState.TokenContext(context.Background(), activeToken)
-
-	// Create a session for the "orphan" token, then invalidate it
-	// (simulates transport layer invalidating on client disconnect)
+	// Create a session then invalidate it to simulate client disconnect
 	orphanToken, err := dbState.NewToken(context.Background(), protocol.TO2Protocol)
 	if err != nil {
 		t.Fatal(err)
@@ -127,10 +119,6 @@ func TestCleanupModules_SweepsOrphanedStates(t *testing.T) {
 	sm := moduleStateMachines{
 		DB: dbState,
 		states: map[string]*moduleStateMachineState{
-			activeToken: {
-				Completed: true,
-				Stop:      func() {},
-			},
 			orphanToken: {
 				Completed:  false,
 				UploadDirs: []string{orphanDir},
@@ -139,15 +127,14 @@ func TestCleanupModules_SweepsOrphanedStates(t *testing.T) {
 		},
 	}
 
-	// CleanupModules for the active session should also sweep the orphan
-	sm.CleanupModules(activeCtx)
+	sm.sweepStaleStates()
 
 	// Orphan's upload dir should be removed
 	if _, err := os.Stat(orphanDir); !os.IsNotExist(err) {
 		t.Error("expected orphaned upload directory to be removed by sweep")
 	}
 
-	// Both entries should be gone from the states map
+	// Orphan entry should be gone from the states map
 	if len(sm.states) != 0 {
 		t.Errorf("expected states map to be empty, got %d entries", len(sm.states))
 	}
