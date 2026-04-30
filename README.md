@@ -9,7 +9,7 @@
 
 ## Prerequisites
 
-- Go 1.25.0 or later
+- Go 1.26.2 or later
 - `openssl` and `curl` available
 - `jq` to parse JSON output (optional)
 - `npx` to run `openapi-format`
