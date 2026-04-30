@@ -9,7 +9,7 @@ The Dockerfile in this repository creates a minimal, secure container image for 
 ### Image Characteristics
 
 - **Base Image**: `gcr.io/distroless/static-debian12:nonroot` (minimal, security-hardened)
-- **Build Stage**: `golang:1.25-alpine` (compact build environment)
+- **Build Stage**: `golang:1.26-alpine` (compact build environment)
 - **Included Binaries**:
   - `go-fdo-server` - main server binary
   - `curl` - static curl binary for health checks
