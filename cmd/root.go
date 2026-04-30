@@ -4,10 +4,6 @@
 package cmd
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fido-device-onboard/go-fdo/protocol"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"hermannm.dev/devlog"
@@ -123,20 +118,17 @@ func rootCmdInit() {
 	rootCmd.PersistentFlags().String("db-dsn", "", "Database DSN (connection string)")
 	rootCmd.PersistentFlags().String("http-cert", "", "Path to server certificate")
 	rootCmd.PersistentFlags().String("http-key", "", "Path to server private key")
-	if err := viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("db.type", rootCmd.PersistentFlags().Lookup("db-type")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("db.dsn", rootCmd.PersistentFlags().Lookup("db-dsn")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("http.cert", rootCmd.PersistentFlags().Lookup("http-cert")); err != nil {
-		panic(err)
-	}
-	if err := viper.BindPFlag("http.key", rootCmd.PersistentFlags().Lookup("http-key")); err != nil {
-		panic(err)
+	for _, binding := range []struct{ key, flag string }{
+		{"log.level", "log-level"},
+		{"db.type", "db-type"},
+		{"db.dsn", "db-dsn"},
+		{"http.cert", "http-cert"},
+		{"http.key", "http-key"},
+	} {
+		if err := viper.BindPFlag(binding.key, rootCmd.PersistentFlags().Lookup(binding.flag)); err != nil {
+			slog.Error("Failed to bind flag", "key", binding.key, "flag", binding.flag, "error", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -147,51 +139,6 @@ func init() {
 	slog.SetDefault(rootLogger)
 	viper.SetOptions(viper.WithLogger(rootLogger))
 	rootCmdInit()
-}
-
-func parsePrivateKey(keyPath string) (crypto.Signer, error) {
-	b, err := os.ReadFile(keyPath) //#nosec G304 //nolint:gosec -- keyPath from CLI flag
-	if err != nil {
-		return nil, err
-	}
-	key, err := x509.ParsePKCS8PrivateKey(b)
-	if err == nil {
-		return key.(crypto.Signer), nil
-	}
-	if strings.Contains(err.Error(), "ParseECPrivateKey") {
-		key, err = x509.ParseECPrivateKey(b)
-		if err != nil {
-			return nil, err
-		}
-		return key.(crypto.Signer), nil
-	}
-	if strings.Contains(err.Error(), "ParsePKCS1PrivateKey") {
-		key, err = x509.ParsePKCS1PrivateKey(b)
-		if err != nil {
-			return nil, err
-		}
-		return key.(crypto.Signer), nil
-	}
-	return nil, fmt.Errorf("unable to parse private key %s: %v", keyPath, err)
-}
-
-func getPrivateKeyType(key any) (protocol.KeyType, error) {
-	switch ktype := key.(type) {
-	case *rsa.PrivateKey:
-		switch ktype.N.BitLen() {
-		case 2048:
-			return protocol.Rsa2048RestrKeyType, nil
-			// case 3072: TODO: add support for 3072 bit keys
-		}
-	case *ecdsa.PrivateKey:
-		switch ktype.Curve.Params().BitSize {
-		case 256:
-			return protocol.Secp256r1KeyType, nil
-		case 384:
-			return protocol.Secp384r1KeyType, nil
-		}
-	}
-	return 0, fmt.Errorf("unsupported key provided")
 }
 
 // parseHTTPAddress parses an address string in the format "host:port" and returns

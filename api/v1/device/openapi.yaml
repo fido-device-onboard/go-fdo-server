@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  title: Owner Devices API (v1 - Deprecated)
+  version: 1.1.0
+  description: |
+    Deprecated API for listing devices known to the owner service.
+
+    This API combines voucher metadata with onboarding (TO2) state to provide
+    a comprehensive view of all devices, including their GUID changes after
+    TO2 completion.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: devices
+    description: |
+      Operations related to device listing and tracking.
+
+      Devices are tracked through their vouchers and TO2 onboarding state.
+      When a device completes TO2, its GUID may change, and both the old and
+      new GUIDs are tracked.
+paths:
+  /owner/devices:
+    get:
+      tags:
+        - devices
+      summary: List all owner devices (Deprecated)
+      description: |
+        Returns a list of all devices known to the owner service, combining
+        voucher metadata with onboarding (TO2) completion state.
+
+        Each device includes:
+        - Current GUID (from voucher)
+        - Old GUID (if device completed TO2 and changed GUID)
+        - Device info string
+        - Creation and update timestamps
+        - TO2 completion status and timestamp
+
+        Results are ordered by updated_at timestamp in descending order.
+      operationId: ListDevices
+      parameters:
+        - name: old_guid
+          in: query
+          description: Filter by old GUID (before TO2 completion, hex-encoded)
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{32}$
+            example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+      responses:
+        "200":
+          description: Successfully retrieved device list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+              examples:
+                emptyList:
+                  summary: No devices found
+                  value: []
+                deviceList:
+                  summary: List of devices
+                  value:
+                    - guid: "a1b2c3d4e5f6789012345678abcdef01"
+                      old_guid: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+                      device_info: "Device 1"
+                      created_at: "2024-01-15T10:30:00Z"
+                      updated_at: "2024-01-16T14:20:00Z"
+                      to2_completed: true
+                      to2_completed_at: "2024-01-16T14:20:00Z"
+                    - guid: "f1e2d3c4b5a6978012345678abcdef02"
+                      old_guid: ""
+                      device_info: "Device 2"
+                      created_at: "2024-01-14T09:20:00Z"
+                      updated_at: "2024-01-14T09:20:00Z"
+                      to2_completed: false
+        "400":
+          description: Invalid query parameters
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                invalidGuid:
+                  summary: Invalid GUID
+                  value: "Invalid GUID"
+                invalidFormat:
+                  summary: Invalid GUID format
+                  value: "Invalid GUID format"
+        "500":
+          description: Internal server error occurred while listing devices
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Internal server error"
+components:
+  schemas:
+    Device:
+      type: object
+      description: |
+        Device information combining voucher metadata and TO2 onboarding state.
+
+        The `guid` field contains the current device GUID from the voucher.
+        If the device completed TO2 and changed its GUID, the `old_guid` field
+        contains the previous GUID. Otherwise, `old_guid` is empty.
+      required:
+        - guid
+        - old_guid
+        - device_info
+        - created_at
+        - updated_at
+        - to2_completed
+      properties:
+        guid:
+          type: string
+          description: Current device GUID (hex-encoded)
+          example: "a1b2c3d4e5f6789012345678abcdef01"
+        old_guid:
+          type: string
+          description: Previous device GUID before TO2 (hex-encoded, empty if no TO2 completion)
+          example: "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+        device_info:
+          type: string
+          description: Device information string
+          example: "Intel NUC Model XYZ"
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when device was first registered
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when device was last updated
+          example: "2024-01-16T14:20:00Z"
+        to2_completed:
+          type: boolean
+          description: Whether the device has completed TO2 onboarding
+          example: true
+        to2_completed_at:
+          type: string
+          format: date-time
+          description: Timestamp when TO2 was completed (null if not completed)
+          example: "2024-01-16T14:20:00Z"
+          nullable: true

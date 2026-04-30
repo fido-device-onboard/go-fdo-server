@@ -1,0 +1,78 @@
+openapi: 3.0.0
+info:
+  title: Common API Objects
+  version: 1.1.0
+  description: Common components, schemas, security definitions, and reusable response objects used across all FDO server APIs.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+components:
+  schemas:
+    ErrorString:
+      type: string
+      description: A human-readable error message.
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: A human-readable error message.
+    DNSHostname:
+      type: string
+      format: hostname
+      example: "rendezvous.example.com"
+    IPv4Address:
+      type: string
+      format: ipv4
+      example: "192.168.1.100"
+    PortNumber:
+      type: integer
+      minimum: 1
+      maximum: 65535
+      example: 8443
+    PortString:
+      type: string
+      example: "8443"
+  responses:
+    PayloadTooLarge:
+      description: Payload Too Large - The request body exceeds the maximum allowed size (1MB).
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "http: request body too large"
+    BadRequest:
+      description: Bad Request - The request was malformed or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            badRequest:
+              summary: Example of a bad request error
+              value:
+                message: "Invalid Request."
+    NotFound:
+      description: Not Found - The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notFound:
+              summary: Example of a not found error
+              value:
+                message: "Object not found."
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            serverError:
+              summary: Example of a server error
+              value:
+                message: "An unexpected error occurred."

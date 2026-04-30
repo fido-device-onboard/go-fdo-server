@@ -26,9 +26,17 @@ var (
 )
 
 type TrustedDeviceCACertsState struct {
-	DB                      *gorm.DB
-	Mutex                   sync.RWMutex
-	TrustedDeviceCACertPool *x509.CertPool
+	DB       *gorm.DB
+	mutex    sync.RWMutex
+	certPool *x509.CertPool
+}
+
+// CertPool returns the current trusted device CA certificate pool.
+// Thread-safe: acquires the read lock internally.
+func (s *TrustedDeviceCACertsState) CertPool() *x509.CertPool {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.certPool
 }
 
 // DeviceCACertificate stores trusted device CA certificates
@@ -56,6 +64,12 @@ func InitTrustedDeviceCACertsDB(db *gorm.DB) (*TrustedDeviceCACertsState, error)
 		return nil, err
 	}
 	slog.Debug("Trusted Device CA Certificates database initialized successfully")
+
+	// Load initial cert pool so it's never nil when the state is handed out
+	if err := state.LoadTrustedDeviceCAs(context.Background()); err != nil {
+		slog.Warn("Failed to load initial device CA cert pool", "error", err)
+	}
+
 	return state, nil
 }
 
@@ -108,11 +122,23 @@ func (s *TrustedDeviceCACertsState) ListDeviceCACertificates(ctx context.Context
 		return nil, 0, fmt.Errorf("failed to count device CA certificates: %w", err)
 	}
 
-	// Apply sorting
-	if sortBy == "" {
+	// Apply sorting with allowlist validation to prevent SQL injection
+	allowedSortColumns := map[string]bool{
+		"created_at":  true,
+		"fingerprint": true,
+		"subject":     true,
+		"issuer":      true,
+		"not_before":  true,
+		"not_after":   true,
+	}
+	allowedSortOrders := map[string]bool{
+		"asc":  true,
+		"desc": true,
+	}
+	if sortBy == "" || !allowedSortColumns[sortBy] {
 		sortBy = "created_at"
 	}
-	if sortOrder == "" {
+	if sortOrder == "" || !allowedSortOrders[sortOrder] {
 		sortOrder = "asc"
 	}
 	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
@@ -143,22 +169,19 @@ type CertificateImportStats struct {
 	Certificates []DeviceCACertificate
 }
 
-// ImportDeviceCACertificates imports device CA certificates from PEM data in an idempotent manner
-// - Valid certificates that don't exist and aren't expired are imported
-// - Certificates that already exist are silently skipped
-// - Expired certificates are silently skipped
-// - Malformed certificates are silently skipped and counted
-func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Context, pemData string) (*CertificateImportStats, error) {
+// ImportDeviceCACertificatesFromPEM parses PEM data, filters out malformed and
+// expired certificates, and imports valid ones via ImportDeviceCACertificates.
+func (s *TrustedDeviceCACertsState) ImportDeviceCACertificatesFromPEM(ctx context.Context, pemData string) (*CertificateImportStats, error) {
 	stats := &CertificateImportStats{
 		Certificates: []DeviceCACertificate{},
 		Messages:     []string{},
 	}
 
+	var valid []*x509.Certificate
 	remaining := []byte(pemData)
 	position := 0
 
 	for {
-		// Parse the next PEM block
 		block, rest := pem.Decode(remaining)
 		if block == nil {
 			break
@@ -171,20 +194,16 @@ func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Conte
 
 		position++
 
-		// Try to parse the certificate
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			// Malformed certificate - skip and count
 			stats.Malformed++
 			stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate at position %d is malformed", position))
 			remaining = rest
 			continue
 		}
 
-		// Valid certificate detected
 		stats.Detected++
 
-		// Check if certificate is expired
 		if time.Now().After(cert.NotAfter) {
 			stats.Skipped++
 			stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate at position %d with subject '%s' was skipped because it is expired", position, cert.Subject.String()))
@@ -192,57 +211,92 @@ func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Conte
 			continue
 		}
 
-		// Calculate SHA-256 fingerprint
-		hash := sha256.Sum256(cert.Raw)
-		fingerprint := hex.EncodeToString(hash[:])
+		valid = append(valid, cert)
+		remaining = rest
+	}
 
-		// Check if certificate already exists
-		var existingCount int64
-		if err := s.DB.WithContext(ctx).Model(&DeviceCACertificate{}).Where("fingerprint = ?", fingerprint).Count(&existingCount).Error; err != nil {
-			return nil, fmt.Errorf("failed to check for existing certificate: %w", err)
-		}
+	importStats, err := s.ImportDeviceCACertificates(ctx, valid)
+	if err != nil {
+		return nil, err
+	}
 
-		if existingCount > 0 {
-			// Certificate already exists - skip
-			stats.Skipped++
-			stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate at position %d with subject '%s' was skipped because it already exists", position, cert.Subject.String()))
-			remaining = rest
-			continue
-		}
+	stats.Imported = importStats.Imported
+	stats.Skipped += importStats.Skipped
+	stats.Messages = append(stats.Messages, importStats.Messages...)
+	stats.Certificates = importStats.Certificates
 
-		// Reconstruct PEM for this single certificate
-		certPEM := pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: cert.Raw,
-		})
+	return stats, nil
+}
 
-		// Create the database record
-		dbCert := DeviceCACertificate{
-			Fingerprint: fingerprint,
-			PEM:         string(certPEM),
-			Subject:     cert.Subject.String(),
-			Issuer:      cert.Issuer.String(),
-			NotBefore:   cert.NotBefore,
-			NotAfter:    cert.NotAfter,
-		}
+// ImportDeviceCACertificates imports x509 certificates into the database in an
+// idempotent manner. Certificates that already exist are skipped. All database
+// operations are wrapped in a single transaction. After a successful import the
+// cert pool is reloaded.
+func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Context, certs []*x509.Certificate) (*CertificateImportStats, error) {
+	stats := &CertificateImportStats{
+		Detected:     len(certs),
+		Certificates: []DeviceCACertificate{},
+		Messages:     []string{},
+	}
 
-		if err := s.DB.WithContext(ctx).Create(&dbCert).Error; err != nil {
-			// If creation fails due to race condition (duplicate), treat as skipped
-			// Otherwise, return the error
-			if isDuplicateError(err) {
+	if len(certs) == 0 {
+		return stats, nil
+	}
+
+	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, cert := range certs {
+			hash := sha256.Sum256(cert.Raw)
+			fingerprint := hex.EncodeToString(hash[:])
+
+			var existingCount int64
+			if err := tx.Model(&DeviceCACertificate{}).Where("fingerprint = ?", fingerprint).Count(&existingCount).Error; err != nil {
+				return fmt.Errorf("failed to check for existing certificate: %w", err)
+			}
+
+			if existingCount > 0 {
 				stats.Skipped++
-				stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate at position %d with subject '%s' was skipped because it already exists", position, cert.Subject.String()))
-				remaining = rest
+				stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate with subject '%s' was skipped because it already exists", cert.Subject.String()))
 				continue
 			}
-			return nil, fmt.Errorf("failed to create device CA certificate: %w", err)
-		}
 
-		// Successfully imported
-		stats.Imported++
-		stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate at position %d with subject '%s' was imported successfully", position, cert.Subject.String()))
-		stats.Certificates = append(stats.Certificates, dbCert)
-		remaining = rest
+			certPEM := pem.EncodeToMemory(&pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: cert.Raw,
+			})
+
+			dbCert := DeviceCACertificate{
+				Fingerprint: fingerprint,
+				PEM:         string(certPEM),
+				Subject:     cert.Subject.String(),
+				Issuer:      cert.Issuer.String(),
+				NotBefore:   cert.NotBefore,
+				NotAfter:    cert.NotAfter,
+			}
+
+			if err := tx.Create(&dbCert).Error; err != nil {
+				if isDuplicateError(err) {
+					stats.Skipped++
+					stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate with subject '%s' was skipped because it already exists", cert.Subject.String()))
+					continue
+				}
+				return fmt.Errorf("failed to create device CA certificate: %w", err)
+			}
+
+			stats.Imported++
+			stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate with subject '%s' was imported successfully", cert.Subject.String()))
+			stats.Certificates = append(stats.Certificates, dbCert)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if stats.Imported > 0 {
+		if err := s.LoadTrustedDeviceCAs(ctx); err != nil {
+			return nil, fmt.Errorf("failed to reload trusted device CA cert pool: %w", err)
+		}
+		slog.Info("Reloaded trusted device CA cert pool", "imported", stats.Imported)
 	}
 
 	return stats, nil
@@ -286,6 +340,10 @@ func (s *TrustedDeviceCACertsState) DeleteDeviceCACertificate(ctx context.Contex
 	if result.RowsAffected == 0 {
 		return ErrDeviceCACertNotFound
 	}
+	if err := s.LoadTrustedDeviceCAs(ctx); err != nil {
+		return fmt.Errorf("failed to reload trusted device CA cert pool: %w", err)
+	}
+	slog.Info("Reloaded trusted device CA cert pool after deletion", "fingerprint", fingerprint)
 	return nil
 }
 
@@ -318,9 +376,9 @@ func (s *TrustedDeviceCACertsState) LoadTrustedDeviceCAs(ctx context.Context) er
 	}
 
 	// Update the state with the new cert pool
-	s.Mutex.Lock()
-	s.TrustedDeviceCACertPool = certPool
-	s.Mutex.Unlock()
+	s.mutex.Lock()
+	s.certPool = certPool
+	s.mutex.Unlock()
 
 	return nil
 }

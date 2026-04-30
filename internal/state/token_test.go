@@ -16,6 +16,7 @@ import (
 )
 
 func setupTestTokenDB(t *testing.T) *gorm.DB {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to open in-memory database: %v", err)

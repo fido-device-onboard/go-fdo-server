@@ -1,0 +1,367 @@
+openapi: 3.0.0
+info:
+  title: RendezvousInfo management API (Deprecated)
+  version: 1.1.0
+  description: |
+    Deprecated API for managing the RendezvousInfo configuration.
+
+    This API uses POST for creation (fails if exists) and PUT for updates (fails if doesn't exist).
+    For a more RESTful API, use the v2 endpoint which uses PUT for upsert behavior.
+  contact:
+    name: Go FDO Server API Support
+    url: https://github.com/fido-device-onboard/go-fdo-server/issues
+tags:
+  - name: rvinfo
+    description: |
+      Operations related to rendezvous info management.
+
+      Typical workflow: Create configuration (POST) →
+      Get current configuration (GET) →
+      Update configuration (PUT).
+      The configuration is embedded in ownership vouchers during device manufacturing.
+paths:
+  /rvinfo:
+    get:
+      tags:
+        - rvinfo
+      summary: Get the current RendezvousInfo (Deprecated)
+      description: Retrieves the current rendezvous information configuration that devices will use to connect to the rendezvous server.
+      operationId: GetRendezvousInfo
+      responses:
+        "200":
+          description: Successfully retrieved the RendezvousInfo configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RendezvousInfo"
+              examples:
+                simpleHttpRendezvous:
+                  summary: Simple HTTP rendezvous configuration
+                  value:
+                    - dns: "rendezvous.example.com"
+                      protocol: "http"
+                      owner_port: "8080"
+                httpsRendezvousWithCertHash:
+                  summary: HTTPS rendezvous with certificate hash validation
+                  value:
+                    - dns: "rv.example.com"
+                      protocol: "https"
+                      owner_port: "8443"
+                      sv_cert_hash: "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01"
+                multipleRendezvousServers:
+                  summary: Multiple rendezvous servers with fallback
+                  value:
+                    - dns: "rv-primary.example.com"
+                      protocol: "https"
+                      owner_port: "8443"
+                    - dns: "rv-fallback.example.com"
+                      protocol: "https"
+                      owner_port: "8443"
+                      delay_seconds: 30
+        "404":
+          description: No RendezvousInfo configuration has been created yet.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "No rvInfo found"
+        "500":
+          description: Internal server error occurred while fetching the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Error fetching rvInfo"
+    post:
+      tags:
+        - rvinfo
+      summary: Create the RendezvousInfo configuration (Deprecated)
+      description: |
+        Creates the rendezvous information configuration.
+
+        This operation will fail if a configuration already exists. Use PUT to update an existing configuration.
+      operationId: CreateRendezvousInfo
+      requestBody:
+        description: The new RendezvousInfo configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RendezvousInfo"
+            examples:
+              createHttps:
+                summary: Create HTTPS rendezvous
+                value:
+                  - dns: "rv-new.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+              createMultipleServers:
+                summary: Create with primary and fallback servers
+                value:
+                  - dns: "rv-primary.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+                  - dns: "rv-fallback.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+                    delay_seconds: 60
+      responses:
+        "201":
+          description: Successfully created the RendezvousInfo configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RendezvousInfo"
+              examples:
+                createdHttpsConfiguration:
+                  summary: Successfully created HTTPS configuration
+                  value:
+                    - dns: "rv-new.example.com"
+                      protocol: "https"
+                      owner_port: "8443"
+        "400":
+          description: Invalid RendezvousInfo configuration provided in the request body.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Invalid rvInfo"
+        "409":
+          description: RendezvousInfo configuration already exists. Use PUT to update instead.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "rvInfo already exists"
+        "413":
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "http: request body too large"
+        "500":
+          description: Internal server error occurred while creating the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                readError:
+                  summary: Error reading request body
+                  value: "Error reading body"
+                insertError:
+                  summary: Error inserting into database
+                  value: "Error inserting rvInfo"
+    put:
+      tags:
+        - rvinfo
+      summary: Update the RendezvousInfo configuration (Deprecated)
+      description: |
+        Updates the rendezvous information configuration.
+
+        This operation will fail if no configuration exists. Use POST to create a new configuration.
+        The new configuration will be used by newly manufactured or initialized devices.
+        Existing devices will continue using their current rendezvous information.
+      operationId: UpdateRendezvousInfo
+      requestBody:
+        description: The updated RendezvousInfo configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RendezvousInfo"
+            examples:
+              updateToHttps:
+                summary: Update to HTTPS rendezvous
+                value:
+                  - dns: "rv-secure.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+              updateWithMultipleServers:
+                summary: Update with primary and fallback servers
+                value:
+                  - dns: "rv-primary.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+                  - dns: "rv-fallback.example.com"
+                    protocol: "https"
+                    owner_port: "8443"
+                    delay_seconds: 60
+      responses:
+        "200":
+          description: Successfully updated the RendezvousInfo configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RendezvousInfo"
+              examples:
+                updatedHttpsConfiguration:
+                  summary: Successfully updated to HTTPS configuration
+                  value:
+                    - dns: "rv-secure.example.com"
+                      protocol: "https"
+                      owner_port: "8443"
+        "400":
+          description: Invalid RendezvousInfo configuration provided in the request body.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "Invalid rvInfo"
+        "404":
+          description: RendezvousInfo configuration does not exist. Use POST to create it first.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "rvInfo does not exist"
+        "413":
+          description: Request payload too large (exceeds maximum allowed size).
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              example: "http: request body too large"
+        "500":
+          description: Internal server error occurred while updating the configuration.
+          content:
+            text/plain:
+              schema:
+                $ref: "../components/openapi.yaml#/components/schemas/ErrorString"
+              examples:
+                readError:
+                  summary: Error reading request body
+                  value: "Error reading body"
+                updateError:
+                  summary: Error updating in database
+                  value: "Error updating rvInfo"
+components:
+  schemas:
+    RVProtocol:
+      type: string
+      description: |
+        Rendezvous protocol value (FDO specification Table 3.6, RVProtocolValue).
+        Specifies the protocol for communication with the rendezvous server:
+        - `rest` - RESTful HTTP/HTTPS (code 0)
+        - `http` - HTTP protocol (code 1)
+        - `https` - HTTPS protocol (code 2)
+        - `tcp` - Raw TCP connection (code 3)
+        - `tls` - TLS-secured TCP connection (code 4)
+        - `coap+tcp` - CoAP over TCP (code 5)
+        - `coap` - CoAP over UDP (code 6)
+      enum:
+        - "rest"
+        - "http"
+        - "https"
+        - "tcp"
+        - "tls"
+        - "coap+tcp"
+        - "coap"
+      example: "https"
+    RendezvousInfo:
+      type: array
+      description: |
+        Rendezvous information array containing one or more rendezvous directive objects.
+        Each object contains fields that guide devices and owners on how to connect to
+        the rendezvous server, including network configuration, protocols, and connection parameters.
+
+        Processing behavior (FDO specification section 3.7):
+        - Directives are processed in order (index 0 first, then 1, etc.)
+        - The first successful connection to a rendezvous server MAY be used
+        - Multiple directives provide fallback options for device connectivity
+        - At least one of `dns` or `ip` must be specified for each directive
+
+        Format: Array of objects with flat key-value pairs (legacy v1 format for backward compatibility).
+      items:
+        $ref: "#/components/schemas/RendezvousDirective"
+      example:
+        - dns: "rendezvous.example.com"
+          protocol: "https"
+          owner_port: "8443"
+        - dns: "rv-fallback.example.com"
+          protocol: "https"
+          owner_port: "8443"
+          delay_seconds: 30
+    RendezvousDirective:
+      type: object
+      description: |
+        A single rendezvous directive containing connection parameters.
+        At least one of `dns` or `ip` must be specified.
+      properties:
+        dns:
+          $ref: "../components/openapi.yaml#/components/schemas/DNSHostname"
+          description: DNS hostname for the server
+        ip:
+          $ref: "../components/openapi.yaml#/components/schemas/IPv4Address"
+          description: IPv4 address for the server
+        protocol:
+          $ref: "#/components/schemas/RVProtocol"
+          description: Rendezvous protocol specification
+        medium:
+          type: string
+          description: |
+            Network medium/interface to use for communication.
+            Options: eth_all, wifi_all
+          enum:
+            - "eth_all"
+            - "wifi_all"
+          example: "wifi_all"
+        device_port:
+          $ref: "../components/openapi.yaml#/components/schemas/PortString"
+          description: Port number on the device side
+        owner_port:
+          $ref: "../components/openapi.yaml#/components/schemas/PortString"
+          description: Port number on the owner/server side
+        wifi_ssid:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: WiFi network SSID (Service Set Identifier)
+          example: "FDO-Network"
+        wifi_pw:
+          type: string
+          format: password
+          description: WiFi network password
+          example: "SecurePassword123"
+        dev_only:
+          type: boolean
+          description: Instruction applies to device only (not owner)
+          example: true
+        owner_only:
+          type: boolean
+          description: Instruction applies to owner only (not device)
+          example: true
+        rv_bypass:
+          type: boolean
+          description: Bypass rendezvous server and connect directly to owner
+          example: true
+        delay_seconds:
+          type: integer
+          format: uint32
+          minimum: 0
+          description: Delay in seconds before attempting connection (with up to 25% randomization)
+          example: 30
+        sv_cert_hash:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
+          description: Server certificate hash for validation (SHA-256 or SHA-384 hex string)
+          example: "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01"
+        cl_cert_hash:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$|^[a-fA-F0-9]{96}$
+          description: Client certificate hash for validation (SHA-256 or SHA-384 hex string)
+          example: "b2c3d4e5f6a78901234567890abcdef1b2c3d4e5f6a78901234567890abcdef1"
+        user_input:
+          type: string
+          description: User input configuration
+          example: "prompt"
+        ext_rv:
+          type: string
+          description: Extended rendezvous information for custom device-specific instructions
+          example: '["custom-data"]'
+      example:
+        dns: "rendezvous.example.com"
+        protocol: "https"
+        owner_port: "8443"
+        device_port: "8041"
