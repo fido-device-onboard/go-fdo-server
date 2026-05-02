@@ -1,0 +1,22 @@
+summary: FDO ServiceInfo fdo.wget module testing
+description: |
+    Tests the fdo.wget FSIM module covering:
+    - File download via wget during onboarding
+    - HTTP/HTTPS file retrieval
+    - Multiple file downloads
+    - Download verification
+    - ServiceInfo module integration
+
+test: ../../rpm/test-fsim-wget.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - fsim
+  - wget
+  - serviceinfo
+  - download
+  - rpm

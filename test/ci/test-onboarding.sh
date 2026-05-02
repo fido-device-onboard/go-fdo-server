@@ -15,14 +15,14 @@ run_test() {
   log_info "Creating directories"
   create_directories
 
-  log_info "Generating service certificates"
-  generate_service_certs
-
   log_info "Build and install 'go-fdo-client' binary"
   install_client
 
   log_info "Build and install 'go-fdo-server' binary"
   install_server
+
+  log_info "Generating service certificates"
+  generate_service_certs
 
   log_info "Configuring services"
   configure_services
