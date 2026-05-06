@@ -212,9 +212,21 @@ install_from_copr() {
 }
 
 install_client() {
-  # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will install the client from the copr repo
-  [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
+  if [ -v "PACKIT_COPR_RPMS" ]; then
+    : # pre-installed by CI
+  elif [ -n "${CLIENT_RPM_URL:-}" ]; then
+    # Install from a specific brew build base path.
+    # CLIENT_RPM_URL should point to the version/release directory of the package in brew.
+    local url
+    url=$(parse_brew_url "${CLIENT_RPM_URL}")
+    # --nogpgcheck and sslverify=false are intentional: internal brew servers
+    # use self-signed certificates and builds may not be GPG-signed.
+    sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
+      "${url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
+  else
+    # If running locally install the client from the COPR repo
+    rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
+  fi
   log_info "Installed Client RPM:"
   echo "    ⚙ $(rpm -q go-fdo-client)"
 }
@@ -224,26 +236,34 @@ uninstall_client() {
   # after a successful execution.
   [ -v "PACKIT_COPR_RPMS" ] || {
     sudo dnf remove -y go-fdo-client
-    sudo dnf copr remove -y @fedora-iot/fedora-iot
+    # Only remove the COPR repo when it was used for installation
+    [ -n "${CLIENT_RPM_URL:-}" ] || sudo dnf copr remove -y @fedora-iot/fedora-iot
   }
 }
 
 install_server() {
-  # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will build and install the RPMs from the *committed* code
-  if [ ! -v "PACKIT_COPR_RPMS" ]; then
+  if [ -v "PACKIT_COPR_RPMS" ]; then
+    : # pre-installed by CI
+  elif [ -n "${SERVER_RPM_URL:-}" ]; then
+    # Install from a specific brew build base path.
+    # SERVER_RPM_URL should point to the version/release directory of the package in brew.
+    local url
+    url=$(parse_brew_url "${SERVER_RPM_URL}")
+    # --nogpgcheck and sslverify=false are intentional: internal brew servers
+    # use self-signed certificates and builds may not be GPG-signed.
+    sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
+      "${url}/${_brew_arch}/go-fdo-server-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm" \
+      "${url}/noarch/go-fdo-server-manufacturer-${_brew_ver}-${_brew_rel}.noarch.rpm" \
+      "${url}/noarch/go-fdo-server-owner-${_brew_ver}-${_brew_rel}.noarch.rpm" \
+      "${url}/noarch/go-fdo-server-rendezvous-${_brew_ver}-${_brew_rel}.noarch.rpm"
+  else
+    # Running locally — build and install RPMs from the committed code
     commit="$(git rev-parse --short HEAD)"
     rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
       make rpm
       sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
-  else
-    log_info "Expected Server RPMs:"
-    for i in ${PACKIT_COPR_RPMS}; do
-      echo "    ⚙ $i"
-    done | sort
   fi
-  # Make sure the RPMS are installed
   installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " go-fdo-server{,-{manufacturer,owner,rendezvous}})
   log_info "Installed Server RPMs:"
   for i in ${installed_rpms}; do
@@ -254,6 +274,7 @@ install_server() {
 uninstall_server() {
   [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-server{,-manufacturer,-owner,-rendezvous}
 }
+
 
 start_service_manufacturer() {
   sudo systemctl start go-fdo-server-manufacturer

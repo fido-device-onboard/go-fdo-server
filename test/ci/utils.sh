@@ -396,13 +396,40 @@ stop_services() {
   done
 }
 
+# Parse a brew build base URL into its components.
+# The URL must point to the version/release directory of the package in brew.
+# Sets _brew_ver, _brew_rel, _brew_arch and returns the trailing-slash-stripped
+# URL on stdout so callers can capture it with: local url; url=$(parse_brew_url …)
+parse_brew_url() {
+  local url="${1%/}"  # strip any trailing slash to prevent empty basename
+  _brew_ver=$(basename "$(dirname "${url}")")
+  _brew_rel=$(basename "${url}")
+  _brew_arch=$(uname -m)
+  echo "${url}"
+}
+
 install_client() {
-  go install github.com/fido-device-onboard/go-fdo-client@main
+  if [ -n "${CLIENT_RPM_URL:-}" ]; then
+    # Install from a specific brew build base path.
+    # CLIENT_RPM_URL should point to the version/release directory of the package in brew.
+    local url
+    url=$(parse_brew_url "${CLIENT_RPM_URL}")
+    # --nogpgcheck and sslverify=false are intentional: internal brew servers
+    # use self-signed certificates and builds may not be GPG-signed.
+    sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
+      "${url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
+  else
+    go install github.com/fido-device-onboard/go-fdo-client@main
+  fi
 }
 
 uninstall_client() {
   log_info "Uninstalling client"
-  rm -vf "$(go env GOPATH)/bin/go-fdo-client"
+  if [ -n "${CLIENT_RPM_URL:-}" ]; then
+    sudo dnf remove -y go-fdo-client
+  else
+    rm -vf "$(go env GOPATH)/bin/go-fdo-client"
+  fi
 }
 
 install_server() {
