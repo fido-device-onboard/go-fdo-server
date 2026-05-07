@@ -207,6 +207,64 @@ jobs:
           source test/ci/test-fsim-upload.sh
           cleanup
 
+  test-upload-cleanup:
+    name: Test upload directory cleanup on TO2 failure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test upload directory cleanup
+        run: |
+          source test/ci/test-upload-cleanup.sh
+          run_test
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs
+        if: always()
+        run: |
+          source test/ci/test-upload-cleanup.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-upload-cleanup.sh
+          cleanup
+
+  test-upload-cleanup-missing-file:
+    name: Test upload directory cleanup on missing file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Test upload directory cleanup (missing file)
+        run: |
+          source test/ci/test-upload-cleanup-missing-file.sh
+          run_test
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs
+        if: always()
+        run: |
+          source test/ci/test-upload-cleanup-missing-file.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source test/ci/test-upload-cleanup-missing-file.sh
+          cleanup
+
   test-fsim-download:
     name: Test FSIM fdo.download
     runs-on: ubuntu-latest

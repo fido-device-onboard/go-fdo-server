@@ -202,7 +202,7 @@ func (s *State) NewToken(ctx context.Context, proto protocol.Protocol) (string, 
 	return token, nil
 }
 
-// InvalidateToken removes a session
+// InvalidateToken removes a session and its associated state from all tables.
 func (s *State) InvalidateToken(ctx context.Context) error {
 	sessionID, ok := s.TokenFromContext(ctx)
 	if !ok {
@@ -214,15 +214,47 @@ func (s *State) InvalidateToken(ctx context.Context) error {
 		return fdo.ErrInvalidSession
 	}
 
-	result := s.DB.Where("id = ?", decoded).Delete(&Session{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fdo.ErrNotFound
+	// Clean up related session state tables before deleting the session,
+	// otherwise these rows become orphaned on every failed or timed-out session.
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		for _, model := range []any{
+			&TO2Session{},
+			&TO1Session{},
+			&TO0Session{},
+			&ReplacementVoucher{},
+			&KeyExchange{},
+			&IncompleteVoucher{},
+			&DeviceInfo{},
+		} {
+			if err := tx.Where("session = ?", decoded).Delete(model).Error; err != nil {
+				return err
+			}
+		}
+		result := tx.Where("id = ?", decoded).Delete(&Session{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fdo.ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// SessionExists checks whether a session for the given token still exists in the database.
+func (s *State) SessionExists(token string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return false
+	}
+	var count int64
+	s.DB.Model(&Session{}).Where("id = ?", decoded).Count(&count)
+	return count > 0
 }
 
 // TokenContext injects a token into the context
@@ -282,7 +314,7 @@ func (s *State) SetDeviceCertChain(ctx context.Context, chain []*x509.Certificat
 	}
 
 	return s.DB.Where("session = ?", sessionID).
-		Assign(map[string]interface{}{"x509_chain": chainBytes}).
+		Assign(map[string]any{"x509_chain": chainBytes}).
 		FirstOrCreate(&deviceInfo).Error
 }
 
