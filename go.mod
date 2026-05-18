@@ -1,6 +1,6 @@
 module github.com/fido-device-onboard/go-fdo-server
 
-go 1.26.2
+go 1.26
 
 require (
 	github.com/elnormous/contenttype v1.0.4
