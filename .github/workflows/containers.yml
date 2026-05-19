@@ -1,4 +1,10 @@
 on:
+  workflow_dispatch:
+    inputs:
+      go-fdo-client-branch:
+        description: Go FDO client branch
+        default: main
+        required: true
   push:
     branches:
     - main
@@ -309,4 +315,67 @@ jobs:
         if: always()
         run: |
           source test/container/test-device-ca-rendezvous-trust.sh
+          cleanup
+
+  test-container:
+    name: "Container: ${{ matrix.name }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: test-onboarding
+            name: Test FIDO device onboarding
+          - test: test-onboarding-config
+            name: Test FIDO device onboarding using a configuration file
+          - test: test-onboarding-postgres
+            name: Test FIDO device onboarding (PostgreSQL)
+          - test: test-ov-verification
+            name: Test Ownership Voucher verification
+          - test: test-resale
+            name: Test FIDO resale protocol
+          - test: test-fsim-download
+            name: Test FSIM fdo.download
+          - test: test-fsim-upload
+            name: Test FSIM fdo.upload
+          - test: test-fsim-wget
+            name: Test FSIM fdo.wget
+          - test: test-device-ca-api
+            name: Test Device CA API
+          - test: test-device-ca-rendezvous-trust
+            name: Test Device CA rendezvous trust verification
+          - test: test-health-api-postgres
+            name: Test Health API (PostgreSQL)
+    env:
+      CLIENT_REF: ${{ inputs.go-fdo-client-branch || 'main' }}
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Check out go-fdo-ci
+        uses: actions/checkout@v4
+        with:
+          repository: fido-device-onboard/go-fdo-ci
+          path: ci
+
+      - name: ${{ matrix.name }}
+        run: |
+          source ci/test/container/${{ matrix.test }}.sh
+          run_test
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs
+        if: always()
+        run: |
+          source ci/test/container/${{ matrix.test }}.sh
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source ci/test/container/${{ matrix.test }}.sh
           cleanup
