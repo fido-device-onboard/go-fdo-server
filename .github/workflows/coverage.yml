@@ -12,19 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install golang
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: "1.26"
 
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run tests with coverage
         run: make test-coverage
 
       - name: Download base coverage breakdown
         id: download-main-breakdown
-        uses: dawidd6/action-download-artifact@v17
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
           branch: main
           workflow_conclusion: success
@@ -34,7 +34,7 @@ jobs:
       # continue-on-error: allow workflow to proceed to post PR comment and upload artifacts
       - name: Check coverage thresholds
         id: coverage
-        uses: vladopajic/go-test-coverage@v2
+        uses: vladopajic/go-test-coverage@a93b868a4cbcbf18dc3781650fad241f0020e609 # v2.18.8
         continue-on-error: true
         with:
           config: .testcoverage.yml
@@ -52,13 +52,13 @@ jobs:
 
       - name: Upload PR metadata
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-metadata
           path: pr-metadata/
 
       - name: Upload coverage breakdown
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: github.ref_name == 'main'
         with:
           name: main.breakdown
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-report
           path: test/coverage/coverage.html
