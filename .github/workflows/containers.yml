@@ -12,6 +12,9 @@ on:
 
 name: Container Tests
 
+permissions:
+  contents: read
+
 jobs:
   test-container-onboarding:
     name: Test FIDO device onboarding

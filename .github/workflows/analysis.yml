@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '19 20 * * 6'
 
+permissions:
+  contents: read
+
 jobs:
   check-spelling:
     name: check spelling

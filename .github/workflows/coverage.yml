@@ -6,10 +6,16 @@ on:
 
 name: Go test coverage
 
+permissions:
+  contents: read
+
 jobs:
   coverage:
     name: Measure test coverage (unit + integration tests)
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Install golang
         uses: actions/setup-go@v6

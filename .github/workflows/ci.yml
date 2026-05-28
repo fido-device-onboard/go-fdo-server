@@ -12,6 +12,9 @@ on:
 
 name: Continuous integration
 
+permissions:
+  contents: read
+
 jobs:
   test-build:
     name: Run the full build via the Makefile

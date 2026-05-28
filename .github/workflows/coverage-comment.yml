@@ -6,6 +6,9 @@ on:
 
 name: Post coverage report to PR
 
+permissions:
+  contents: read
+
 jobs:
   comment:
     name: Post coverage report
