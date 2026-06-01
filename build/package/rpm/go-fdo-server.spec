@@ -56,7 +56,7 @@ devices when they are first powered on in their final location.
 # https://discussion.fedoraproject.org/t/why-does-the-go-compiler-uses-x-nodwarf5-by-default/179804
 # https://github.com/golang/go/issues/75079
 export GOEXPERIMENT="nodwarf5"
-export GO_LDFLAGS="-X %{goipath}/internal/version.VERSION=%{version}"
+export GO_LDFLAGS='-X %{goipath}/internal/version.VERSION=%{version} %{?currentldflags}'
 %gobuild -o %{gobuilddir}/bin/go-fdo-server %{goipath}
 
 %install
