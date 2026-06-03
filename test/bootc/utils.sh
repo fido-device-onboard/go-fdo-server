@@ -59,12 +59,14 @@ baseurl=http://${DOWNLOAD_NODE}/rhel-${major_ver}/nightly/RHEL-${major_ver}/late
 enabled=1
 # Nightly compose builds are not GPG-signed; gpgcheck=0 is intentional.
 gpgcheck=0
+sslverify=0
 [RHEL-${VERSION_ID}-NIGHTLY-AppStream]
 name=appstream
 baseurl=http://${DOWNLOAD_NODE}/rhel-${major_ver}/nightly/RHEL-${major_ver}/latest-RHEL-${VERSION_ID}/compose/AppStream/\$basearch/os/
 enabled=1
 # Nightly compose builds are not GPG-signed; gpgcheck=0 is intentional.
 gpgcheck=0
+sslverify=0
 EOF
   fi
 
@@ -79,6 +81,32 @@ FROM ${base_image_url}
 # use self-signed certificates and builds may not be GPG-signed.
 RUN dnf install -y --nogpgcheck --setopt=sslverify=false \
       "${url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
+EOF
+  elif [ -n "${COMPOSE_BASE_URL:-}" ]; then
+    # Install go-fdo-client from a compose repository.
+    # Generate per-stream repo files, copy them into the image, install, then remove them.
+    local compose_streams="${COMPOSE_STREAMS:-BaseOS AppStream}"
+    local arch
+    arch=$(uname -m)
+    mkdir -p files
+    local repo_args=""
+    for stream in ${compose_streams}; do
+      local repo_name="compose-${ID}-${VERSION_ID}-${stream}"
+      local repo_file="files/${repo_name}.repo"
+      cat > "${repo_file}" <<EOF
+[${repo_name}]
+name=${repo_name}
+baseurl=${COMPOSE_BASE_URL}/${stream}/${arch}/os/
+enabled=1
+gpgcheck=0
+sslverify=0
+EOF
+      repo_args+="COPY ${repo_file} /etc/yum.repos.d/${repo_name}.repo"$'\n'
+    done
+    tee Containerfile >/dev/null <<EOF
+FROM ${base_image_url}
+${repo_args}RUN dnf install -y --disablerepo='*' --enablerepo='compose-*' go-fdo-client && \
+    rm -f /etc/yum.repos.d/compose-*.repo
 EOF
   else
     tee Containerfile >/dev/null <<EOF
@@ -165,6 +193,8 @@ install_server() {
       "${url}/noarch/go-fdo-server-manufacturer-${_brew_ver}-${_brew_rel}.noarch.rpm" \
       "${url}/noarch/go-fdo-server-owner-${_brew_ver}-${_brew_rel}.noarch.rpm" \
       "${url}/noarch/go-fdo-server-rendezvous-${_brew_ver}-${_brew_rel}.noarch.rpm"
+  elif [ -n "${COMPOSE_BASE_URL:-}" ]; then
+    install_from_compose ${go_fdo_server_rpms}
   else
     sudo dnf install -y golang make
     commit="$(git rev-parse --short HEAD)"
@@ -173,7 +203,7 @@ install_server() {
       sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
     }
   fi
-  installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " go-fdo-server{,-{manufacturer,owner,rendezvous}})
+  installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " ${go_fdo_server_rpms})
   log_info "Installed Go FDO Server RPMs:"
   for i in ${installed_rpms}; do
     echo "    ⚙ $i"
