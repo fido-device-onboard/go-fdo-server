@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
@@ -206,72 +205,21 @@ func (s *Server) InsertVoucher(ctx context.Context, request InsertVoucherRequest
 // verifyVoucher performs comprehensive verification as per the old handler
 func (s *Server) verifyVoucher(ov *fdo.Voucher) error {
 	// Verify ownership
-	if err := s.verifyVoucherOwnership(ov); err != nil {
+	if err := utils.VerifyVoucherOwnership(ov, s.OwnerPKeys); err != nil {
 		return err
 	}
 
-	// Verify integrity
-	return s.verifyOwnershipVoucher(ov)
-}
-
-// verifyVoucherOwnership verifies the ownership voucher belongs to this owner
-func (s *Server) verifyVoucherOwnership(ov *fdo.Voucher) error {
-	if len(s.OwnerPKeys) == 0 {
-		return fmt.Errorf("ownerPKeys must contain at least one owner public key")
+	// Verify integrity — nil certPool skips device CA check inside VerifyOwnershipVoucher
+	if err := utils.VerifyOwnershipVoucher(ov, nil); err != nil {
+		return err
 	}
 
-	expectedPubKey, err := ov.OwnerPublicKey()
-	if err != nil {
-		return fmt.Errorf("unable to parse owner public key from voucher: %w", err)
-	}
-
-	if !slices.ContainsFunc(s.OwnerPKeys, func(k crypto.PublicKey) bool {
-		return utils.PublicKeysEqual(expectedPubKey, k)
-	}) {
-		return fmt.Errorf("voucher owner key does not match any of the server's configured keys")
-	}
-
-	return nil
-}
-
-// verifyOwnershipVoucher performs header field validation and cryptographic verification
-func (s *Server) verifyOwnershipVoucher(ov *fdo.Voucher) error {
-	const FDOProtocolVersion uint16 = 101 // FDO spec v1.1
-
-	// Header Field Validation
-	if ov.Version != FDOProtocolVersion {
-		return fmt.Errorf("unsupported protocol version: %d (expected %d)", ov.Version, FDOProtocolVersion)
-	}
-	if ov.Version != ov.Header.Val.Version {
-		return fmt.Errorf("protocol version mismatch: voucher version=%d, header version=%d",
-			ov.Version, ov.Header.Val.Version)
-	}
-	var zeroGUID protocol.GUID
-	if ov.Header.Val.GUID == zeroGUID {
-		return fmt.Errorf("invalid voucher: GUID is zero")
-	}
-	if ov.Header.Val.DeviceInfo == "" {
-		return fmt.Errorf("invalid voucher: DeviceInfo is empty")
-	}
-	if ov.Header.Val.ManufacturerKey.Type == 0 {
-		return fmt.Errorf("invalid voucher: ManufacturerKey is missing or invalid")
-	}
-	if len(ov.Header.Val.RvInfo) == 0 {
-		return fmt.Errorf("invalid voucher: RvInfo is empty")
-	}
-
-	// Cryptographic Integrity Verification
-	if err := ov.VerifyEntries(); err != nil {
-		return fmt.Errorf("signature chain verification failed: %w", err)
-	}
-	if err := ov.VerifyCertChainHash(); err != nil {
-		return fmt.Errorf("device certificate chain hash verification failed: %w", err)
-	}
-	if err := ov.VerifyDeviceCertChain(nil); err != nil {
-		return fmt.Errorf("device certificate chain verification failed: %w", err)
-	}
-	if err := ov.VerifyManufacturerCertChain(nil); err != nil {
-		return fmt.Errorf("manufacturer certificate chain verification failed: %w", err)
+	// V1 backward compat: validate device cert chain against system trust roots.
+	// V2 validates against explicitly configured device CAs instead.
+	if ov.CertChain != nil {
+		if err := ov.VerifyDeviceCertChain(nil); err != nil {
+			return fmt.Errorf("device certificate chain verification failed: %w", err)
+		}
 	}
 
 	return nil
