@@ -425,7 +425,7 @@
       "get": {
         "operationId": "GetRVTO2Addr",
         "summary": "Get the current owner redirect info (RVTO2Addr) configuration (Deprecated)",
-        "description": "Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address\nconfiguration that specifies where devices should connect to the owner server\nafter completing the rendezvous protocol.\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "description": "Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address\nconfiguration that specifies where devices should connect to the owner server\nafter completing the rendezvous protocol.\n(Deprecated: please use \"/api/v2/rvto2addr\" endpoint instead)\n",
         "responses": {
           "200": {
             "description": "Successfully retrieved the owner redirect info (RVTO2Addr) configuration.",
@@ -531,7 +531,7 @@
       "post": {
         "operationId": "CreateRVTO2Addr",
         "summary": "Create the owner redirect info (RVTOAddr) configuration (Deprecated)",
-        "description": "Creates the owner redirect info (RVTO2Addr) configuration.\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "description": "Creates the owner redirect info (RVTO2Addr) configuration.\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n(Deprecated: please use \"/api/v2/rvto2addr\" endpoint instead)\n",
         "requestBody": {
           "description": "The new owner redirect info (RVTO2Addr) configuration",
           "required": true,
@@ -691,7 +691,7 @@
       "put": {
         "operationId": "UpdateRVTO2Addr",
         "summary": "Update the owner redirect info (RVTO2Addr) configuration (Deprecated)",
-        "description": "Updates the owner redirect info (RVTO2Addr) configuration.\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n(Deprecated: please use \"/rvto2addr\" endpoint instead)\n",
+        "description": "Updates the owner redirect info (RVTO2Addr) configuration.\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n(Deprecated: please use \"/api/v2/rvto2addr\" endpoint instead)\n",
         "requestBody": {
           "description": "The new owner redirect info (RVTO2Addr) configuration",
           "required": true,

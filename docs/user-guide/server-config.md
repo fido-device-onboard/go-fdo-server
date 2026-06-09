@@ -33,7 +33,6 @@ The name of the configuration file is based on the server's role, with the file 
 | Owner | `owner.<suffix>` | `owner.yaml`, `owner.toml` |
 | Rendezvous | `rendezvous.<suffix>` | `rendezvous.yaml`, `rendezvous.toml` |
 
-
 ## Configuration Structure
 
 The configuration file uses a hierarchical structure that defines the following sections:
@@ -79,12 +78,16 @@ provided under the `[http]` section:
 
 ## Device Certificate Authority (CA) Configuration
 
-The Device CA configuration is under the `[device_ca]` section. This section is required for both Manufacturing and Owner servers:
+The Device CA configuration is under the `[device_ca]` section. This section is required for the Manufacturing server and optional for the Owner and Rendezvous servers:
 
 | Key | Type | Description | Required |
 |-----|------|-------------|----------|
-| `cert` | string | Device CA certificate file path | Yes |
-| `key` | string | Device CA private key file path | Yes (for Manufacturing server) |
+| `cert` | string | Device CA certificate file path | Yes (Manufacturing), No (Owner, Rendezvous) |
+| `key` | string | Device CA private key file path | Yes (Manufacturing only) |
+
+When configured on the Owner server, only vouchers signed by the specified Device CA are accepted during import. When omitted, vouchers from any Device CA are accepted.
+
+When configured on the Rendezvous server, the device certificate chain is verified against the specified Device CA during the TO0 protocol. When omitted, chain integrity is verified (the chain is internally consistent) but any root CA is accepted, allowing any device to register.
 
 ## Manufacturing Server Configuration
 
@@ -95,6 +98,7 @@ The Manufacturing server configuration is under the `[manufacturing]` section:
 | `key` | string | Manufacturing private key file path | Yes |
 
 The Manufacturing server also requires:
+
 - `[device_ca]` section with both `cert` and `key` (see Device CA Configuration above)
 - `[owner]` section with `cert` field (see Owner Configuration below)
 
@@ -110,8 +114,9 @@ The Owner server configuration is under the `[owner]` section:
 | `to0_insecure_tls` | boolean | Skip TLS certificate verification for TO0 | No (default: `false`) |
 | `service_info` | map | ServiceInfo Modules to execute on device onboarding (See below) | No |
 
-The Owner server also requires:
-- `[device_ca]` section with `cert` field (see Device CA Configuration above)
+The Owner server optionally accepts:
+
+- `[device_ca]` section with `cert` field to restrict voucher imports to a trusted Device CA (see Device CA Configuration above). When omitted, vouchers from any Device CA are accepted.
 
 **Note**: The `owner.cert` field is used by the Manufacturing server to specify the Owner certificate. The `owner.key` field is used by the Owner server to specify its private key.
 
@@ -149,6 +154,7 @@ The `defaults` field is a list of default entries with the following structure:
 | `dir` | string | Default directory path (must be absolute) | Yes |
 
 **IMPORTANT**:
+
 - Each `fsim` value can appear only once in the defaults list (maximum of 3 entries)
 - The `dir` path must be absolute
 - For `fdo.download` and `fdo.upload`, the directory must exist on the Owner server at startup
@@ -325,6 +331,13 @@ The Rendezvous server configuration is under the `[rendezvous]` section:
 | `initial_cleanup_delay` | integer | Delay in seconds before the first cleanup runs after server startup. This prevents startup spikes when restarting servers with large amounts of expired data, allowing the server to start serving requests before running potentially heavy cleanup operations. | 300 (5 minutes) |
 
 **Note**: The Rendezvous server performs periodic background cleanup to prevent database bloat. Expired rendezvous blobs and old sessions are automatically removed based on the configured intervals.
+
+### Device CA Trust on the Rendezvous Server
+
+The Rendezvous server verifies the device certificate chain of ownership vouchers during the TO0 protocol. Trusted Device CA certificates can be uploaded via the management API (Device CA endpoints).
+
+- When one or more Device CA certificates are uploaded, only vouchers whose device certificate chain is signed by a trusted Device CA are accepted during TO0.
+- When no Device CA certificates are uploaded, the Rendezvous server performs chain integrity validation only (verifies the chain is internally consistent) but accepts any root CA. This allows any device to register.
 
 ## Configuration File Examples
 

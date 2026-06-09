@@ -21,7 +21,7 @@ Before setting up the reverse proxy, ensure you have:
 
 ## Overview
 
-The FDO server exposes management APIs on `/api/v1/` endpoints without built-in authentication. A reverse proxy can provide:
+The FDO server exposes management APIs on `/api/v1/` and `/api/v2/` endpoints without built-in authentication. A reverse proxy can provide:
 
 - Basic HTTP authentication
 - TLS termination
@@ -30,14 +30,14 @@ The FDO server exposes management APIs on `/api/v1/` endpoints without built-in 
 
 ## Management API Protection
 
-The FDO server exposes management APIs under the `/api/v1/` path prefix that require protection:
+The FDO server exposes management APIs under the `/api/v1/` and `/api/v2/` path prefixes that require protection:
 
 - **Manufacturing Service** (typically port 8038): Management APIs for rendezvous info and vouchers
 - **Owner Service** (typically port 8043): Management APIs for device ownership and onboarding
 
 The reverse proxy should:
 
-- **Require authentication** for all `/api/v1/*` requests  
+- **Require authentication** for all `/api/v1/*` and `/api/v2/*` requests
 - **Allow unauthenticated access** to `/health` and `/fdo/101/msg/*` endpoints
 
 ## Common Setup Steps
@@ -85,7 +85,7 @@ sudo firewall-cmd --reload
 The nginx configuration below creates two separate virtual hosts (one for Manufacturing APIs, one for Owner APIs) with the following security features:
 
 - **TLS Encryption**: Forces HTTPS with modern TLS protocols and secure ciphers
-- **Basic Authentication**: Requires username/password for `/api/v1/` endpoints  
+- **Basic Authentication**: Requires username/password for `/api/v1/` and `/api/v2/` endpoints (using a single regex-based location block)
 - **Security Headers**: Adds headers to protect against common attacks
 - **Health Check Access**: Allows unauthenticated access to `/health` for monitoring
 - **Request Blocking**: Returns 404 for any other requests
@@ -110,17 +110,17 @@ server {
     add_header X-Content-Type-Options nosniff;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     
-    # Protect management APIs
-    location /api/v1/ {
+    # Protect management APIs (V1 - deprecated, V2 - current)
+    location ~ ^/api/v[12]/ {
         auth_basic "FDO Management";
         auth_basic_user_file /etc/nginx/fdo-mgmt.passwd;
-        
+
         proxy_pass http://127.0.0.1:8038;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # Timeouts for API calls
         proxy_connect_timeout 30s;
         proxy_send_timeout 30s;
@@ -143,7 +143,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # Timeouts for protocol calls
         proxy_connect_timeout 30s;
         proxy_send_timeout 30s;
@@ -160,36 +160,36 @@ server {
 server {
     listen 443 ssl http2;
     server_name fdo-owner.example.com;
-    
+
     # TLS Configuration (same as above)
     ssl_certificate /path/to/your/cert.pem;
     ssl_certificate_key /path/to/your/key.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
-    
+
     # Security Headers
     add_header X-Frame-Options DENY;
     add_header X-Content-Type-Options nosniff;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    
-    # Protect management APIs
-    location /api/v1/ {
+
+    # Protect management APIs (V1 - deprecated, V2 - current)
+    location ~ ^/api/v[12]/ {
         auth_basic "FDO Management";
         auth_basic_user_file /etc/nginx/fdo-mgmt.passwd;
-        
+
         proxy_pass http://127.0.0.1:8043;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # Timeouts for API calls
         proxy_connect_timeout 30s;
         proxy_send_timeout 30s;
         proxy_read_timeout 30s;
     }
-    
+
     # Health check (no auth required)
     location /health {
         proxy_pass http://127.0.0.1:8043;
@@ -198,7 +198,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-    
+
     # FDO protocol endpoints (no auth required)
     location /fdo/101/ {
         proxy_pass http://127.0.0.1:8043;
@@ -206,13 +206,13 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # Timeouts for protocol calls
         proxy_connect_timeout 30s;
         proxy_send_timeout 30s;
         proxy_read_timeout 30s;
     }
-    
+
     # Block everything else
     location / {
         return 404;
@@ -261,7 +261,7 @@ Create `/etc/httpd/conf.d/fdo-mgmt.conf`:
 # FDO Manufacturing Management API
 <VirtualHost *:443>
     ServerName fdo-mfg.example.com
-    
+
     # TLS Configuration
     SSLEngine on
     SSLCertificateFile /path/to/your/cert.pem
@@ -269,29 +269,28 @@ Create `/etc/httpd/conf.d/fdo-mgmt.conf`:
     SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
     SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
     SSLHonorCipherOrder off
-    
+
     # Security Headers
     Header always set X-Frame-Options DENY
     Header always set X-Content-Type-Options nosniff
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    
+
     # Block everything else by default
     <Location "/">
         Require all denied
     </Location>
 
-    # Protect management APIs
-    <Location "/api/v1/">
+    # Protect management APIs (V1 - deprecated, V2 - current)
+    <LocationMatch "^/api/v[12]/">
         AuthType Basic
         AuthName "FDO Management"
         AuthUserFile /etc/httpd/fdo-mgmt.passwd
         Require valid-user
-        
+
         ProxyPreserveHost On
-        ProxyPass http://127.0.0.1:8038/api/v1/
-        ProxyPassReverse http://127.0.0.1:8038/api/v1/
-        
-    </Location>
+        ProxyPass http://127.0.0.1:8038
+        ProxyPassReverse http://127.0.0.1:8038
+    </LocationMatch>
     
     # Health check (no auth required)
     <Location "/health">
@@ -332,19 +331,18 @@ Create `/etc/httpd/conf.d/fdo-mgmt.conf`:
         Require all denied
     </Location>
 
-    # Protect management APIs
-    <Location "/api/v1/">
+    # Protect management APIs (V1 - deprecated, V2 - current)
+    <LocationMatch "^/api/v[12]/">
         AuthType Basic
         AuthName "FDO Management"
         AuthUserFile /etc/httpd/fdo-mgmt.passwd
         Require valid-user
-        
+
         ProxyPreserveHost On
-        ProxyPass http://127.0.0.1:8043/api/v1/
-        ProxyPassReverse http://127.0.0.1:8043/api/v1/
-        
-    </Location>
-    
+        ProxyPass http://127.0.0.1:8043
+        ProxyPassReverse http://127.0.0.1:8043
+    </LocationMatch>
+
     # Health check (no auth required)
     <Location "/health">
         Require all granted
@@ -390,17 +388,17 @@ The examples below assume you have valid TLS certificates from a trusted Certifi
 ### 1. Test Without Authentication (should fail)
 
 ```bash
-curl -i https://fdo-mfg.example.com/api/v1/rvinfo
+curl -i https://fdo-mfg.example.com/api/v2/rvinfo
 # Expected: 401 Unauthorized
 ```
 
 ### 2. Test With Authentication
 
 ```bash
-curl -i -u admin:password https://fdo-mfg.example.com/api/v1/rvinfo
+curl -i -u admin:password https://fdo-mfg.example.com/api/v2/rvinfo
 # Expected: 200 OK with RV info data
 
-curl -i -u admin:password https://fdo-owner.example.com/api/v1/owner/redirect
+curl -i -u admin:password https://fdo-owner.example.com/api/v2/rvto2addr
 # Expected: 200 OK with redirect data
 ```
 
@@ -420,16 +418,16 @@ If you're using self-signed certificates for testing, curl will reject the conne
 
 ```bash
 # Test without auth (should fail with 401)
-curl -i -k https://fdo-mfg.example.com/api/v1/rvinfo
+curl -i -k https://fdo-mfg.example.com/api/v2/rvinfo
 
 # Test with auth (should succeed)
-curl -i -k -u admin:password https://fdo-mfg.example.com/api/v1/rvinfo
+curl -i -k -u admin:password https://fdo-mfg.example.com/api/v2/rvinfo
 
 # Test health endpoint
 curl -i -k https://fdo-mfg.example.com/health
 
 # Test Owner service endpoints
-curl -i -k -u admin:password https://fdo-owner.example.com/api/v1/owner/redirect
+curl -i -k -u admin:password https://fdo-owner.example.com/api/v2/rvto2addr
 curl -i -k https://fdo-owner.example.com/health
 ```
 
@@ -437,7 +435,7 @@ curl -i -k https://fdo-owner.example.com/health
 
 ## Important Notes
 
-1. **FDO Protocol Endpoints**: The reverse proxy only protects management APIs (`/api/v1/`). The FDO protocol endpoints (`/fdo/101/msg/`) should remain accessible for device communication.
+1. **FDO Protocol Endpoints**: The reverse proxy only protects management APIs (`/api/v1/` and `/api/v2/`). The FDO protocol endpoints (`/fdo/101/msg/`) should remain accessible for device communication.
 
 2. **Certificate Management**: Replace `/path/to/your/cert.pem` and `/path/to/your/key.pem` with actual certificate paths. Consider using Let's Encrypt for free certificates.
 
@@ -445,7 +443,9 @@ curl -i -k https://fdo-owner.example.com/health
 
 4. **Monitoring**: Enable access logs to monitor API usage and potential security threats.
 
-5. **Rate Limiting**: The FDO server includes built-in rate limiting (2 requests/second, burst of 10). The reverse proxy can add additional protection if needed.
+5. **Rate Limiting**: The FDO server includes built-in rate limiting on management APIs (all servers: 2 requests/second, burst 10). The reverse proxy can add additional protection if needed.
+
+6. **API Documentation**: The server exposes Swagger UI at `/api/docs/` and the OpenAPI spec at `/api/openapi.json`. These endpoints are not under the `/api/v1/` or `/api/v2/` prefixes. If you want to expose them through the reverse proxy, add a separate location block for `/api/docs/` and `/api/openapi.json`.
 
 For RHEL-specific documentation on reverse proxy setups, refer to:
 

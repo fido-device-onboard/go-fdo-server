@@ -24,8 +24,8 @@ The `go-fdo-server` requires three different X.509 public key certificates and t
    - Private key (`owner.key`): Local to Owner server only
 
 3. **Device CA Certificate**
-   - Shared: MUST be identical on both Manufacturing and Owner servers
-   - Certificate (`device-ca.crt`): Provided to both Manufacturer and Owner servers
+   - Shared: Required for Manufacturing server, optional for Owner and Rendezvous servers
+   - Certificate (`device-ca.crt`): Required on Manufacturer, optionally provided to Owner and Rendezvous servers for trust verification
    - Private Key (`device-ca.key`): Local to Manufacturing server only
 
 ## Certificate Types
@@ -48,12 +48,20 @@ The `go-fdo-server` requires three different X.509 public key certificates and t
 ### Shared Certificates
 
 **Device CA Certificate** (`/etc/pki/go-fdo-server/{device-ca.crt,device-ca.key}`)
-- MUST be identical on both Manufacturing and Owner servers
 - Signs device certificates during DI protocol (Manufacturer server)
-- Verifies device certificates during TO2 protocol (Owner server)
-- Must be created once and distributed to both servers
+- When configured on the Owner server, only vouchers signed by a trusted Device CA are accepted during import
+- When not configured on the Owner server, vouchers signed by any Device CA are accepted during import
+- Must be created once and distributed to both servers if Device CA verification is desired
 
-**IMPORTANT**: The Device CA certificate chain must be intact across both servers for FDO to function correctly. Independent generation breaks the signing/verification chain.
+The Device CA verification behavior varies by server role:
+
+| Server | Device CA required? | Behavior when configured | Behavior when not configured |
+|--------|--------------------|--------------------------|-----------------------------|
+| Manufacturing | Yes (for DI) | Signs device certificates; verifies device cert chain on voucher import | N/A — required for device initialization |
+| Owner | No | Only vouchers signed by a trusted Device CA are accepted during import | Vouchers from any Device CA are accepted during import |
+| Rendezvous | No | Only vouchers with a trusted Device CA cert chain are accepted during TO0 | Chain integrity is verified but any root CA is accepted during TO0 |
+
+**Note**: Configuring Device CA certificates on the Owner and Rendezvous servers is recommended for production deployments to restrict which devices can onboard. Omitting them allows open import/registration, which may be useful in development or multi-manufacturer environments.
 
 ### HTTPS/TLS Certificates
 

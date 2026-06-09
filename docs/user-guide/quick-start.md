@@ -129,54 +129,47 @@ A minimal configuration must be set prior to performing onboarding. This involve
 
 The `RVInfo` configuration is used to determine the network address of the Rendezvous server. The configuration must include the Rendezvous server's IP address or DNS name, and TCP port.
 
-> **Note**: The V2 API (`/api/v2/rvinfo`) is recommended for new deployments. It uses OpenAPI specification format with strict typing (integer ports). The V1 API (`/api/v1/rvinfo`) is deprecated and will be removed in a future release, but is still supported for backward compatibility.
+To set the `RVInfo` configuration, send a `PUT` HTTP request containing the Rendezvous server information to the Manufacturing server:
 
-To set the `RVInfo` configuration, send a `POST` HTTP request containing the Rendezvous server information to the Manufacturing server:
 ```bash
-curl -X POST 'http://localhost:8038/api/v1/rvinfo' \
-  -H 'Content-Type: text/plain' \
-  -d '[{"dns":"fdo.example.com","device_port":"8041","owner_port":"8041","protocol":"http","ip":"127.0.0.1"}]'
+curl -X PUT 'http://localhost:8038/api/v2/rvinfo' \
+  -H 'Content-Type: application/json' \
+  -d '[[{"dns":"fdo.example.com"},{"device_port":8041},{"owner_port":8041},{"protocol":"http"},{"ip":"127.0.0.1"}]]'
 ```
 
 Verify the configuration has been stored on the Manufacturing server by sending a `GET` request to fetch the current `RVInfo` data:
 ```bash
-curl -X GET 'http://localhost:8038/api/v1/rvinfo'
+curl -X GET 'http://localhost:8038/api/v2/rvinfo'
 ```
 
-### RV Info V2 API Examples (Recommended)
-
+To configure RV bypass (skip rendezvous, connect directly to owner):
 ```bash
-# Create or update RV info (V2 format: array of arrays with single-key objects, integer ports)
-curl -X PUT 'http://localhost:8038/api/v2/rvinfo' \
-  -H 'Content-Type: application/json' \
-  -d '[[{"dns":"fdo.example.com"},{"device_port":8041},{"owner_port":8041},{"protocol":"http"},{"ip":"127.0.0.1"}]]'
-
-# Create or update with RV bypass (skip rendezvous, connect directly to owner)
 curl -X PUT 'http://localhost:8038/api/v2/rvinfo' \
   -H 'Content-Type: application/json' \
   -d '[[{"dns":"fdo.example.com"},{"device_port":8043},{"owner_port":8043},{"protocol":"http"},{"ip":"127.0.0.1"},{"rv_bypass":true}]]'
+```
 
-# Fetch RV info
-curl -X GET 'http://localhost:8038/api/v2/rvinfo'
-
-# Delete RV info
+To delete the RV info configuration:
+```bash
 curl -X DELETE 'http://localhost:8038/api/v2/rvinfo'
 ```
+
+> **Note**: The deprecated V1 API (`/api/v1/rvinfo`) is still supported for backward compatibility but will be removed in a future release.
 
 ### Managing the Owner Server Redirect Configuration (`RVTO2Addr`)
 
 The Owner server sends its `RVTO2Addr` configuration to the Rendezvous server prior to onboarding a device.  The configuration contains the network address of the Owner server, which the Rendezvous server will pass to the device during onboarding.  The device uses this network address to access the Owner server.
 
-To set the `RVTO2Addr` configuration, send a `POST` HTTP request containing the Owner server's network address to the Owner server:
+To set the `RVTO2Addr` configuration, send a `PUT` HTTP request containing the Owner server's network address to the Owner server:
 ```bash
-curl -X POST 'http://localhost:8043/api/v1/owner/redirect' \
-  -H 'Content-Type: text/plain' \
-  -d '[{"dns":"fdo.example.com","port":"8043","protocol":"http","ip":"127.0.0.1"}]'
+curl -X PUT 'http://localhost:8043/api/v2/rvto2addr' \
+  -H 'Content-Type: application/json' \
+  -d '[{"dns":"fdo.example.com","port":8043,"protocol":"http","ip":"127.0.0.1"}]'
 ```
 
 Verify the configuration has been stored on the Owner server by sending a `GET` request to fetch the current redirect data:
 ```bash
-curl -X GET 'http://localhost:8043/api/v1/owner/redirect'
+curl -X GET 'http://localhost:8043/api/v2/rvto2addr'
 ```
 
 ## Basic Onboarding Flow (Device DI → voucher → TO0 → TO2)
@@ -207,8 +200,10 @@ echo "GUID=${GUID}"
 3. Using the Device GUID, download the device's Ownership Voucher from the Manufacturing server and upload it to the Owner server:
 
 ```bash
-curl -v "http://localhost:8038/api/v1/vouchers/${GUID}" > /tmp/fdo/ov/ownervoucher
-curl -X POST 'http://localhost:8043/api/v1/owner/vouchers' \
+curl -v -H 'Accept: application/x-pem-file' \
+  "http://localhost:8038/api/v2/vouchers/${GUID}" > /tmp/fdo/ov/ownervoucher
+curl -X POST 'http://localhost:8043/api/v2/vouchers' \
+  -H 'Content-Type: application/x-pem-file' \
   --data-binary @/tmp/fdo/ov/ownervoucher
 ```
 

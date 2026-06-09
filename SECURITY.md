@@ -8,7 +8,7 @@ Information about different FIDO Device Onboard (FDO) release versions can be fo
 
 ### Management API Security
 
-**Important**: The FDO server management APIs (`/api/v1/` endpoints) do not include built-in authentication mechanisms. These APIs provide administrative access to:
+**Important**: The FDO server management APIs (`/api/v1/` and `/api/v2/` endpoints) do not include built-in authentication mechanisms. These APIs provide administrative access to:
 
 - Rendezvous information management
 - Ownership voucher management

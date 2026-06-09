@@ -4,7 +4,7 @@ The Device CA API endpoints support content negotiation based on the `Accept` HT
 
 ## Supported Endpoints
 
-### GET /api/v1/device-ca
+### GET /api/v2/device-ca
 
 **List all trusted device CA certificates**
 
@@ -15,16 +15,16 @@ The Device CA API endpoints support content negotiation based on the `Accept` HT
 
 ```bash
 # Get certificates as JSON (default)
-curl -H "Accept: application/json" http://localhost:8080/api/v1/device-ca
+curl -H "Accept: application/json" http://localhost:8043/api/v2/device-ca
 
 # Get certificates as PEM file
-curl -H "Accept: application/x-pem-file" http://localhost:8080/api/v1/device-ca
+curl -H "Accept: application/x-pem-file" http://localhost:8043/api/v2/device-ca
 
 # No Accept header defaults to JSON
-curl http://localhost:8080/api/v1/device-ca
+curl http://localhost:8043/api/v2/device-ca
 ```
 
-### GET /api/v1/device-ca/{fingerprint}
+### GET /api/v2/device-ca/{fingerprint}
 
 **Get a specific trusted device CA certificate by fingerprint**
 
@@ -36,14 +36,14 @@ curl http://localhost:8080/api/v1/device-ca
 ```bash
 # Get certificate as JSON (default)
 curl -H "Accept: application/json" \
-  http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+  http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 
 # Get certificate as PEM file
 curl -H "Accept: application/x-pem-file" \
-  http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+  http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 
 # No Accept header defaults to JSON
-curl http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+curl http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 ```
 
 ## Default Behavior
@@ -81,13 +81,13 @@ The middleware properly handles:
 ```bash
 # Higher quality for PEM → returns PEM
 curl -H "Accept: application/json;q=0.8, application/x-pem-file;q=0.9" \
-  http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+  http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 
 # Higher quality for JSON → returns JSON
 curl -H "Accept: application/json;q=0.9, application/x-pem-file;q=0.5" \
-  http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+  http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 
 # Equal quality (both default to q=1.0) → returns first acceptable (JSON preferred)
 curl -H "Accept: application/json, application/x-pem-file" \
-  http://localhost:8080/api/v1/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
+  http://localhost:8043/api/v2/device-ca/a1b2c3d4e5f67890123456789abcdef0a1b2c3d4e5f67890123456789abcdef0
 ```

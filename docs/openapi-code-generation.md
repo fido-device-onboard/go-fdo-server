@@ -17,51 +17,47 @@ This approach provides:
 
 ## Directory Structure
 
+The API code is organized by version (`v1`, `v2`). Each endpoint package contains its OpenAPI definition, oapi-codegen configuration, generated code, and handler implementation:
+
 ```
 .
 ├── api/
-│   ├── definitions/           # Modular OpenAPI definitions (source)
-│   │   ├── components.yaml    # Common schemas, security, responses
-│   │   ├── health.yaml        # Health check endpoint
-│   │   ├── device-ca.yaml     # Device CA certificates API
-│   │   ├── voucher.yaml       # Ownership voucher API
-│   │   ├── rvinfo.yaml        # Rendezvous info API
-│   │   ├── rvto2addr.yaml     # RV TO2 address API
-│   │   ├── manufacturer.yaml  # Manufacturer aggregation spec
-│   │   ├── owner.yaml         # Owner aggregation spec
-│   │   └── rendezvous.yaml    # Rendezvous aggregation spec
-│   ├── manufacturer/
-│   │   └── openapi.yaml       # Complete Manufacturer API spec (generated)
-│   ├── owner/
-│   │   └── openapi.yaml       # Complete Owner API spec (generated)
-│   └── rendezvous/
-│       └── openapi.yaml       # Complete Rendezvous API spec (generated)
-├── configs/goapi-codegen/     # oapi-codegen configuration files
-│   ├── components.yaml
-│   ├── health.yaml
-│   ├── device-ca.yaml
-│   ├── voucher.yaml
-│   ├── rvinfo.yaml
-│   └── rvto2addr.yaml
-└── internal/
-    ├── generate.go            # Go generate directives
-    └── handlers/
-        ├── components/
-        │   └── models.gen.go  # Common models (generated)
-        ├── health/
-        │   ├── handler.gen.go # Health handler interfaces (generated)
-        │   └── handler.go     # Health handler implementation
-        ├── deviceca/
-        │   ├── handler.gen.go # Device CA interfaces (generated)
-        │   └── handler.go     # Device CA implementation
-        ├── voucher/
-        │   └── handler.gen.go # Voucher handler (generated)
-        ├── rvinfo/
-        │   └── handler.gen.go # RV info handler (generated)
-        ├── rvto2addr/
-        │   └── handler.gen.go # RV TO2 addr handler (generated)
-        └── rendezvous/
-            └── handler.go     # Rendezvous server wiring
+│   ├── v1/                        # V1 API (deprecated, backward-compatible)
+│   │   ├── components/
+│   │   │   ├── openapi.yaml       # Common schemas, security, responses
+│   │   │   ├── config.yaml        # oapi-codegen configuration
+│   │   │   └── models.gen.go      # Generated common models
+│   │   ├── health/
+│   │   │   ├── openapi.yaml       # Health check endpoint definition
+│   │   │   ├── config.yaml        # oapi-codegen configuration
+│   │   │   ├── handler.gen.go     # Generated handler interfaces
+│   │   │   └── handler.go         # Handler implementation
+│   │   ├── deviceca/              # Device CA certificates API
+│   │   ├── voucher/               # Ownership voucher API
+│   │   ├── rvinfo/                # Rendezvous info API
+│   │   └── ...                    # Other V1 endpoints
+│   └── v2/                        # V2 API (current)
+│       ├── components/
+│       │   ├── openapi.yaml       # Common schemas
+│       │   ├── config.yaml        # oapi-codegen configuration
+│       │   └── handler.gen.go     # Generated common models
+│       ├── health/                # Health check endpoint
+│       ├── deviceca/              # Device CA certificates API
+│       ├── voucher/               # Ownership voucher API (enhanced)
+│       ├── rvinfo/                # Rendezvous info API
+│       ├── rvto2addr/             # RV TO2 address API (new in V2)
+│       ├── manufacturer/
+│       │   ├── handler.go         # Manufacturer server wiring
+│       │   ├── openapi.json       # Complete spec (generated)
+│       │   └── openapi.yaml       # Complete spec (generated)
+│       ├── owner/
+│       │   ├── handler.go         # Owner server wiring
+│       │   ├── openapi.json       # Complete spec (generated)
+│       │   └── openapi.yaml       # Complete spec (generated)
+│       └── rendezvous/
+│           ├── handler.go         # Rendezvous server wiring
+│           ├── openapi.json       # Complete spec (generated)
+│           └── openapi.yaml       # Complete spec (generated)
 ```
 
 ## Code Generation Process
@@ -70,15 +66,15 @@ This approach provides:
 
 **Tool**: [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) v2.5.1+
 
-**Input**: Modular OpenAPI definitions in `api/definitions/`
+**Input**: Modular OpenAPI definitions in `api/v{1,2}/*/openapi.yaml`
 
-**Output**: Go server interfaces and models in `internal/handlers/*/handler.gen.go`
+**Output**: Go server interfaces and models in `api/v{1,2}/*/handler.gen.go`
 
 **Process**:
-1. Each OpenAPI definition file has a corresponding configuration in `configs/goapi-codegen/`
+1. Each OpenAPI definition file has a corresponding `config.yaml` in the same directory
 2. Configuration specifies what to generate (models, servers, strict interfaces)
 3. `oapi-codegen` reads the OpenAPI spec and config, generates Go code
-4. Common types from `components.yaml` are imported via `import-mapping`
+4. Common types from `../components/openapi.yaml` are imported via `import-mapping`
 
 **Generated Code Includes**:
 - Type definitions for request/response schemas
@@ -91,9 +87,9 @@ This approach provides:
 
 **Tool**: [openapi-format](https://github.com/thim81/openapi-format) via npx
 
-**Input**: Aggregation specs in `api/definitions/{manufacturer,owner,rendezvous}.yaml`
+**Input**: Aggregation specs in `api/v2/{manufacturer,owner,rendezvous}/`
 
-**Output**: Complete OpenAPI documents in `api/{manufacturer,owner,rendezvous}/openapi.yaml`
+**Output**: Complete OpenAPI documents in `api/v2/{manufacturer,owner,rendezvous}/openapi.json`
 
 **Process**:
 1. Aggregation specs use `$ref` to compose endpoints from modular definitions
@@ -105,7 +101,7 @@ This approach provides:
 
 ### oapi-codegen Configuration
 
-Each endpoint has a configuration file in `configs/goapi-codegen/`. Example (`configs/goapi-codegen/voucher.yaml`):
+Each endpoint has a `config.yaml` alongside its `openapi.yaml`. Example (`api/v2/voucher/config.yaml`):
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
@@ -114,9 +110,9 @@ generate:
   std-http-server: true             # Generate standard http.Handler interfaces
   strict-server: true               # Generate strict server wrapper
   models: true                      # Generate request/response models
-output: handlers/voucher/handler.gen.go  # Output file path
+output: handler.gen.go              # Output file path (relative to config)
 import-mapping:                     # Import shared types from other packages
-  components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+  ../components/openapi.yaml: "github.com/fido-device-onboard/go-fdo-server/api/v2/components"
 output-options:
   skip-prune: true                  # Generate all types, even unused ones
 ```
@@ -132,13 +128,14 @@ output-options:
 
 ### Components Configuration
 
-`configs/goapi-codegen/components.yaml` is special - it only generates models:
+`api/v2/components/config.yaml` generates shared models (the V1 equivalent outputs to `models.gen.go` instead of `handler.gen.go`):
 
 ```yaml
 package: components
 generate:
-  models: true                      # Only generate models, no handlers
-output: handlers/components/models.gen.go
+  models: true                      # Generate shared model types
+  strict-server: true               # Generate strict server response types
+output: handler.gen.go
 output-options:
   skip-prune: true
 ```
@@ -156,23 +153,24 @@ The Rendezvous server combines:
 - Health check API
 - Device CA management API
 
-**File: `internal/handlers/rendezvous/handler.go`**
+**File: `api/v2/rendezvous/handler.go`** (simplified for illustration)
 
 ```go
 package rendezvous
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
+	"github.com/elnormous/contenttype"
 	fdo_lib "github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/deviceca"
-	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/health"
+	v1deviceca "github.com/fido-device-onboard/go-fdo-server/api/v1/deviceca"
+	v2deviceca "github.com/fido-device-onboard/go-fdo-server/api/v2/deviceca"
+	"github.com/fido-device-onboard/go-fdo-server/api/v2/health"
+	"github.com/fido-device-onboard/go-fdo-server/internal/middleware"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	fdo_http "github.com/fido-device-onboard/go-fdo/http"
 )
@@ -215,51 +213,48 @@ func (r *Rendezvous) Handler() http.Handler {
 	healthStrictHandler := health.NewStrictHandler(&healthServer, nil)
 	health.HandlerFromMux(healthStrictHandler, rendezvousServeMux)
 
-	// 3. Wire Management APIs with middleware
-	mgmtAPIServeMux := http.NewServeMux()
-
-	// Device CA API (from generated code)
-	deviceCAServer := deviceca.NewServer(r.State.DeviceCA)
-	deviceCAMiddlewares := []deviceca.StrictMiddlewareFunc{
-		deviceca.ContentNegotiationMiddleware,
+	// 3. Content negotiation configuration for Device CA endpoints
+	deviceCACertContentTypes := []contenttype.MediaType{
+		contenttype.NewMediaType("application/json"),
+		contenttype.NewMediaType("application/x-pem-file"),
 	}
-	deviceCAStrictHandler := deviceca.NewStrictHandler(&deviceCAServer, deviceCAMiddlewares)
-	deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtAPIServeMux)
+	deviceCACertPreferredContentType := "application/json"
 
-	// Apply rate limiting and body size limits to management APIs
-	mgmtAPIHandler := rateLimitMiddleware(
+	// 4. Wire deprecated V1 management APIs
+	mgmtAPIServeMuxV1 := http.NewServeMux()
+	deviceCAServerV1 := v1deviceca.NewServer(r.State.DeviceCA)
+	deviceCAMiddlewaresV1 := []v1deviceca.StrictMiddlewareFunc{
+		middleware.ContentNegotiationMiddleware[v1deviceca.StrictHandlerFunc](
+			deviceCACertContentTypes, deviceCACertPreferredContentType),
+	}
+	deviceCAStrictHandlerV1 := v1deviceca.NewStrictHandler(&deviceCAServerV1, deviceCAMiddlewaresV1)
+	v1deviceca.HandlerFromMux(deviceCAStrictHandlerV1, mgmtAPIServeMuxV1)
+
+	mgmtAPIHandlerV1 := middleware.RateLimitMiddleware(
 		rate.NewLimiter(2, 10),
-		bodySizeMiddleware(1<<20, // 1MB
-			mgmtAPIServeMux,
-		),
+		middleware.BodySizeMiddleware(1<<20, mgmtAPIServeMuxV1),
 	)
-	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api", mgmtAPIHandler))
+
+	// 5. Wire V2 management APIs
+	mgmtAPIServeMuxV2 := http.NewServeMux()
+	deviceCAServerV2 := v2deviceca.NewServer(r.State.DeviceCA)
+	deviceCAMiddlewaresV2 := []v2deviceca.StrictMiddlewareFunc{
+		middleware.ContentNegotiationMiddleware[v2deviceca.StrictHandlerFunc](
+			deviceCACertContentTypes, deviceCACertPreferredContentType),
+	}
+	deviceCAStrictHandler := v2deviceca.NewStrictHandler(&deviceCAServerV2, deviceCAMiddlewaresV2)
+	v2deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtAPIServeMuxV2)
+
+	mgmtAPIHandlerV2 := middleware.RateLimitMiddleware(
+		rate.NewLimiter(2, 10),
+		middleware.BodySizeMiddleware(1<<20, mgmtAPIServeMuxV2),
+	)
+
+	// 6. Mount both API versions
+	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandlerV1))
+	rendezvousServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))
 
 	return rendezvousServeMux
-}
-
-// Helper middlewares
-func rateLimitMiddleware(limiter *rate.Limiter, next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow() {
-			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
-			return
-		}
-		next.ServeHTTP(w, r)
-	}
-}
-
-func bodySizeMiddleware(limitBytes int64, next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = struct {
-			io.Reader
-			io.Closer
-		}{
-			Reader: io.LimitReader(r.Body, limitBytes),
-			Closer: r.Body,
-		}
-		next.ServeHTTP(w, r)
-	}
 }
 ```
 
@@ -295,10 +290,11 @@ health.HandlerFromMux(healthStrictHandler, rendezvousServeMux)
 
 #### 3. Adding Middleware to Generated Handlers
 ```go
-deviceCAMiddlewares := []deviceca.StrictMiddlewareFunc{
-	deviceca.ContentNegotiationMiddleware,
+deviceCAMiddlewares := []v2deviceca.StrictMiddlewareFunc{
+	middleware.ContentNegotiationMiddleware[v2deviceca.StrictHandlerFunc](
+		deviceCACertContentTypes, deviceCACertPreferredContentType),
 }
-deviceCAStrictHandler := deviceca.NewStrictHandler(&deviceCAServer, deviceCAMiddlewares)
+deviceCAStrictHandler := v2deviceca.NewStrictHandler(&deviceCAServer, deviceCAMiddlewares)
 ```
 
 Middlewares can be applied to strict handlers for cross-cutting concerns like:
@@ -312,11 +308,23 @@ Middlewares can be applied to strict handlers for cross-cutting concerns like:
 // Main server mux
 rendezvousServeMux := http.NewServeMux()
 
-// Separate mux for management APIs
-mgmtAPIServeMux := http.NewServeMux()
+// Separate mux for each API version
+mgmtAPIServeMuxV1 := http.NewServeMux()
+mgmtAPIServeMuxV2 := http.NewServeMux()
 
-// Mount management APIs under /api/v1/
-rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api", mgmtAPIHandler))
+// Wrap each version with rate limiting and body size middleware
+mgmtAPIHandlerV1 := middleware.RateLimitMiddleware(
+	rate.NewLimiter(2, 10),
+	middleware.BodySizeMiddleware(1<<20, mgmtAPIServeMuxV1),
+)
+mgmtAPIHandlerV2 := middleware.RateLimitMiddleware(
+	rate.NewLimiter(2, 10),
+	middleware.BodySizeMiddleware(1<<20, mgmtAPIServeMuxV2),
+)
+
+// Mount management APIs under /api/v1/ (deprecated) and /api/v2/ (current)
+rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandlerV1))
+rendezvousServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))
 ```
 
 This pattern allows:
@@ -328,7 +336,7 @@ This pattern allows:
 
 For each generated API, implement the `StrictServerInterface`:
 
-**File: `internal/handlers/health/handler.go`**
+**File: `api/v2/health/handler.go`**
 
 ```go
 package health
@@ -337,7 +345,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+	"github.com/fido-device-onboard/go-fdo-server/api/v2/components"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/fido-device-onboard/go-fdo-server/internal/version"
 )
@@ -403,10 +411,10 @@ sudo apt install npm
 From the project root:
 
 ```bash
-go generate ./internal/...
+go generate ./api/...
 ```
 
-This executes all `//go:generate` directives in `internal/generate.go`, which:
+This executes all `//go:generate` directives in `api/v{1,2}/*/generate.go`, which:
 1. Generates Go handlers from OpenAPI definitions
 2. Generates standalone OpenAPI documents
 
@@ -414,20 +422,20 @@ This executes all `//go:generate` directives in `internal/generate.go`, which:
 
 ```bash
 # All handlers
-go generate -run oapi-codegen ./internal/...
+go generate -run oapi-codegen ./api/v2/...
 
 # Specific handler
-go tool oapi-codegen -config configs/goapi-codegen/voucher.yaml api/definitions/voucher.yaml
+go tool oapi-codegen -config api/v2/voucher/config.yaml api/v2/voucher/openapi.yaml
 ```
 
 ### Regenerate Only OpenAPI Docs
 
 ```bash
 # All three server specs
-go generate -run openapi-format ./internal/...
+go generate -run openapi-format ./api/v2/...
 
 # Specific server
-npx openapi-format api/definitions/manufacturer.yaml -o api/manufacturer/openapi.yaml
+npx openapi-format api/v2/manufacturer/openapi.yaml --json -o api/v2/manufacturer/openapi.json
 ```
 
 ## Adding a New Endpoint
@@ -436,7 +444,7 @@ Follow these steps to add a new API endpoint:
 
 ### 1. Create OpenAPI Definition
 
-Create `api/definitions/myendpoint.yaml`:
+Create `api/v2/myendpoint/openapi.yaml`:
 
 ```yaml
 openapi: 3.0.0
@@ -448,7 +456,7 @@ tags:
   - name: myendpoint
     description: Operations for my endpoint
 paths:
-  /v1/myendpoint:
+  /v2/myendpoint:
     get:
       tags:
         - myendpoint
@@ -462,7 +470,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/MyResponse'
         '500':
-          $ref: 'components.yaml#/components/responses/InternalServerError'
+          $ref: '../components/openapi.yaml#/components/responses/InternalServerError'
 components:
   schemas:
     MyResponse:
@@ -473,13 +481,13 @@ components:
 ```
 
 **Important**:
-- Always reference common types from `components.yaml` where possible
+- Always reference common types from `../components/openapi.yaml` where possible
 - Use `operationId` for every operation (becomes Go method name)
 - Follow existing patterns for pagination, filtering, error responses
 
 ### 2. Create oapi-codegen Configuration
 
-Create `configs/goapi-codegen/myendpoint.yaml`:
+Create `api/v2/myendpoint/config.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
@@ -488,28 +496,30 @@ generate:
   std-http-server: true
   strict-server: true
   models: true
-output: handlers/myendpoint/handler.gen.go
+output: handler.gen.go
 import-mapping:
-  components.yaml: "github.com/fido-device-onboard/go-fdo-server/internal/handlers/components"
+  ../components/openapi.yaml: "github.com/fido-device-onboard/go-fdo-server/api/v2/components"
 output-options:
   skip-prune: true
 ```
 
 ### 3. Add Generate Directive
 
-Edit `internal/generate.go` and add:
+Create `api/v2/myendpoint/generate.go`:
 
 ```go
-//go:generate go tool oapi-codegen -config ../configs/goapi-codegen/myendpoint.yaml ../api/definitions/myendpoint.yaml
+package myendpoint
+
+//go:generate go tool oapi-codegen -config config.yaml openapi.yaml
 ```
 
 ### 4. Generate Code
 
 ```bash
-go generate ./internal/...
+go generate ./api/...
 ```
 
-This creates `internal/handlers/myendpoint/handler.gen.go` with:
+This creates `api/v2/myendpoint/handler.gen.go` with:
 - `ServerInterface` - interface you'll implement
 - `StrictServerInterface` - strict typed version
 - Request/response types
@@ -517,7 +527,7 @@ This creates `internal/handlers/myendpoint/handler.gen.go` with:
 
 ### 5. Implement Handler
 
-Create `internal/handlers/myendpoint/handler.go`:
+Create `api/v2/myendpoint/handler.go`:
 
 ```go
 package myendpoint
@@ -548,7 +558,7 @@ func (s *Server) GetMyEndpoint(ctx context.Context, request GetMyEndpointRequest
 
 ### 6. Wire Handler into Server Role
 
-Add to your server's `Handler()` method (e.g., `internal/handlers/manufacturer/handler.go`):
+Add to your server's `Handler()` method (e.g., `api/v2/manufacturer/handler.go`):
 
 ```go
 // Wire My Endpoint API
@@ -561,19 +571,19 @@ myendpoint.HandlerFromMux(myEndpointStrictHandler, mgmtAPIServeMux)
 
 If this endpoint should appear in one of the server role specs, add it to the appropriate aggregation file.
 
-Edit `api/definitions/manufacturer.yaml` (or `owner.yaml`, `rendezvous.yaml`):
+Edit `api/v2/manufacturer/openapi.yaml` (or `owner/openapi.yaml`, `rendezvous/openapi.yaml`):
 
 ```yaml
 paths:
   # ... existing paths ...
-  /v1/myendpoint:
-    $ref: 'myendpoint.yaml#/paths/~1v1~1myendpoint'
+  /v2/myendpoint:
+    $ref: 'myendpoint.yaml#/paths/~1v2~1myendpoint'
 ```
 
 Then regenerate:
 
 ```bash
-npx openapi-format api/definitions/manufacturer.yaml -o api/manufacturer/openapi.yaml
+npx openapi-format api/v2/manufacturer/openapi.yaml --json -o api/v2/manufacturer/openapi.json
 ```
 
 ## Best Practices
@@ -582,7 +592,7 @@ npx openapi-format api/definitions/manufacturer.yaml -o api/manufacturer/openapi
 
 1. **Use $ref for Reusability**: Reference common components rather than duplicating
    ```yaml
-   $ref: 'components.yaml#/components/schemas/Error'
+   $ref: '../components/openapi.yaml#/components/schemas/Error'
    ```
 
 2. **Follow Naming Conventions**:
@@ -595,10 +605,10 @@ npx openapi-format api/definitions/manufacturer.yaml -o api/manufacturer/openapi
    example: "192.168.1.100"
    ```
 
-4. **Use Standard Responses**: Reference common responses from `components.yaml`
+4. **Use Standard Responses**: Reference common responses from the components spec
    ```yaml
    '400':
-     $ref: 'components.yaml#/components/responses/BadRequest'
+     $ref: '../components/openapi.yaml#/components/responses/BadRequest'
    ```
 
 5. **Document Everything**: Add descriptions to all operations, parameters, and schemas
@@ -614,7 +624,7 @@ npx openapi-format api/definitions/manufacturer.yaml -o api/manufacturer/openapi
 
 3. **Keep Handlers Pure**: Generated handlers should be thin wrappers around business logic
 
-4. **Version Your API**: Include version in paths (`/v1/resource`) for future compatibility
+4. **Version Your API**: Include version in paths (`/v2/resource`) for future compatibility
 
 5. **Use Compile-Time Checks**: Ensure your implementation satisfies the interface
    ```go
@@ -638,9 +648,9 @@ This launches Swagger UI in a container at http://localhost:9080 with all three 
 podman run --rm -p 9080:8080 \
   -v ./api:/usr/share/nginx/html/api:z \
   -e URLS='[
-    {"url": "/api/manufacturer/openapi.yaml", "name": "Manufacturer API"},
-    {"url": "/api/rendezvous/openapi.yaml", "name": "Rendezvous API"},
-    {"url": "/api/owner/openapi.yaml", "name": "Owner API"}
+    {"url": "/api/v2/manufacturer/openapi.json", "name": "Manufacturer API"},
+    {"url": "/api/v2/rendezvous/openapi.json", "name": "Rendezvous API"},
+    {"url": "/api/v2/owner/openapi.json", "name": "Owner API"}
   ]' \
   docker.swagger.io/swaggerapi/swagger-ui
 
@@ -651,7 +661,7 @@ open http://localhost:9080
 ### Using Redoc
 
 ```bash
-npx @redocly/cli preview-docs api/manufacturer/openapi.yaml
+npx @redocly/cli preview-docs api/v2/manufacturer/openapi.yaml
 ```
 
 ## Troubleshooting
@@ -660,9 +670,9 @@ npx @redocly/cli preview-docs api/manufacturer/openapi.yaml
 
 **Cause**: Import mapping isn't working correctly.
 
-**Solution**: Ensure `components.yaml` is generated first:
+**Solution**: Ensure the components package is generated first:
 ```bash
-go tool oapi-codegen -config configs/goapi-codegen/components.yaml api/definitions/components.yaml
+go tool oapi-codegen -config api/v2/components/config.yaml api/v2/components/openapi.yaml
 ```
 
 ### Error: "$ref could not be resolved"
@@ -671,9 +681,9 @@ go tool oapi-codegen -config configs/goapi-codegen/components.yaml api/definitio
 
 **Solution**: Check that referenced files exist relative to the OpenAPI file:
 ```yaml
-# From api/definitions/voucher.yaml
-$ref: 'components.yaml#/components/schemas/Error'  # ✓ Correct
-$ref: '../components.yaml#/components/schemas/Error'  # ✗ Wrong
+# From api/v2/voucher/openapi.yaml
+$ref: '../components/openapi.yaml#/components/schemas/Error'  # ✓ Correct
+$ref: 'components.yaml#/components/schemas/Error'              # ✗ Wrong (no such file)
 ```
 
 ### Generated Code Doesn't Compile
@@ -682,7 +692,7 @@ $ref: '../components.yaml#/components/schemas/Error'  # ✗ Wrong
 
 **Solution**: Validate your spec:
 ```bash
-npx @apidevtools/swagger-cli validate api/definitions/myendpoint.yaml
+npx @apidevtools/swagger-cli validate api/v2/myendpoint/openapi.yaml
 ```
 
 ### npx Command Not Found
@@ -711,7 +721,7 @@ sudo apt install npm
 ```bash
 # Clean and regenerate
 go clean -cache
-go generate ./internal/...
+go generate ./api/...
 go build ./...
 ```
 
