@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+
+	"github.com/fido-device-onboard/go-fdo/protocol"
 )
 
 // The manufacturer server configuration
@@ -31,18 +33,23 @@ func (m ManufacturingServerConfig) String() string {
 
 // validateCertFile checks that a certificate file exists and returns a helpful error if not
 func validateCertFile(path, name, contextLine string) error {
-	if path == "" || func() bool { _, err := os.Stat(path); return err != nil }() {
-		detail := ""
-		if path != "" {
-			detail = fmt.Sprintf(" (configured: %s)", path)
-		}
-		context := ""
+	if path == "" {
+		errContext := ""
 		if contextLine != "" {
-			context = contextLine + "\n"
+			errContext = contextLine + "\n"
 		}
-		return fmt.Errorf("%s is required%s\n%s"+
+		return fmt.Errorf("%s is required\n%s"+
 			"run 'generate-go-fdo-server-certs.sh' for single-host setup\n"+
-			"see CERTIFICATE_SETUP.md for multi-host deployment", name, detail, context)
+			"see docs/user-guide/certificates.md for multi-host deployment", name, errContext)
+	}
+	if _, err := os.Stat(path); err != nil {
+		errContext := ""
+		if contextLine != "" {
+			errContext = contextLine + "\n"
+		}
+		return fmt.Errorf("%s is required (configured: %s): %w\n%s"+
+			"run 'generate-go-fdo-server-certs.sh' for single-host setup\n"+
+			"see docs/user-guide/certificates.md for multi-host deployment", name, path, err, errContext)
 	}
 	return nil
 }
@@ -66,37 +73,37 @@ func (m *ManufacturingServerConfig) Validate() error {
 	if err := validateCertFile(m.DeviceCA.CertPath, "device CA certificate", "this certificate must be shared between manufacturer and owner servers"); err != nil {
 		return err
 	}
-	// Validate owner certificate exists
-	if err := validateCertFile(m.Owner.OwnerCertificate, "owner certificate", "this certificate must come from the owner server deployment"); err != nil {
-		return err
-	}
+	// Owner certificate is optional — when absent, vouchers are not
+	// auto-extended during DI and must be extended via the API.
 
 	slog.Info("Manufacturing server configuration validated successfully")
 	return nil
 }
 
-// GetManufacturerKey loads the manufacturer private key
-func (m *ManufacturingServerConfig) GetManufacturerKey() (crypto.Signer, error) {
-	slog.Debug("Loading manufacturer private key", "path", m.Manufacturer.ManufacturerKeyPath)
-	key, err := parsePrivateKey(m.Manufacturer.ManufacturerKeyPath)
+func loadKeyWithType(path, name string) (crypto.Signer, protocol.KeyType, error) {
+	slog.Debug("Loading private key", "name", name, "path", path)
+	key, err := parsePrivateKey(path)
 	if err != nil {
-		slog.Error("Failed to parse manufacturer private key", "path", m.Manufacturer.ManufacturerKeyPath, "error", err)
-		return nil, fmt.Errorf("failed to parse manufacturer private key from %s: %w", m.Manufacturer.ManufacturerKeyPath, err)
+		slog.Error("Failed to parse private key", "name", name, "path", path, "error", err)
+		return nil, 0, fmt.Errorf("failed to parse %s from %s: %w", name, path, err)
 	}
-	slog.Debug("Manufacturer private key loaded successfully", "path", m.Manufacturer.ManufacturerKeyPath)
-	return key, nil
+	keytype, err := getPrivateKeyType(key)
+	if err != nil {
+		slog.Error("Failed to determine key type", "name", name, "error", err)
+		return nil, 0, fmt.Errorf("failed to determine key type for %s: %w", name, err)
+	}
+	slog.Debug("Private key loaded successfully", "name", name, "path", path, "keyType", keytype)
+	return key, keytype, nil
+}
+
+// GetManufacturerKey loads the manufacturer private key
+func (m *ManufacturingServerConfig) GetManufacturerKey() (crypto.Signer, protocol.KeyType, error) {
+	return loadKeyWithType(m.Manufacturer.ManufacturerKeyPath, "manufacturer key")
 }
 
 // GetDeviceCAKey loads the device CA private key
-func (m *ManufacturingServerConfig) GetDeviceCAKey() (crypto.Signer, error) {
-	slog.Debug("Loading device CA private key", "path", m.DeviceCA.KeyPath)
-	key, err := parsePrivateKey(m.DeviceCA.KeyPath)
-	if err != nil {
-		slog.Error("Failed to parse device CA private key", "path", m.DeviceCA.KeyPath, "error", err)
-		return nil, fmt.Errorf("failed to parse device CA private key from %s: %w", m.DeviceCA.KeyPath, err)
-	}
-	slog.Debug("Device CA private key loaded successfully", "path", m.DeviceCA.KeyPath)
-	return key, nil
+func (m *ManufacturingServerConfig) GetDeviceCAKey() (crypto.Signer, protocol.KeyType, error) {
+	return loadKeyWithType(m.DeviceCA.KeyPath, "device CA key")
 }
 
 // GetDeviceCACerts loads the device CA certificate chain
@@ -111,6 +118,9 @@ func (m *ManufacturingServerConfig) GetDeviceCACerts() ([]*x509.Certificate, err
 
 // GetOwnerCertificate loads the owner certificate
 func (m *ManufacturingServerConfig) GetOwnerCertificate() (*x509.Certificate, error) {
+	if m.Owner.OwnerCertificate == "" {
+		return nil, nil
+	}
 	slog.Debug("Loading owner certificate", "path", m.Owner.OwnerCertificate)
 
 	ownerPublicKey, err := os.ReadFile(m.Owner.OwnerCertificate)

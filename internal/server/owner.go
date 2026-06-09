@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/fido-device-onboard/go-fdo"
-	"github.com/fido-device-onboard/go-fdo-server/api/v1/owner"
+	"github.com/fido-device-onboard/go-fdo-server/api/v2/owner"
 	"github.com/fido-device-onboard/go-fdo-server/internal/config"
 	"github.com/fido-device-onboard/go-fdo-server/internal/serviceinfo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
@@ -66,6 +66,12 @@ func NewOwnerServer(config config.OwnerServerConfig) (*OwnerServer, error) {
 	// Initialize owner key state with loaded key and certificate chain
 	owner.State.OwnerKey = state.NewOwnerKeyPersistentState(ownerKey, ownerKeyType, chain)
 
+	if owner.State.Voucher.NeedsOwnershipMigration {
+		if _, _, err := owner.State.Voucher.MigrateOwnershipVerified(context.Background(), ownerKey.Public()); err != nil {
+			return nil, fmt.Errorf("failed to migrate ownership_verified: %w", err)
+		}
+	}
+
 	// Create service info module state machine (requires State to be initialized)
 	owner.ServiceInfoModules = serviceinfo.NewModuleStateMachines(owner.State, &config.OwnerConfig.ServiceInfo)
 
@@ -113,13 +119,17 @@ func TO0(ctx context.Context, config *config.OwnerServerConfig, ownerState *stat
 			}
 
 			now := time.Now()
+			if len(vouchers) == 0 {
+				slog.Debug("to0 scheduler: no owned, non-onboarded vouchers pending")
+				continue
+			}
+			slog.Debug("to0 scheduler: found pending vouchers", "count", len(vouchers))
+
 			for _, v := range vouchers {
-				// Check if context was canceled
 				if ctx.Err() != nil {
 					return
 				}
 
-				// Parse voucher to get GUID and RVInfo
 				var ov fdo.Voucher
 				if err := cbor.Unmarshal(v.CBOR, &ov); err != nil {
 					slog.Warn("to0 scheduler: unmarshal voucher failed", "error", err)
@@ -127,7 +137,6 @@ func TO0(ctx context.Context, config *config.OwnerServerConfig, ownerState *stat
 				}
 				guidHex := hex.EncodeToString(ov.Header.Val.GUID[:])
 
-				// Skip if already completed
 				dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				completed, err := ownerState.Voucher.IsTO2Completed(dbCtx, ov.Header.Val.GUID)
 				cancel()
@@ -136,27 +145,27 @@ func TO0(ctx context.Context, config *config.OwnerServerConfig, ownerState *stat
 					continue
 				}
 				if completed {
+					slog.Debug("to0 scheduler: skipping completed device", "guid", guidHex)
 					delete(nextTry, guidHex)
 					continue
 				}
 
-				// Respect backoff schedule
 				if t, ok := nextTry[guidHex]; ok && now.Before(t) {
+					slog.Debug("to0 scheduler: backoff active, skipping", "guid", guidHex, "retry_in", time.Until(t).Round(time.Second))
 					continue
 				}
 
-				// Attempt TO0 once for this GUID
+				slog.Debug("to0 scheduler: attempting TO0 registration", "guid", guidHex)
 				refresh, err := to0.RegisterRvBlob(ctx, ov.Header.Val.RvInfo, guidHex, ownerState.Voucher, ownerKeyState, ownerState.RVTO2Addr, config.OwnerConfig.TO0InsecureTLS, defaultTo0TTL)
 				if err != nil {
-					// On failure, retry after 10s
 					nextTry[guidHex] = now.Add(10 * time.Second)
-					slog.Warn("to0 scheduler: register 'RV2TO0Addr' failed", "guid", guidHex, "error", err)
+					slog.Warn("to0 scheduler: registration failed", "guid", guidHex, "error", err, "retry_in", "10s")
 					continue
 				}
 				if refresh == 0 {
 					refresh = defaultTo0TTL
 				}
-				slog.Debug("to0 scheduler: register 'RV2TO0Addr' completed", "guid", guidHex, "refresh", refresh)
+				slog.Debug("to0 scheduler: registration succeeded", "guid", guidHex, "refresh_ttl", time.Duration(refresh)*time.Second)
 				nextTry[guidHex] = now.Add(time.Duration(refresh) * time.Second)
 			}
 		}

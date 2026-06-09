@@ -5,8 +5,8 @@ package owner
 
 import (
 	"context"
-	"crypto"
 	"fmt"
+	"log/slog"
 
 	"github.com/fido-device-onboard/go-fdo"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
@@ -14,7 +14,7 @@ import (
 )
 
 // VerifyVoucher verifies that a voucher is valid and owned by this server
-func VerifyVoucher(ctx context.Context, voucher fdo.Voucher, ownerKey crypto.Signer, ownerState *state.OwnerState, reuseCred bool) error {
+func VerifyVoucher(ctx context.Context, voucher fdo.Voucher, ownerState *state.OwnerState, reuseCred bool) error {
 	// 1. Verify the voucher has at least one entry
 	// Per spec, vouchers with zero entries/extensions should be rejected
 	if len(voucher.Entries) == 0 {
@@ -27,14 +27,23 @@ func VerifyVoucher(ctx context.Context, voucher fdo.Voucher, ownerKey crypto.Sig
 		return fmt.Errorf("failed to extract owner public key from voucher: %w", err)
 	}
 
+	if ownerState.OwnerKey == nil {
+		slog.Error("Owner server misconfiguration: owner signing key is not set")
+		return fmt.Errorf("owner server configuration error: missing signing key")
+	}
+
 	// Compare the voucher's owner public key with our server's owner public key
-	serverOwnerPubKey := ownerKey.Public()
+	serverOwnerPubKey := ownerState.OwnerKey.Signer().Public()
 	if !utils.PublicKeysEqual(voucherOwnerPubKey, serverOwnerPubKey) {
 		return fmt.Errorf("voucher is not owned by this server (public key mismatch)")
 	}
 
 	// 3. Check if TO2 has already been completed for this voucher
 	// (unless credential reuse is enabled)
+	if ownerState.Voucher == nil {
+		slog.Error("Owner server misconfiguration: voucher persistent state is not configured")
+		return fmt.Errorf("voucher state is not configured")
+	}
 	if !reuseCred {
 		completed, err := ownerState.Voucher.IsTO2Completed(ctx, voucher.Header.Val.GUID)
 		if err != nil {

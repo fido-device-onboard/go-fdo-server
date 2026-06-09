@@ -8,12 +8,12 @@ info:
     and rendezvous TO2 addresses for device onboarding.
 
     This specification aggregates the following management APIs:
-    - Ownership Voucher Management (/v1/vouchers) (Deprecated)
-    - Ownership Voucher Management (/v2/vouchers)
-    - Trusted Device CA Certificates (/v1/device-ca) (Deprecated) 
-    - Trusted Device CA Certificates (/v2/device-ca)
-    - RVTO2 Address Configuration (/v1/owner/redirect) (Deprecated) 
-    - RVTO2 Address Configuration (/v2/rvto2addr)
+    - Ownership Voucher Management (/api/v1/vouchers) (Deprecated)
+    - Ownership Voucher Management (/api/v2/vouchers)
+    - Trusted Device CA Certificates (/api/v1/device-ca) (Deprecated)
+    - Trusted Device CA Certificates (/api/v2/device-ca)
+    - RVTO2 Address Configuration (/api/v1/owner/redirect) (Deprecated)
+    - RVTO2 Address Configuration (/api/v2/rvto2addr)
 
     ## API Versioning
     This API uses semantic versioning (MAJOR.MINOR.PATCH) and includes the major

@@ -38,12 +38,12 @@ func NewManufacturingServer(config config.ManufacturingServerConfig) (*Manufactu
 	}
 
 	// Load keys and certificates from config
-	mfgKey, err := config.GetManufacturerKey()
+	mfgKey, mfgKeyType, err := config.GetManufacturerKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load manufacturer key: %w", err)
 	}
 
-	deviceKey, err := config.GetDeviceCAKey()
+	deviceKey, _, err := config.GetDeviceCAKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load device CA key: %w", err)
 	}
@@ -57,11 +57,22 @@ func NewManufacturingServer(config config.ManufacturingServerConfig) (*Manufactu
 	if err != nil {
 		return nil, fmt.Errorf("failed to load owner certificate: %w", err)
 	}
+	if ownerCert != nil {
+		slog.Info("Owner certificate configured — vouchers will be auto-extended during DI")
+	} else {
+		slog.Info("No owner certificate configured — vouchers must be extended via the API")
+	}
 
 	// Create manufacturer handler
-	mfg := manufacturer.NewManufacturer(gormDB, mfgKey, deviceKey, deviceCACerts, ownerCert)
+	mfg := manufacturer.NewManufacturer(gormDB, mfgKey, mfgKeyType, deviceKey, deviceCACerts, ownerCert)
 	if err := mfg.InitDB(); err != nil {
 		return nil, fmt.Errorf("failed to initialize manufacturing state: %w", err)
+	}
+
+	if mfg.State.Voucher.NeedsOwnershipMigration {
+		if _, _, err := mfg.State.Voucher.MigrateOwnershipVerified(context.Background(), mfgKey.Public()); err != nil {
+			return nil, fmt.Errorf("failed to migrate ownership_verified: %w", err)
+		}
 	}
 
 	httpHandler := mfg.Handler()
@@ -115,7 +126,7 @@ func (s *ManufacturingServer) Start() error {
 	defer func() { _ = lis.Close() }()
 	slog.Info("Listening", "local", lis.Addr().String())
 
-	if s.config.ServerConfig.HTTP.UseTLS() {
+	if s.config.HTTP.UseTLS() {
 		preferredCipherSuites := []uint16{
 			tls.TLS_AES_256_GCM_SHA384,                  // TLS v1.3
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,   // TLS v1.2

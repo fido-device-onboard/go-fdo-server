@@ -33,11 +33,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 }
 
 func TestVerifyVoucher_NoEntries(t *testing.T) {
-	ownerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate owner key: %v", err)
-	}
-
 	db := setupTestDB(t)
 	voucherState := &state.VoucherPersistentState{DB: db}
 
@@ -47,9 +42,16 @@ func TestVerifyVoucher_NoEntries(t *testing.T) {
 		t.Fatalf("failed to init device CA state: %v", err)
 	}
 
+	ownerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate owner key: %v", err)
+	}
+	ownerKeyState := state.NewOwnerKeyPersistentState(ownerKey, protocol.Secp256r1KeyType, nil)
+
 	ownerState := &state.OwnerState{
 		Voucher:  voucherState,
 		DeviceCA: deviceCAState,
+		OwnerKey: ownerKeyState,
 	}
 
 	// Create voucher with no entries
@@ -59,7 +61,7 @@ func TestVerifyVoucher_NoEntries(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = VerifyVoucher(ctx, voucher, ownerKey, ownerState, false)
+	err = VerifyVoucher(ctx, voucher, ownerState, false)
 	if err == nil {
 		t.Error("expected error for voucher with no entries")
 	}

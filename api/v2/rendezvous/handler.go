@@ -19,7 +19,6 @@ import (
 	"github.com/fido-device-onboard/go-fdo-server/internal/middleware"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	fdo_http "github.com/fido-device-onboard/go-fdo/http"
-	swaggerui "github.com/swaggest/swgui/v5emb"
 )
 
 // Embedded OpenAPI specification
@@ -225,27 +224,15 @@ func (r *Rendezvous) Handler() http.Handler {
 	deviceCAStrictHandler := v2deviceca.NewStrictHandler(&deviceCAServerV2, deviceCAMiddlewaresV2)
 	v2deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtAPIServeMuxV2)
 
+	validationMiddleware := middleware.OpenAPIValidationMiddleware(openAPISpecJSON)
 	mgmtAPIHandlerV2 := middleware.RateLimitMiddleware(
 		rate.NewLimiter(2, 10),
 		middleware.BodySizeMiddleware(1<<20, // 1MB
-			mgmtAPIServeMuxV2,
+			validationMiddleware(mgmtAPIServeMuxV2),
 		),
 	)
 
-	// Serve OpenAPI specification
-	rendezvousServeMux.HandleFunc("GET /api/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if _, err := w.Write(openAPISpecJSON); err != nil {
-			slog.Error("Failed to write OpenAPI spec response", "error", err)
-		}
-	})
-
-	// Serve Swagger UI documentation
-	rendezvousServeMux.Handle("GET /api/docs/", swaggerui.New(
-		"Rendezvous",
-		"/api/openapi.json",
-		"/api/docs/"))
+	middleware.ServeOpenAPI(rendezvousServeMux, "Rendezvous", openAPISpecJSON)
 
 	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandlerV1))
 	rendezvousServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))
