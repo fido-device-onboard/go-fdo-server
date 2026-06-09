@@ -77,11 +77,15 @@ func (s *Server) ResellVoucher(ctx context.Context, request ResellVoucherRequest
 	// Use the state's ExtendVoucher method which handles the transaction.
 	// It returns the extended voucher and the exact CBOR bytes persisted to
 	// the database, so we use those directly instead of re-marshaling.
-	_, extendedCBOR, err := s.VoucherState.ExtendVoucher(ctx, guid, s.OwnerKey.Signer(), nextOwner)
+	_, extendedCBOR, err := s.VoucherState.ExtendVoucher(ctx, guid, s.OwnerKey.Signer(), s.OwnerKey.Signer().Public(), nextOwner)
 	if err != nil {
 		if errors.Is(err, fdo.ErrNotFound) {
 			slog.Warn("Voucher not found for resell", "guid", guidHex)
 			return ResellVoucher404TextResponse("Voucher not found for the specified GUID"), nil
+		}
+		if errors.Is(err, state.ErrNotOwner) {
+			slog.Warn("Server does not own voucher for resell", "guid", guidHex)
+			return ResellVoucher400TextResponse("Server does not own this voucher"), nil
 		}
 		if errors.Is(err, state.ErrUnsupportedKeyType) {
 			slog.Warn("Unsupported public key type for resell", "guid", guidHex, "error", err)

@@ -849,6 +849,102 @@
         ]
       }
     },
+    "/api/v1/owner/devices": {
+      "get": {
+        "operationId": "ListDevices",
+        "summary": "List all owner devices (Deprecated)",
+        "description": "Returns a list of all devices known to the owner service, combining\nvoucher metadata with onboarding (TO2) completion state.\nEach device includes:\n- Current GUID (from voucher)\n- Old GUID (if device completed TO2 and changed GUID)\n- Device info string\n- Creation and update timestamps\n- TO2 completion status and timestamp\nResults are ordered by updated_at timestamp in descending order.\n",
+        "parameters": [
+          {
+            "name": "old_guid",
+            "in": "query",
+            "description": "Filter by old GUID (before TO2 completion, hex-encoded)",
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved device list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Device"
+                  }
+                },
+                "examples": {
+                  "emptyList": {
+                    "summary": "No devices found",
+                    "value": []
+                  },
+                  "deviceList": {
+                    "summary": "List of devices",
+                    "value": [
+                      {
+                        "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                        "old_guid": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+                        "device_info": "Device 1",
+                        "created_at": "2024-01-15T10:30:00Z",
+                        "updated_at": "2024-01-16T14:20:00Z",
+                        "to2_completed": true,
+                        "to2_completed_at": "2024-01-16T14:20:00Z"
+                      },
+                      {
+                        "guid": "f1e2d3c4b5a6978012345678abcdef02",
+                        "old_guid": "",
+                        "device_info": "Device 2",
+                        "created_at": "2024-01-14T09:20:00Z",
+                        "updated_at": "2024-01-14T09:20:00Z",
+                        "to2_completed": false
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "examples": {
+                  "invalidGuid": {
+                    "summary": "Invalid GUID",
+                    "value": "Invalid GUID"
+                  },
+                  "invalidFormat": {
+                    "summary": "Invalid GUID format",
+                    "value": "Invalid GUID format"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error occurred while listing devices",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorString"
+                },
+                "example": "Internal server error"
+              }
+            }
+          }
+        },
+        "tags": [
+          "devices"
+        ]
+      }
+    },
     "/api/v1/device-ca": {
       "get": {
         "operationId": "ListTrustedDeviceCACerts",
@@ -1390,7 +1486,8 @@
               },
               "application/x-pem-file": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "getPEMVouchers": {
@@ -1421,7 +1518,7 @@
       "post": {
         "operationId": "ImportOwnershipVouchers",
         "summary": "Import ownership voucher(s)",
-        "description": "Imports one or more ownership vouchers into the system.\n\nThis operation is idempotent:\n- Valid vouchers that don't exist in the database are imported\n- Vouchers that already exist (duplicate GUID) are rejected with a 409 error\n- Malformed or invalid vouchers are rejected with a 400 error\n\nOwnership vouchers can be provided in PEM or JSON format.\nYou can import a single voucher or an array of vouchers.\n",
+        "description": "Imports one or more ownership vouchers into the system.\n\nEach voucher PEM block is parsed and verified independently:\n- Valid vouchers that don't exist in the database are imported\n- Vouchers that already exist (duplicate GUID) are skipped\n- Malformed, invalid, or unverifiable vouchers are counted as failed\n\nResponse status codes:\n- 201: at least one voucher was imported\n- 200: no vouchers imported, but one or more were detected (skipped or failed)\n- 400: no valid ownership voucher PEM blocks found in the request body\n\nOwnership vouchers must be provided in PEM format.\n",
         "requestBody": {
           "description": "One or more ownership vouchers in PEM or JSON format.",
           "required": true,
@@ -1429,6 +1526,7 @@
             "application/x-pem-file": {
               "schema": {
                 "type": "string",
+                "format": "binary",
                 "maxLength": 1048576
               },
               "examples": {
@@ -1441,71 +1539,78 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Ownership voucher(s) imported successfully.",
+          "200": {
+            "description": "No vouchers imported, but one or more were detected and skipped or failed.",
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "At least one ownership voucher was imported successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
                 },
                 "examples": {
                   "success": {
                     "summary": "Vouchers successfully imported",
-                    "value": [
-                      {
-                        "voucher": {
-                          "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
-                          "protocolVersion": 101,
-                          "deviceInfo": "Intel Device",
-                          "numEntries": 1
+                    "value": {
+                      "detected": 2,
+                      "imported": 2,
+                      "failed": 0,
+                      "skipped": 0,
+                      "messages": [
+                        "voucher at position 1 with GUID d21d841a3f54f4e89a60ed9b9779e9e8 was imported successfully",
+                        "voucher at position 2 with GUID a1b2c3d4e5f6789012345678abcdef01 was imported successfully"
+                      ],
+                      "vouchers": [
+                        {
+                          "voucher": {
+                            "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                            "protocolVersion": 101,
+                            "deviceInfo": "Intel Device",
+                            "numEntries": 1
+                          },
+                          "createdAt": "2025-10-27T14:00:00Z",
+                          "updatedAt": "2025-10-27T14:00:00Z"
                         },
-                        "createdAt": "2025-10-27T14:00:00Z",
-                        "updatedAt": "2025-10-27T14:00:00Z"
-                      },
-                      {
-                        "voucher": {
-                          "guid": "a1b2c3d4e5f6789012345678abcdef01",
-                          "protocolVersion": 101,
-                          "deviceInfo": "ARM IoT Device",
-                          "numEntries": 1
-                        },
-                        "createdAt": "2025-10-27T14:00:00Z",
-                        "updatedAt": "2025-10-27T14:00:00Z"
-                      }
-                    ]
+                        {
+                          "voucher": {
+                            "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                            "protocolVersion": 101,
+                            "deviceInfo": "ARM IoT Device",
+                            "numEntries": 1
+                          },
+                          "createdAt": "2025-10-27T14:00:00Z",
+                          "updatedAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
                   }
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest1"
+            "description": "No valid ownership voucher PEM blocks found in the request body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "description": "Conflict - A voucher with this GUID already exists.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
           },
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
@@ -1609,7 +1714,8 @@
               "application/x-pem-file": {
                 "schema": {
                   "description": "The voucher content in PEM format.",
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "getVoucherPem": {
@@ -1619,6 +1725,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1657,6 +1766,9 @@
         "responses": {
           "204": {
             "description": "Ownership voucher deleted successfully."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest1"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1700,7 +1812,8 @@
           "content": {
             "application/x-pem-file": {
               "schema": {
-                "type": "string"
+                "type": "string",
+                "format": "binary"
               },
               "examples": {
                 "extendWithPublicKey": {
@@ -1722,7 +1835,8 @@
               "application/x-pem-file": {
                 "schema": {
                   "description": "The extended voucher in PEM format.",
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "extendedVoucher": {
@@ -1754,6 +1868,69 @@
         },
         "tags": [
           "voucher"
+        ]
+      }
+    },
+    "/api/v2/devices": {
+      "get": {
+        "operationId": "ListDevices",
+        "summary": "List all owner devices",
+        "description": "Returns a paginated list of all devices known to the owner service,\ncombining voucher metadata with onboarding (TO2) completion state.\nEach device includes:\n- Current GUID (from voucher)\n- Old GUID (if device completed TO2 and changed GUID)\n- Device info string\n- Creation and update timestamps\n- TO2 completion status and timestamp\nResults are ordered by updated_at timestamp in descending order.\n",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of items to return per page.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "The number of items to skip before starting to collect the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "old_guid",
+            "in": "query",
+            "description": "Filter by old GUID (before TO2 completion, hex-encoded)",
+            "schema": {
+              "type": "string",
+              "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c",
+              "pattern": "^[0-9a-fA-F]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved device list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicesPaginated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest2"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError2"
+          }
+        },
+        "tags": [
+          "devices"
         ]
       }
     },
@@ -2290,7 +2467,7 @@
       "put": {
         "operationId": "UpdateRVTO2Addr",
         "summary": "Update the RVTO2 address configuration",
-        "description": "Updates the rendezvous TO2 address configuration.\n\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n",
+        "description": "Updates the rendezvous TO2 address configuration.\nThe new configuration will be used by devices completing the TO2 protocol\nto determine where to connect to the owner server. This typically includes\nthe owner server's hostname/IP address, protocol, and port.\n",
         "requestBody": {
           "description": "The new RVTO2 address configuration",
           "required": true,
@@ -2412,7 +2589,7 @@
       "delete": {
         "operationId": "DeleteRVTO2Addr",
         "summary": "Delete the RVTO2 address configuration",
-        "description": "Deletes the current rendezvous TO2 address configuration.\n\nAfter deletion, devices will not have owner server address information\navailable until a new configuration is set via PUT. Returns the deleted\nconfiguration, or an empty array if no configuration was set.\n",
+        "description": "Deletes the current rendezvous TO2 address configuration.\nAfter deletion, devices will not have owner server address information\navailable until a new configuration is set via PUT. Returns the deleted\nconfiguration, or an empty array if no configuration was set.\n",
         "responses": {
           "200": {
             "description": "Successfully deleted the RVTO2 address configuration. Returns the deleted configuration or an empty array if nothing was configured.",
@@ -2603,6 +2780,59 @@
         "items": {
           "$ref": "#/components/schemas/RVTO2AddrEntry"
         }
+      },
+      "Device": {
+        "description": "Device information combining voucher metadata and TO2 onboarding state.\nThe `guid` field contains the current device GUID from the voucher.\nIf the device completed TO2 and changed its GUID, the `old_guid` field\ncontains the previous GUID. Otherwise, `old_guid` is empty.\n",
+        "type": "object",
+        "properties": {
+          "guid": {
+            "description": "Current device GUID (hex-encoded)",
+            "type": "string",
+            "example": "a1b2c3d4e5f6789012345678abcdef01"
+          },
+          "old_guid": {
+            "description": "Previous device GUID before TO2 (hex-encoded, empty if no TO2 completion)",
+            "type": "string",
+            "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+          },
+          "device_info": {
+            "description": "Device information string",
+            "type": "string",
+            "example": "Intel NUC Model XYZ"
+          },
+          "created_at": {
+            "description": "Timestamp when device was first registered",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "updated_at": {
+            "description": "Timestamp when device was last updated",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-16T14:20:00Z"
+          },
+          "to2_completed": {
+            "description": "Whether the device has completed TO2 onboarding",
+            "type": "boolean",
+            "example": true
+          },
+          "to2_completed_at": {
+            "description": "Timestamp when TO2 was completed (null if not completed)",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-16T14:20:00Z",
+            "nullable": true
+          }
+        },
+        "required": [
+          "guid",
+          "old_guid",
+          "device_info",
+          "created_at",
+          "updated_at",
+          "to2_completed"
+        ]
       },
       "TrustedDeviceCACert": {
         "type": "object",
@@ -2853,6 +3083,49 @@
           "total",
           "limit",
           "offset",
+          "vouchers"
+        ]
+      },
+      "OwnershipVouchersImportResult": {
+        "type": "object",
+        "properties": {
+          "detected": {
+            "description": "Total number of ownership voucher PEM blocks found in the request body.",
+            "type": "integer"
+          },
+          "imported": {
+            "description": "Number of vouchers successfully imported into the database.",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Number of vouchers that could not be imported (malformed CBOR, failed verification, untrusted device CA, etc.).",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "Number of vouchers skipped because they already exist in the database.",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "Per-voucher result messages describing the outcome of each voucher.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vouchers": {
+            "description": "List of successfully imported vouchers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
+            }
+          }
+        },
+        "required": [
+          "detected",
+          "imported",
+          "failed",
+          "skipped",
+          "messages",
           "vouchers"
         ]
       },
@@ -3348,6 +3621,100 @@
           "entries"
         ]
       },
+      "Device1": {
+        "description": "Device information combining voucher metadata and TO2 onboarding state.\nThe `guid` field contains the current device GUID from the voucher.\nIf the device completed TO2 and changed its GUID, the `old_guid` field\ncontains the previous GUID. Otherwise, `old_guid` is empty.\n",
+        "type": "object",
+        "properties": {
+          "guid": {
+            "description": "Current device GUID (hex-encoded)",
+            "type": "string",
+            "example": "a1b2c3d4e5f6789012345678abcdef01"
+          },
+          "old_guid": {
+            "description": "Previous device GUID before TO2 (hex-encoded, empty if no TO2 completion)",
+            "type": "string",
+            "example": "3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c"
+          },
+          "device_info": {
+            "description": "Device information string",
+            "type": "string",
+            "example": "Intel NUC Model XYZ"
+          },
+          "created_at": {
+            "description": "Timestamp when device was first registered",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "updated_at": {
+            "description": "Timestamp when device was last updated",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-16T14:20:00Z"
+          },
+          "to2_completed": {
+            "description": "Whether the device has completed TO2 onboarding",
+            "type": "boolean",
+            "example": true
+          },
+          "to2_completed_at": {
+            "description": "Timestamp when TO2 was completed (null if not completed)",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-16T14:20:00Z",
+            "nullable": true
+          }
+        },
+        "required": [
+          "guid",
+          "old_guid",
+          "device_info",
+          "created_at",
+          "updated_at",
+          "to2_completed"
+        ]
+      },
+      "DevicesPaginated": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "description": "Total number of devices available.",
+            "type": "integer"
+          },
+          "limit": {
+            "description": "The number of items returned in this response.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "The offset from the beginning of the collection.",
+            "type": "integer"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Device1"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "devices"
+        ]
+      },
+      "Error2": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "A human-readable error message.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
       "TrustedDeviceCACert1": {
         "type": "object",
         "properties": {
@@ -3485,20 +3852,20 @@
         ]
       },
       "TransportProtocol1": {
-        "description": "Transport protocol for TO2 owner server connections\n(FDO specification section 3.3.14, TransportProtocol).\n- `http` - HTTP protocol (code 3)\n- `https` - HTTPS protocol (code 5)\n- `tcp` - Raw TCP connection (code 1)\n- `tls` - TLS-secured TCP connection (code 2)\n- `coap` - CoAP over UDP (code 4)\n- `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)\n",
+        "description": "Transport protocol for TO2 owner server connections\n(FDO specification section 3.3.14, TransportProtocol).\n- `tcp` - Raw TCP connection (code 1)\n- `tls` - TLS-secured TCP connection (code 2)\n- `http` - HTTP protocol (code 3)\n- `coap` - CoAP (code 4)\n- `https` - HTTPS protocol (code 5)\n- `coaps` - CoAPS (code 6) \n",
         "type": "string",
         "example": "https",
         "enum": [
-          "rest",
           "http",
           "https",
           "tcp",
           "tls",
-          "coap"
+          "coap",
+          "coaps"
         ]
       },
       "RVTO2AddrEntry1": {
-        "description": "A single owner server address entry. Each entry specifies the protocol,\nnetwork location (DNS hostname and/or IP address), and port for connecting\nto the owner server during TO2 protocol.\n\nBoth 'dns' and 'ip' fields are optional and may be provided independently\nor together. However, at least one addressing method MUST be specified\n(non-null) as required by FDO specification section 3.3.14. Requests that\nomit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.\n\nWhen both 'dns' and 'ip' are provided, the device MUST attempt to connect\nusing the DNS address first. The device MUST only use the IP address after\nall DNS connection attempts have failed. This behavior is defined in the\nFDO specification section 3.3.14.\n",
+        "description": "A single owner server address entry. Each entry specifies the protocol,\nnetwork location (DNS hostname and/or IP address), and port for connecting\nto the owner server during TO2 protocol.\nBoth 'dns' and 'ip' fields are optional and may be provided independently\nor together. However, at least one addressing method MUST be specified\n(non-null) as required by FDO specification section 3.3.14. Requests that\nomit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.\nWhen both 'dns' and 'ip' are provided, the device MUST attempt to connect\nusing the DNS address first. The device MUST only use the IP address after\nall DNS connection attempts have failed. This behavior is defined in the\nFDO specification section 3.3.14.\n",
         "type": "object",
         "properties": {
           "protocol": {
@@ -3704,6 +4071,42 @@
                 "summary": "Example of a not found error",
                 "value": {
                   "message": "Object not found."
+                }
+              }
+            }
+          }
+        }
+      },
+      "BadRequest2": {
+        "description": "Bad Request - The request was malformed or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error2"
+            },
+            "examples": {
+              "badRequest": {
+                "summary": "Example of a bad request error",
+                "value": {
+                  "message": "Invalid Request."
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError2": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error2"
+            },
+            "examples": {
+              "serverError": {
+                "summary": "Example of a server error",
+                "value": {
+                  "message": "An unexpected error occurred."
                 }
               }
             }

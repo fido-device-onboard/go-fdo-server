@@ -8,11 +8,13 @@ import (
 	"encoding/hex"
 	"log/slog"
 
+	"github.com/fido-device-onboard/go-fdo-server/api/v2/components"
 	"github.com/fido-device-onboard/go-fdo-server/internal/state"
-	"github.com/fido-device-onboard/go-fdo-server/internal/utils"
 )
 
-// Server implements the StrictServerInterface for Device listing (v1 - legacy behavior)
+// Server implements the StrictServerInterface for Device listing
+var _ StrictServerInterface = (*Server)(nil)
+
 type Server struct {
 	VoucherState *state.VoucherPersistentState
 }
@@ -23,32 +25,44 @@ func NewServer(voucherState *state.VoucherPersistentState) Server {
 	}
 }
 
-var _ StrictServerInterface = (*Server)(nil)
-
-// ListDevices implements GET /v1/owner/devices
+// ListDevices implements GET /v2/devices
 func (s *Server) ListDevices(ctx context.Context, request ListDevicesRequestObject) (ListDevicesResponseObject, error) {
 	slog.Debug("Listing owner devices")
 
+	limit := 20
+	if request.Params.Limit != nil {
+		limit = *request.Params.Limit
+	}
+
+	offset := 0
+	if request.Params.Offset != nil {
+		offset = *request.Params.Offset
+	}
+
 	var filter state.DeviceFilter
 
-	// Handle old_guid filter
+	// Redundant with OpenAPI validation middleware (pattern: ^[0-9a-fA-F]{32}$)
 	if request.Params.OldGuid != nil {
-		guidHex := *request.Params.OldGuid
-		if !utils.IsValidGUID(guidHex) {
-			return ListDevices400TextResponse("Invalid GUID"), nil
-		}
-
-		decoded, err := hex.DecodeString(guidHex)
+		decoded, err := hex.DecodeString(*request.Params.OldGuid)
 		if err != nil {
-			return ListDevices400TextResponse("Invalid GUID format"), nil
+			slog.Warn("Invalid GUID format", "guid", *request.Params.OldGuid, "error", err)
+			return ListDevices400JSONResponse{
+				BadRequestJSONResponse: components.BadRequestJSONResponse{
+					Message: "Invalid GUID format",
+				},
+			}, nil
 		}
 		filter.OldGUID = decoded
 	}
 
-	devices, _, err := s.VoucherState.ListDevices(ctx, filter, 0, 0)
+	devices, total, err := s.VoucherState.ListDevices(ctx, filter, limit, offset)
 	if err != nil {
 		slog.Error("Error listing devices", "error", err)
-		return ListDevices500TextResponse("Internal server error"), nil
+		return ListDevices500JSONResponse{
+			InternalServerErrorJSONResponse: components.InternalServerErrorJSONResponse{
+				Message: "Internal server error",
+			},
+		}, nil
 	}
 
 	// Convert state.Device to generated Device type
@@ -68,5 +82,10 @@ func (s *Server) ListDevices(ctx context.Context, request ListDevicesRequestObje
 		result[i] = device
 	}
 
-	return ListDevices200JSONResponse(result), nil
+	return ListDevices200JSONResponse(DevicesPaginated{
+		Limit:   limit,
+		Offset:  offset,
+		Total:   int(total),
+		Devices: result,
+	}), nil
 }

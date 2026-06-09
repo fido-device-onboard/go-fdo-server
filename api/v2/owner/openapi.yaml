@@ -80,6 +80,8 @@ paths:
     $ref: ../../v1/resell/openapi.yaml#/paths/~1resell~1{guid}
   /api/v1/owner/redirect:
     $ref: ../../v1/ownerinfo/openapi.yaml#/paths/~1owner~1redirect
+  /api/v1/owner/devices:
+    $ref: ../../v1/device/openapi.yaml#/paths/~1owner~1devices
   /api/v1/device-ca:
     $ref: ../../v1/deviceca/openapi.yaml#/paths/~1device-ca
   /api/v1/device-ca/{fingerprint}:
@@ -91,10 +93,11 @@ paths:
     $ref: ../voucher/openapi.yaml#/paths/~1vouchers~1{guid}
   /api/v2/vouchers/{guid}/extend:
     $ref: ../voucher/openapi.yaml#/paths/~1vouchers~1{guid}~1extend
+  /api/v2/devices:
+    $ref: ../../v2/device/openapi.yaml#/paths/~1devices
   /api/v2/device-ca:
     $ref: ../deviceca/openapi.yaml#/paths/~1device-ca
   /api/v2/device-ca/{fingerprint}:
     $ref: ../deviceca/openapi.yaml#/paths/~1device-ca~1{fingerprint}
   /api/v2/rvto2addr:
     $ref: ../rvto2addr/openapi.yaml#/paths/~1rvto2addr
-

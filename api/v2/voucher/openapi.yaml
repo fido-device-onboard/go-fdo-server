@@ -127,6 +127,7 @@ paths:
             application/x-pem-file:
               schema:
                 type: string
+                format: binary
               examples:
                 getPEMVouchers:
                   summary: Example of a successful response
@@ -156,13 +157,17 @@ paths:
       description: |
         Imports one or more ownership vouchers into the system.
 
-        This operation is idempotent:
+        Each voucher PEM block is parsed and verified independently:
         - Valid vouchers that don't exist in the database are imported
-        - Vouchers that already exist (duplicate GUID) are rejected with a 409 error
-        - Malformed or invalid vouchers are rejected with a 400 error
+        - Vouchers that already exist (duplicate GUID) are skipped
+        - Malformed, invalid, or unverifiable vouchers are counted as failed
 
-        Ownership vouchers can be provided in PEM or JSON format.
-        You can import a single voucher or an array of vouchers.
+        Response status codes:
+        - 201: at least one voucher was imported
+        - 200: no vouchers imported, but one or more were detected (skipped or failed)
+        - 400: no valid ownership voucher PEM blocks found in the request body
+
+        Ownership vouchers must be provided in PEM format.
       operationId: ImportOwnershipVouchers
       requestBody:
         description: One or more ownership vouchers in PEM or JSON format.
@@ -171,6 +176,7 @@ paths:
           application/x-pem-file:
             schema:
               type: string
+              format: binary
               maxLength: 1048576
             examples:
               importFromPEM:
@@ -187,46 +193,54 @@ paths:
                   ...
                   -----END OWNERSHIP VOUCHER-----
       responses:
-        "201":
-          description: Ownership voucher(s) imported successfully.
+        "200":
+          description: No vouchers imported, but one or more were detected and skipped or failed.
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: "#/components/schemas/OwnershipVoucherSummaryInfo"
-                  - type: array
-                    items:
-                      $ref: "#/components/schemas/OwnershipVoucherSummaryInfo"
+                $ref: "#/components/schemas/OwnershipVouchersImportResult"
+        "201":
+          description: At least one ownership voucher was imported successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnershipVouchersImportResult"
               examples:
                 success:
                   summary: Vouchers successfully imported
                   value:
-                    - voucher:
-                        guid: "d21d841a3f54f4e89a60ed9b9779e9e8"
-                        protocolVersion: 101
-                        deviceInfo: "Intel Device"
-                        numEntries: 1
-                      createdAt: "2025-10-27T14:00:00Z"
-                      updatedAt: "2025-10-27T14:00:00Z"
-                    - voucher:
-                        guid: "a1b2c3d4e5f6789012345678abcdef01"
-                        protocolVersion: 101
-                        deviceInfo: "ARM IoT Device"
-                        numEntries: 1
-                      createdAt: "2025-10-27T14:00:00Z"
-                      updatedAt: "2025-10-27T14:00:00Z"
+                    detected: 2
+                    imported: 2
+                    failed: 0
+                    skipped: 0
+                    messages:
+                      - "voucher at position 1 with GUID d21d841a3f54f4e89a60ed9b9779e9e8 was imported successfully"
+                      - "voucher at position 2 with GUID a1b2c3d4e5f6789012345678abcdef01 was imported successfully"
+                    vouchers:
+                      - voucher:
+                          guid: "d21d841a3f54f4e89a60ed9b9779e9e8"
+                          protocolVersion: 101
+                          deviceInfo: "Intel Device"
+                          numEntries: 1
+                        createdAt: "2025-10-27T14:00:00Z"
+                        updatedAt: "2025-10-27T14:00:00Z"
+                      - voucher:
+                          guid: "a1b2c3d4e5f6789012345678abcdef01"
+                          protocolVersion: 101
+                          deviceInfo: "ARM IoT Device"
+                          numEntries: 1
+                        createdAt: "2025-10-27T14:00:00Z"
+                        updatedAt: "2025-10-27T14:00:00Z"
         "400":
-          $ref: "../components/openapi.yaml#/components/responses/BadRequest"
+          description: No valid ownership voucher PEM blocks found in the request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnershipVouchersImportResult"
         "401":
           $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
         "403":
           $ref: "../components/openapi.yaml#/components/responses/Forbidden"
-        "409":
-          description: Conflict - A voucher with this GUID already exists.
-          content:
-            application/json:
-              schema:
-                $ref: "../components/openapi.yaml#/components/schemas/Error"
         "413":
           $ref: "../components/openapi.yaml#/components/responses/PayloadTooLarge"
         "500":
@@ -261,6 +275,7 @@ paths:
             application/x-pem-file:
               schema:
                 type: string
+                format: binary
                 description: The voucher content in PEM format.
               examples:
                 getVoucherPem:
@@ -313,6 +328,8 @@ paths:
                         publicKey:
                           type: "SECP256R1"
                           value: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."
+        "400":
+          $ref: "../components/openapi.yaml#/components/responses/BadRequest"
         "401":
           $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
         "403":
@@ -339,6 +356,8 @@ paths:
       responses:
         "204":
           description: Ownership voucher deleted successfully.
+        "400":
+          $ref: "../components/openapi.yaml#/components/responses/BadRequest"
         "401":
           $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
         "403":
@@ -375,6 +394,7 @@ paths:
           application/x-pem-file:
             schema:
               type: string
+              format: binary
             examples:
               extendWithPublicKey:
                 summary: Extend voucher with PEM encoded public key
@@ -401,6 +421,7 @@ paths:
             application/x-pem-file:
               schema:
                 type: string
+                format: binary
                 description: The extended voucher in PEM format.
               examples:
                 extendedVoucher:
@@ -428,6 +449,29 @@ paths:
           $ref: "../components/openapi.yaml#/components/responses/PayloadTooLarge"
         "500":
           $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
+  /vouchers/verify-ownership:
+    post:
+      tags:
+        - voucher
+      summary: Re-verify ownership of all vouchers
+      description: |
+        Scans all vouchers and updates the ownership_verified flag by comparing
+        each voucher's current owner public key against the server's key.
+
+        Use this endpoint after key rotation, interrupted migrations, or when
+        the ownership_verified state needs to be recalculated.
+      operationId: VerifyOwnership
+      responses:
+        "200":
+          description: Ownership verification completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnershipVerificationResult"
+        "403":
+          $ref: "../components/openapi.yaml#/components/responses/Forbidden"
+        "500":
+          $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
 security:
   - BasicAuth: []
   - BearerAuth: []
@@ -447,6 +491,54 @@ components:
     Oauth2Auth:
       $ref: "../components/openapi.yaml#/components/securitySchemes/Oauth2Auth"
   schemas:
+    OwnershipVerificationResult:
+      type: object
+      required:
+        - total
+        - owned
+        - unowned
+      properties:
+        total:
+          type: integer
+          description: Total number of vouchers scanned.
+        owned:
+          type: integer
+          description: Number of vouchers owned by this server.
+        unowned:
+          type: integer
+          description: Number of vouchers not owned by this server.
+    OwnershipVouchersImportResult:
+      type: object
+      required:
+        - detected
+        - imported
+        - failed
+        - skipped
+        - messages
+        - vouchers
+      properties:
+        detected:
+          type: integer
+          description: Total number of ownership voucher PEM blocks found in the request body.
+        imported:
+          type: integer
+          description: Number of vouchers successfully imported into the database.
+        failed:
+          type: integer
+          description: Number of vouchers that could not be imported (malformed CBOR, failed verification, untrusted device CA, etc.).
+        skipped:
+          type: integer
+          description: Number of vouchers skipped because they already exist in the database.
+        messages:
+          type: array
+          description: Per-voucher result messages describing the outcome of each voucher.
+          items:
+            type: string
+        vouchers:
+          type: array
+          description: List of successfully imported vouchers.
+          items:
+            $ref: "#/components/schemas/OwnershipVoucherSummaryInfo"
     OwnershipVouchersPaginated:
       type: object
       required:

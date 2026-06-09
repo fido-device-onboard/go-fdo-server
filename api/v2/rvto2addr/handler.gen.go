@@ -26,9 +26,9 @@ const (
 // Defines values for TransportProtocol.
 const (
 	Coap  TransportProtocol = "coap"
+	Coaps TransportProtocol = "coaps"
 	Http  TransportProtocol = "http"
 	Https TransportProtocol = "https"
-	Rest  TransportProtocol = "rest"
 	Tcp   TransportProtocol = "tcp"
 	Tls   TransportProtocol = "tls"
 )
@@ -38,11 +38,11 @@ func (e TransportProtocol) Valid() bool {
 	switch e {
 	case Coap:
 		return true
+	case Coaps:
+		return true
 	case Http:
 		return true
 	case Https:
-		return true
-	case Rest:
 		return true
 	case Tcp:
 		return true
@@ -62,12 +62,10 @@ type RVTO2Addr = []RVTO2AddrEntry
 // RVTO2AddrEntry A single owner server address entry. Each entry specifies the protocol,
 // network location (DNS hostname and/or IP address), and port for connecting
 // to the owner server during TO2 protocol.
-//
 // Both 'dns' and 'ip' fields are optional and may be provided independently
 // or together. However, at least one addressing method MUST be specified
 // (non-null) as required by FDO specification section 3.3.14. Requests that
 // omit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.
-//
 // When both 'dns' and 'ip' are provided, the device MUST attempt to connect
 // using the DNS address first. The device MUST only use the IP address after
 // all DNS connection attempts have failed. This behavior is defined in the
@@ -79,23 +77,23 @@ type RVTO2AddrEntry struct {
 
 	// Protocol Transport protocol for TO2 owner server connections
 	// (FDO specification section 3.3.14, TransportProtocol).
-	// - `http` - HTTP protocol (code 3)
-	// - `https` - HTTPS protocol (code 5)
 	// - `tcp` - Raw TCP connection (code 1)
 	// - `tls` - TLS-secured TCP connection (code 2)
-	// - `coap` - CoAP over UDP (code 4)
-	// - `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)
+	// - `http` - HTTP protocol (code 3)
+	// - `coap` - CoAP (code 4)
+	// - `https` - HTTPS protocol (code 5)
+	// - `coaps` - CoAPS (code 6)
 	Protocol TransportProtocol `json:"protocol"`
 }
 
 // TransportProtocol Transport protocol for TO2 owner server connections
 // (FDO specification section 3.3.14, TransportProtocol).
-// - `http` - HTTP protocol (code 3)
-// - `https` - HTTPS protocol (code 5)
 // - `tcp` - Raw TCP connection (code 1)
 // - `tls` - TLS-secured TCP connection (code 2)
-// - `coap` - CoAP over UDP (code 4)
-// - `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)
+// - `http` - HTTP protocol (code 3)
+// - `coap` - CoAP (code 4)
+// - `https` - HTTPS protocol (code 5)
+// - `coaps` - CoAPS (code 6)
 type TransportProtocol string
 
 // apiKeyAuthContextKey is the context key for ApiKeyAuth security scheme

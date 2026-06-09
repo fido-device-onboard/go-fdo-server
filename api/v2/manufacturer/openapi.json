@@ -757,7 +757,8 @@
               },
               "application/x-pem-file": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "getPEMVouchers": {
@@ -788,7 +789,7 @@
       "post": {
         "operationId": "ImportOwnershipVouchers",
         "summary": "Import ownership voucher(s)",
-        "description": "Imports one or more ownership vouchers into the system.\n\nThis operation is idempotent:\n- Valid vouchers that don't exist in the database are imported\n- Vouchers that already exist (duplicate GUID) are rejected with a 409 error\n- Malformed or invalid vouchers are rejected with a 400 error\n\nOwnership vouchers can be provided in PEM or JSON format.\nYou can import a single voucher or an array of vouchers.\n",
+        "description": "Imports one or more ownership vouchers into the system.\n\nEach voucher PEM block is parsed and verified independently:\n- Valid vouchers that don't exist in the database are imported\n- Vouchers that already exist (duplicate GUID) are skipped\n- Malformed, invalid, or unverifiable vouchers are counted as failed\n\nResponse status codes:\n- 201: at least one voucher was imported\n- 200: no vouchers imported, but one or more were detected (skipped or failed)\n- 400: no valid ownership voucher PEM blocks found in the request body\n\nOwnership vouchers must be provided in PEM format.\n",
         "requestBody": {
           "description": "One or more ownership vouchers in PEM or JSON format.",
           "required": true,
@@ -796,6 +797,7 @@
             "application/x-pem-file": {
               "schema": {
                 "type": "string",
+                "format": "binary",
                 "maxLength": 1048576
               },
               "examples": {
@@ -808,71 +810,78 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Ownership voucher(s) imported successfully.",
+          "200": {
+            "description": "No vouchers imported, but one or more were detected and skipped or failed.",
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "At least one ownership voucher was imported successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
                 },
                 "examples": {
                   "success": {
                     "summary": "Vouchers successfully imported",
-                    "value": [
-                      {
-                        "voucher": {
-                          "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
-                          "protocolVersion": 101,
-                          "deviceInfo": "Intel Device",
-                          "numEntries": 1
+                    "value": {
+                      "detected": 2,
+                      "imported": 2,
+                      "failed": 0,
+                      "skipped": 0,
+                      "messages": [
+                        "voucher at position 1 with GUID d21d841a3f54f4e89a60ed9b9779e9e8 was imported successfully",
+                        "voucher at position 2 with GUID a1b2c3d4e5f6789012345678abcdef01 was imported successfully"
+                      ],
+                      "vouchers": [
+                        {
+                          "voucher": {
+                            "guid": "d21d841a3f54f4e89a60ed9b9779e9e8",
+                            "protocolVersion": 101,
+                            "deviceInfo": "Intel Device",
+                            "numEntries": 1
+                          },
+                          "createdAt": "2025-10-27T14:00:00Z",
+                          "updatedAt": "2025-10-27T14:00:00Z"
                         },
-                        "createdAt": "2025-10-27T14:00:00Z",
-                        "updatedAt": "2025-10-27T14:00:00Z"
-                      },
-                      {
-                        "voucher": {
-                          "guid": "a1b2c3d4e5f6789012345678abcdef01",
-                          "protocolVersion": 101,
-                          "deviceInfo": "ARM IoT Device",
-                          "numEntries": 1
-                        },
-                        "createdAt": "2025-10-27T14:00:00Z",
-                        "updatedAt": "2025-10-27T14:00:00Z"
-                      }
-                    ]
+                        {
+                          "voucher": {
+                            "guid": "a1b2c3d4e5f6789012345678abcdef01",
+                            "protocolVersion": 101,
+                            "deviceInfo": "ARM IoT Device",
+                            "numEntries": 1
+                          },
+                          "createdAt": "2025-10-27T14:00:00Z",
+                          "updatedAt": "2025-10-27T14:00:00Z"
+                        }
+                      ]
+                    }
                   }
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "No valid ownership voucher PEM blocks found in the request body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipVouchersImportResult"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "description": "Conflict - A voucher with this GUID already exists.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
           },
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
@@ -976,7 +985,8 @@
               "application/x-pem-file": {
                 "schema": {
                   "description": "The voucher content in PEM format.",
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "getVoucherPem": {
@@ -986,6 +996,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1024,6 +1037,9 @@
         "responses": {
           "204": {
             "description": "Ownership voucher deleted successfully."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1067,7 +1083,8 @@
           "content": {
             "application/x-pem-file": {
               "schema": {
-                "type": "string"
+                "type": "string",
+                "format": "binary"
               },
               "examples": {
                 "extendWithPublicKey": {
@@ -1089,7 +1106,8 @@
               "application/x-pem-file": {
                 "schema": {
                   "description": "The extended voucher in PEM format.",
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 },
                 "examples": {
                   "extendedVoucher": {
@@ -1911,6 +1929,49 @@
           "total",
           "limit",
           "offset",
+          "vouchers"
+        ]
+      },
+      "OwnershipVouchersImportResult": {
+        "type": "object",
+        "properties": {
+          "detected": {
+            "description": "Total number of ownership voucher PEM blocks found in the request body.",
+            "type": "integer"
+          },
+          "imported": {
+            "description": "Number of vouchers successfully imported into the database.",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Number of vouchers that could not be imported (malformed CBOR, failed verification, untrusted device CA, etc.).",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "Number of vouchers skipped because they already exist in the database.",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "Per-voucher result messages describing the outcome of each voucher.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vouchers": {
+            "description": "List of successfully imported vouchers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnershipVoucherSummaryInfo"
+            }
+          }
+        },
+        "required": [
+          "detected",
+          "imported",
+          "failed",
+          "skipped",
+          "messages",
           "vouchers"
         ]
       },

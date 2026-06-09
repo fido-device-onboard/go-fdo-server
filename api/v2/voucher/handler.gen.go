@@ -138,6 +138,18 @@ type Hash struct {
 // HashAlgorithm Hash algorithm.
 type HashAlgorithm string
 
+// OwnershipVerificationResult defines model for OwnershipVerificationResult.
+type OwnershipVerificationResult struct {
+	// Owned Number of vouchers owned by this server.
+	Owned int `json:"owned"`
+
+	// Total Total number of vouchers scanned.
+	Total int `json:"total"`
+
+	// Unowned Number of vouchers not owned by this server.
+	Unowned int `json:"unowned"`
+}
+
 // OwnershipVoucher defines model for OwnershipVoucher.
 type OwnershipVoucher struct {
 	// CertChain X.509 certificate chain in PEM format (null for Intel EPID).
@@ -201,6 +213,27 @@ type OwnershipVoucherSummaryInfo struct {
 
 // OwnershipVoucherUpdatedAt The timestamp when the voucher was last updated.
 type OwnershipVoucherUpdatedAt = time.Time
+
+// OwnershipVouchersImportResult defines model for OwnershipVouchersImportResult.
+type OwnershipVouchersImportResult struct {
+	// Detected Total number of ownership voucher PEM blocks found in the request body.
+	Detected int `json:"detected"`
+
+	// Failed Number of vouchers that could not be imported (malformed CBOR, failed verification, untrusted device CA, etc.).
+	Failed int `json:"failed"`
+
+	// Imported Number of vouchers successfully imported into the database.
+	Imported int `json:"imported"`
+
+	// Messages Per-voucher result messages describing the outcome of each voucher.
+	Messages []string `json:"messages"`
+
+	// Skipped Number of vouchers skipped because they already exist in the database.
+	Skipped int `json:"skipped"`
+
+	// Vouchers List of successfully imported vouchers.
+	Vouchers []OwnershipVoucherSummaryInfo `json:"vouchers"`
+}
 
 // OwnershipVouchersPaginated defines model for OwnershipVouchersPaginated.
 type OwnershipVouchersPaginated struct {
@@ -323,76 +356,6 @@ type ListOwnershipVouchersParamsSortBy string
 // ListOwnershipVouchersParamsSortOrder defines parameters for ListOwnershipVouchers.
 type ListOwnershipVouchersParamsSortOrder string
 
-// ImportOwnershipVouchers201JSONResponseBody1 defines parameters for ImportOwnershipVouchers.
-type ImportOwnershipVouchers201JSONResponseBody1 = []OwnershipVoucherSummaryInfo
-
-// ImportOwnershipVouchers201JSONResponseBody defines parameters for ImportOwnershipVouchers.
-type ImportOwnershipVouchers201JSONResponseBody struct {
-	union json.RawMessage
-}
-
-// AsOwnershipVoucherSummaryInfo returns the union data inside the ImportOwnershipVouchers201JSONResponseBody as a OwnershipVoucherSummaryInfo
-func (t ImportOwnershipVouchers201JSONResponseBody) AsOwnershipVoucherSummaryInfo() (OwnershipVoucherSummaryInfo, error) {
-	var body OwnershipVoucherSummaryInfo
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromOwnershipVoucherSummaryInfo overwrites any union data inside the ImportOwnershipVouchers201JSONResponseBody as the provided OwnershipVoucherSummaryInfo
-func (t *ImportOwnershipVouchers201JSONResponseBody) FromOwnershipVoucherSummaryInfo(v OwnershipVoucherSummaryInfo) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeOwnershipVoucherSummaryInfo performs a merge with any union data inside the ImportOwnershipVouchers201JSONResponseBody, using the provided OwnershipVoucherSummaryInfo
-func (t *ImportOwnershipVouchers201JSONResponseBody) MergeOwnershipVoucherSummaryInfo(v OwnershipVoucherSummaryInfo) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsImportOwnershipVouchers201JSONResponseBody1 returns the union data inside the ImportOwnershipVouchers201JSONResponseBody as a ImportOwnershipVouchers201JSONResponseBody1
-func (t ImportOwnershipVouchers201JSONResponseBody) AsImportOwnershipVouchers201JSONResponseBody1() (ImportOwnershipVouchers201JSONResponseBody1, error) {
-	var body ImportOwnershipVouchers201JSONResponseBody1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromImportOwnershipVouchers201JSONResponseBody1 overwrites any union data inside the ImportOwnershipVouchers201JSONResponseBody as the provided ImportOwnershipVouchers201JSONResponseBody1
-func (t *ImportOwnershipVouchers201JSONResponseBody) FromImportOwnershipVouchers201JSONResponseBody1(v ImportOwnershipVouchers201JSONResponseBody1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeImportOwnershipVouchers201JSONResponseBody1 performs a merge with any union data inside the ImportOwnershipVouchers201JSONResponseBody, using the provided ImportOwnershipVouchers201JSONResponseBody1
-func (t *ImportOwnershipVouchers201JSONResponseBody) MergeImportOwnershipVouchers201JSONResponseBody1(v ImportOwnershipVouchers201JSONResponseBody1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ImportOwnershipVouchers201JSONResponseBody) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *ImportOwnershipVouchers201JSONResponseBody) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List all ownership vouchers
@@ -401,6 +364,9 @@ type ServerInterface interface {
 	// Import ownership voucher(s)
 	// (POST /vouchers)
 	ImportOwnershipVouchers(w http.ResponseWriter, r *http.Request)
+	// Re-verify ownership of all vouchers
+	// (POST /vouchers/verify-ownership)
+	VerifyOwnership(w http.ResponseWriter, r *http.Request)
 	// Delete an ownership voucher by GUID
 	// (DELETE /vouchers/{guid})
 	DeleteOwnershipVoucher(w http.ResponseWriter, r *http.Request, guid string)
@@ -565,6 +531,34 @@ func (siw *ServerInterfaceWrapper) ImportOwnershipVouchers(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ImportOwnershipVouchers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyOwnership operation middleware
+func (siw *ServerInterfaceWrapper) VerifyOwnership(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BasicAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, ApiKeyAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, OidcAuthScopes, []string{})
+
+	ctx = context.WithValue(ctx, Oauth2AuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyOwnership(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -816,6 +810,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/vouchers", wrapper.ListOwnershipVouchers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/vouchers", wrapper.ImportOwnershipVouchers)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/vouchers/verify-ownership", wrapper.VerifyOwnership)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/vouchers/{guid}", wrapper.DeleteOwnershipVoucher)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/vouchers/{guid}", wrapper.GetOwnershipVoucherByGuid)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/vouchers/{guid}/extend", wrapper.ExtendOwnershipVoucher)
@@ -937,12 +932,26 @@ type ImportOwnershipVouchersResponseObject interface {
 	VisitImportOwnershipVouchersResponse(w http.ResponseWriter) error
 }
 
-type ImportOwnershipVouchers201JSONResponse = ImportOwnershipVouchers201JSONResponseBody
+type ImportOwnershipVouchers200JSONResponse OwnershipVouchersImportResult
+
+func (response ImportOwnershipVouchers200JSONResponse) VisitImportOwnershipVouchersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportOwnershipVouchers201JSONResponse OwnershipVouchersImportResult
 
 func (response ImportOwnershipVouchers201JSONResponse) VisitImportOwnershipVouchersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.union); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -951,9 +960,7 @@ func (response ImportOwnershipVouchers201JSONResponse) VisitImportOwnershipVouch
 	return err
 }
 
-type ImportOwnershipVouchers400JSONResponse struct {
-	externalRef0.BadRequestJSONResponse
-}
+type ImportOwnershipVouchers400JSONResponse OwnershipVouchersImportResult
 
 func (response ImportOwnershipVouchers400JSONResponse) VisitImportOwnershipVouchersResponse(w http.ResponseWriter) error {
 
@@ -999,20 +1006,6 @@ func (response ImportOwnershipVouchers403JSONResponse) VisitImportOwnershipVouch
 	return err
 }
 
-type ImportOwnershipVouchers409JSONResponse externalRef0.Error
-
-func (response ImportOwnershipVouchers409JSONResponse) VisitImportOwnershipVouchersResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type ImportOwnershipVouchers413JSONResponse struct {
 	externalRef0.PayloadTooLargeJSONResponse
 }
@@ -1045,6 +1038,59 @@ func (response ImportOwnershipVouchers500JSONResponse) VisitImportOwnershipVouch
 	return err
 }
 
+type VerifyOwnershipRequestObject struct {
+}
+
+type VerifyOwnershipResponseObject interface {
+	VisitVerifyOwnershipResponse(w http.ResponseWriter) error
+}
+
+type VerifyOwnership200JSONResponse OwnershipVerificationResult
+
+func (response VerifyOwnership200JSONResponse) VisitVerifyOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyOwnership403JSONResponse struct {
+	externalRef0.ForbiddenJSONResponse
+}
+
+func (response VerifyOwnership403JSONResponse) VisitVerifyOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyOwnership500JSONResponse struct {
+	externalRef0.InternalServerErrorJSONResponse
+}
+
+func (response VerifyOwnership500JSONResponse) VisitVerifyOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteOwnershipVoucherRequestObject struct {
 	Guid string `json:"guid"`
 }
@@ -1059,6 +1105,22 @@ type DeleteOwnershipVoucher204Response struct {
 func (response DeleteOwnershipVoucher204Response) VisitDeleteOwnershipVoucherResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
+}
+
+type DeleteOwnershipVoucher400JSONResponse struct {
+	externalRef0.BadRequestJSONResponse
+}
+
+func (response DeleteOwnershipVoucher400JSONResponse) VisitDeleteOwnershipVoucherResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type DeleteOwnershipVoucher401JSONResponse struct {
@@ -1164,6 +1226,22 @@ func (response GetOwnershipVoucherByGuid200ApplicationxPemFileResponse) VisitGet
 		defer closer.Close()
 	}
 	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetOwnershipVoucherByGuid400JSONResponse struct {
+	externalRef0.BadRequestJSONResponse
+}
+
+func (response GetOwnershipVoucherByGuid400JSONResponse) VisitGetOwnershipVoucherByGuidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
 	return err
 }
 
@@ -1364,6 +1442,9 @@ type StrictServerInterface interface {
 	// Import ownership voucher(s)
 	// (POST /vouchers)
 	ImportOwnershipVouchers(ctx context.Context, request ImportOwnershipVouchersRequestObject) (ImportOwnershipVouchersResponseObject, error)
+	// Re-verify ownership of all vouchers
+	// (POST /vouchers/verify-ownership)
+	VerifyOwnership(ctx context.Context, request VerifyOwnershipRequestObject) (VerifyOwnershipResponseObject, error)
 	// Delete an ownership voucher by GUID
 	// (DELETE /vouchers/{guid})
 	DeleteOwnershipVoucher(ctx context.Context, request DeleteOwnershipVoucherRequestObject) (DeleteOwnershipVoucherResponseObject, error)
@@ -1449,6 +1530,30 @@ func (sh *strictHandler) ImportOwnershipVouchers(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ImportOwnershipVouchersResponseObject); ok {
 		if err := validResponse.VisitImportOwnershipVouchersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyOwnership operation middleware
+func (sh *strictHandler) VerifyOwnership(w http.ResponseWriter, r *http.Request) {
+	var request VerifyOwnershipRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyOwnership(ctx, request.(VerifyOwnershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyOwnership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyOwnershipResponseObject); ok {
+		if err := validResponse.VisitVerifyOwnershipResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

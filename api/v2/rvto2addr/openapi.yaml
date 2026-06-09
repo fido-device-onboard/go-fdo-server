@@ -10,7 +10,6 @@ tags:
   - name: rvto2addr
     description: |
       Operations related to rendezvous TO2 address management.
-
       Typical workflow: Get current configuration (GET) →
       Update configuration (PUT) → Delete when no longer needed (DELETE).
       The TO2 address tells devices where to find the owner server after rendezvous.
@@ -23,15 +22,14 @@ paths:
         Retrieves the current rendezvous TO2 (Transfer of Ownership 2) address
         configuration that specifies where devices should connect to the owner server
         after completing the rendezvous protocol.
-      tags:
-        - rvto2addr
+      tags: [rvto2addr]
       responses:
-        "200":
+        '200':
           description: Successfully retrieved the RVTO2 address configuration. Returns an empty array if no configuration has been set.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RVTO2Addr"
+                $ref: '#/components/schemas/RVTO2Addr'
               examples:
                 simpleHttpConfig:
                   summary: Simple HTTP configuration with DNS
@@ -74,30 +72,28 @@ paths:
                 emptyConfiguration:
                   summary: No configuration set
                   value: []
-        "401":
-          $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "../components/openapi.yaml#/components/responses/Forbidden"
-        "500":
-          $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
+        '401':
+          $ref: ../components/openapi.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../components/openapi.yaml#/components/responses/Forbidden
+        '500':
+          $ref: ../components/openapi.yaml#/components/responses/InternalServerError
     put:
       operationId: UpdateRVTO2Addr
       summary: Update the RVTO2 address configuration
       description: |
         Updates the rendezvous TO2 address configuration.
-
         The new configuration will be used by devices completing the TO2 protocol
         to determine where to connect to the owner server. This typically includes
         the owner server's hostname/IP address, protocol, and port.
-      tags:
-        - rvto2addr
+      tags: [rvto2addr]
       requestBody:
         description: The new RVTO2 address configuration
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RVTO2Addr"
+              $ref: '#/components/schemas/RVTO2Addr'
             examples:
               updateToHttps:
                 summary: Update to HTTPS with DNS
@@ -129,12 +125,12 @@ paths:
                     ip: 10.0.0.100
                     port: 8443
       responses:
-        "200":
+        '200':
           description: Successfully updated the RVTO2 address configuration
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RVTO2Addr"
+                $ref: '#/components/schemas/RVTO2Addr'
               examples:
                 updatedHttpsConfiguration:
                   summary: Successfully updated to HTTPS configuration
@@ -151,34 +147,32 @@ paths:
                     - protocol: https
                       dns: owner-backup.example.com
                       port: 8443
-        "400":
-          $ref: "../components/openapi.yaml#/components/responses/BadRequest"
-        "401":
-          $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "../components/openapi.yaml#/components/responses/Forbidden"
-        "413":
-          $ref: "../components/openapi.yaml#/components/responses/PayloadTooLarge"
-        "500":
-          $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
+        '400':
+          $ref: ../components/openapi.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/openapi.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../components/openapi.yaml#/components/responses/Forbidden
+        '413':
+          $ref: ../components/openapi.yaml#/components/responses/PayloadTooLarge
+        '500':
+          $ref: ../components/openapi.yaml#/components/responses/InternalServerError
     delete:
       operationId: DeleteRVTO2Addr
       summary: Delete the RVTO2 address configuration
       description: |
         Deletes the current rendezvous TO2 address configuration.
-
         After deletion, devices will not have owner server address information
         available until a new configuration is set via PUT. Returns the deleted
         configuration, or an empty array if no configuration was set.
-      tags:
-        - rvto2addr
+      tags: [rvto2addr]
       responses:
-        "200":
+        '200':
           description: Successfully deleted the RVTO2 address configuration. Returns the deleted configuration or an empty array if nothing was configured.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RVTO2Addr"
+                $ref: '#/components/schemas/RVTO2Addr'
               examples:
                 deletedHttpsConfiguration:
                   summary: Deleted HTTPS configuration
@@ -198,12 +192,12 @@ paths:
                 noConfigurationToDelete:
                   summary: No configuration was set
                   value: []
-        "401":
-          $ref: "../components/openapi.yaml#/components/responses/Unauthorized"
-        "403":
-          $ref: "../components/openapi.yaml#/components/responses/Forbidden"
-        "500":
-          $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
+        '401':
+          $ref: ../components/openapi.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../components/openapi.yaml#/components/responses/Forbidden
+        '500':
+          $ref: ../components/openapi.yaml#/components/responses/InternalServerError
 security:
   - BasicAuth: []
   - BearerAuth: []
@@ -213,35 +207,21 @@ security:
 components:
   securitySchemes:
     BasicAuth:
-      $ref: "../components/openapi.yaml#/components/securitySchemes/BasicAuth"
+      $ref: ../components/openapi.yaml#/components/securitySchemes/BasicAuth
     BearerAuth:
-      $ref: "../components/openapi.yaml#/components/securitySchemes/BearerAuth"
+      $ref: ../components/openapi.yaml#/components/securitySchemes/BearerAuth
     ApiKeyAuth:
-      $ref: "../components/openapi.yaml#/components/securitySchemes/ApiKeyAuth"
+      $ref: ../components/openapi.yaml#/components/securitySchemes/ApiKeyAuth
     OidcAuth:
-      $ref: "../components/openapi.yaml#/components/securitySchemes/OidcAuth"
+      $ref: ../components/openapi.yaml#/components/securitySchemes/OidcAuth
     Oauth2Auth:
-      $ref: "../components/openapi.yaml#/components/securitySchemes/Oauth2Auth"
+      $ref: ../components/openapi.yaml#/components/securitySchemes/Oauth2Auth
   schemas:
     TransportProtocol:
       type: string
-      description: |
-        Transport protocol for TO2 owner server connections
-        (FDO specification section 3.3.14, TransportProtocol).
-        - `http` - HTTP protocol (code 3)
-        - `https` - HTTPS protocol (code 5)
-        - `tcp` - Raw TCP connection (code 1)
-        - `tls` - TLS-secured TCP connection (code 2)
-        - `coap` - CoAP over UDP (code 4)
-        - `rest` - RESTful HTTP/HTTPS (mapped to HTTPS)
-      enum:
-        - "rest"
-        - "http"
-        - "https"
-        - "tcp"
-        - "tls"
-        - "coap"
-      example: "https"
+      description: "Transport protocol for TO2 owner server connections\n(FDO specification section 3.3.14, TransportProtocol).\n- `tcp` - Raw TCP connection (code 1)\n- `tls` - TLS-secured TCP connection (code 2)\n- `http` - HTTP protocol (code 3)\n- `coap` - CoAP (code 4)\n- `https` - HTTPS protocol (code 5)\n- `coaps` - CoAPS (code 6) \n"
+      enum: [http, https, tcp, tls, coap, coaps]
+      example: https
     RVTO2Addr:
       type: array
       description: |
@@ -250,32 +230,28 @@ components:
         Ownership 2) protocol after completing rendezvous. Multiple entries provide
         fallback options if the primary address is unreachable.
       items:
-        $ref: "#/components/schemas/RVTO2AddrEntry"
+        $ref: '#/components/schemas/RVTO2AddrEntry'
     RVTO2AddrEntry:
       type: object
       description: |
         A single owner server address entry. Each entry specifies the protocol,
         network location (DNS hostname and/or IP address), and port for connecting
         to the owner server during TO2 protocol.
-
         Both 'dns' and 'ip' fields are optional and may be provided independently
         or together. However, at least one addressing method MUST be specified
         (non-null) as required by FDO specification section 3.3.14. Requests that
         omit both 'dns' and 'ip' will be rejected with a 400 Bad Request error.
-
         When both 'dns' and 'ip' are provided, the device MUST attempt to connect
         using the DNS address first. The device MUST only use the IP address after
         all DNS connection attempts have failed. This behavior is defined in the
         FDO specification section 3.3.14.
-      required:
-        - protocol
-        - port
+      required: [protocol, port]
       properties:
         protocol:
-          $ref: "#/components/schemas/TransportProtocol"
+          $ref: '#/components/schemas/TransportProtocol'
         dns:
-          $ref: "../components/openapi.yaml#/components/schemas/DNSHostname"
+          $ref: ../components/openapi.yaml#/components/schemas/DNSHostname
         ip:
-          $ref: "../components/openapi.yaml#/components/schemas/IPv4Address"
+          $ref: ../components/openapi.yaml#/components/schemas/IPv4Address
         port:
-          $ref: "../components/openapi.yaml#/components/schemas/PortNumber"
+          $ref: ../components/openapi.yaml#/components/schemas/PortNumber

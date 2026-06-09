@@ -189,6 +189,23 @@ func (s *Server) InsertVoucher(ctx context.Context, request InsertVoucherRequest
 			slog.Debug("Error inserting into database", "error", err.Error())
 			return InsertVoucher500TextResponse("Internal server error"), nil
 		}
+		// Determine ownership by comparing the voucher's owner key against
+		// the server's configured keys. V1 import already rejects non-matching
+		// vouchers upstream (VerifyVoucherOwnership), but we compare explicitly
+		// so the flag is correct even if the upstream check is ever relaxed.
+		owned := false
+		ownerPubKey, pubKeyErr := ov.OwnerPublicKey()
+		if pubKeyErr == nil {
+			for _, k := range s.OwnerPKeys {
+				if utils.PublicKeysEqual(ownerPubKey, k) {
+					owned = true
+					break
+				}
+			}
+		}
+		if err := s.VoucherState.SetOwnershipVerified(ctx, ov.Header.Val.GUID, owned); err != nil {
+			slog.Warn("Failed to set ownership_verified", "guid", ov.Header.Val.GUID[:], "error", err)
+		}
 	}
 
 	if len(bytes.TrimSpace(rest)) > 0 {
