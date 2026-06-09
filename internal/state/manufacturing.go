@@ -8,6 +8,7 @@ import (
 
 // ManufacturingState aggregates all state needed for the manufacturing server
 type ManufacturingState struct {
+	DeviceCA  *TrustedDeviceCACertsState
 	DISession *DISessionState
 	Voucher   *VoucherPersistentState
 	RvInfo    *RvInfoState
@@ -17,6 +18,7 @@ type ManufacturingState struct {
 
 // InitManufacturingDB initializes all database state needed for the manufacturing server
 func InitManufacturingDB(db *gorm.DB) (*ManufacturingState, error) {
+
 	diSessionState, err := InitDISessionDB(db)
 	if err != nil {
 		return nil, err
@@ -37,9 +39,15 @@ func InitManufacturingDB(db *gorm.DB) (*ManufacturingState, error) {
 		return nil, err
 	}
 
+	deviceCAState, err := InitTrustedDeviceCACertsDB(db)
+	if err != nil {
+		return nil, err
+	}
+
 	slog.Info("Manufacturing database initialized successfully")
 
 	return &ManufacturingState{
+		DeviceCA:  deviceCAState,
 		DISession: diSessionState,
 		Voucher:   voucherState,
 		RvInfo:    rvInfoState,

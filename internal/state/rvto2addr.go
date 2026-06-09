@@ -139,7 +139,7 @@ func (s *RVTO2AddrState) Create(ctx context.Context, addrs []protocol.RvTO2Addr)
 
 	record := RVTO2Addr{ID: 1, Value: cborData}
 	if err := s.DB.WithContext(ctx).Create(&record).Error; err != nil {
-		if isDuplicateError(err) {
+		if IsDuplicateError(err) {
 			return ErrRVTO2AddrExists
 		}
 		return fmt.Errorf("failed to create RVTO2Addr: %w", err)

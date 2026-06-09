@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ type TrustedDeviceCACertsState struct {
 }
 
 // CertPool returns the current trusted device CA certificate pool.
+// The returned pool is immutable after construction; LoadTrustedDeviceCAs
+// creates a new pool and atomically swaps the pointer.
 // Thread-safe: acquires the read lock internally.
 func (s *TrustedDeviceCACertsState) CertPool() *x509.CertPool {
 	s.mutex.RLock()
@@ -40,7 +43,6 @@ func (s *TrustedDeviceCACertsState) CertPool() *x509.CertPool {
 }
 
 // DeviceCACertificate stores trusted device CA certificates
-
 type DeviceCACertificate struct {
 	Fingerprint string    `gorm:"type:varchar(64);primaryKey"`
 	PEM         string    `gorm:"type:text;not null"`
@@ -102,8 +104,9 @@ func (s *TrustedDeviceCACertsState) ListDeviceCACertificates(ctx context.Context
 		query = query.Where("subject = ?", *subject)
 	}
 	if search != nil && *search != "" {
-		searchPattern := "%" + *search + "%"
-		query = query.Where("subject LIKE ? OR issuer LIKE ?", searchPattern, searchPattern)
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(*search)
+		searchPattern := "%" + escaped + "%"
+		query = query.Where("subject LIKE ? ESCAPE '\\' OR issuer LIKE ? ESCAPE '\\'", searchPattern, searchPattern)
 	}
 	if validityStatus != nil {
 		now := time.Now()
@@ -274,7 +277,7 @@ func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Conte
 			}
 
 			if err := tx.Create(&dbCert).Error; err != nil {
-				if isDuplicateError(err) {
+				if IsDuplicateError(err) {
 					stats.Skipped++
 					stats.Messages = append(stats.Messages, fmt.Sprintf("the certificate with subject '%s' was skipped because it already exists", cert.Subject.String()))
 					continue
@@ -302,8 +305,8 @@ func (s *TrustedDeviceCACertsState) ImportDeviceCACertificates(ctx context.Conte
 	return stats, nil
 }
 
-// isDuplicateError checks if the error is a duplicate key/unique constraint violation
-func isDuplicateError(err error) bool {
+// IsDuplicateError checks if the error is a duplicate key/unique constraint violation
+func IsDuplicateError(err error) bool {
 	// PostgreSQL
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -351,17 +354,17 @@ func (s *TrustedDeviceCACertsState) DeleteDeviceCACertificate(ctx context.Contex
 // into the TrustedDeviceCACertPool. This should be called on server startup
 // and whenever device CA certificates are added or removed.
 func (s *TrustedDeviceCACertsState) LoadTrustedDeviceCAs(ctx context.Context) error {
-	// Create a new cert pool
 	certPool := x509.NewCertPool()
-
 	// Get all device CA certificates from the database
-	var certs []DeviceCACertificate
-	if err := s.DB.WithContext(ctx).Find(&certs).Error; err != nil {
+	var deviceCACerts []DeviceCACertificate
+	if err := s.DB.WithContext(ctx).Find(&deviceCACerts).Error; err != nil {
 		return fmt.Errorf("failed to load device CA certificates: %w", err)
 	}
 
+	certs := make([]*x509.Certificate, len(deviceCACerts))
+
 	// Parse and add each certificate to the pool
-	for _, dbCert := range certs {
+	for i, dbCert := range deviceCACerts {
 		block, _ := pem.Decode([]byte(dbCert.PEM))
 		if block == nil {
 			return fmt.Errorf("failed to decode PEM for certificate with fingerprint %s", dbCert.Fingerprint)
@@ -372,10 +375,16 @@ func (s *TrustedDeviceCACertsState) LoadTrustedDeviceCAs(ctx context.Context) er
 			return fmt.Errorf("failed to parse certificate with fingerprint %s: %w", dbCert.Fingerprint, err)
 		}
 
+		certs[i] = cert
 		certPool.AddCert(cert)
 	}
 
-	// Update the state with the new cert pool
+	// Update the state with the new cert pool.
+	// When no certs are configured, set certPool to nil so the go-fdo library
+	// allows all vouchers instead of rejecting them with an empty pool.
+	if len(certs) == 0 {
+		certPool = nil
+	}
 	s.mutex.Lock()
 	s.certPool = certPool
 	s.mutex.Unlock()
