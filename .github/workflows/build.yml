@@ -1,0 +1,63 @@
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+name: Build
+
+jobs:
+  test-build:
+    name: Run the full build via the Makefile
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install dependencies
+        run: dnf install -y git make gcc shfmt npm
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Run make all
+        env:
+          CGO_ENABLED: 1
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make all shfmt
+
+      - name: Fail if the source code has changes after go fmt
+        uses: NathanielHill/fail-if-changes@master
+
+  test-rpms:
+    name: Test srpm and rpm builds
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install dependencies
+        run: dnf install -y git make npm
+
+      - name: Install golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Build SRPM
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make srpm
+
+      - name: Build RPM
+        run: |
+          git config --global --add safe.directory /__w/go-fdo-server/go-fdo-server
+          make rpm
+
+      - name: Fail if the source code has changes after build
+        uses: NathanielHill/fail-if-changes@master

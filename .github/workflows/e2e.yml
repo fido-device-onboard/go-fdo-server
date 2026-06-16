@@ -1,0 +1,98 @@
+name: E2E Testing
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      go-fdo-ci-ref:
+        description: "go-fdo-ci ref (branch, tag, or refs/pull/N/head)"
+        default: "main"
+      go-fdo-server-ref:
+        description: "go-fdo-server ref (branch, tag, or refs/pull/N/head)"
+        default: "main"
+      go-fdo-client-ref:
+        description: "go-fdo-client ref (branch, tag, or refs/pull/N/head)"
+        default: "main"
+
+jobs:
+  setup:
+    name: "Setup test matrix"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
+    steps:
+      - name: Check out go-fdo-ci
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: fido-device-onboard/go-fdo-ci
+          ref: ${{ inputs.go-fdo-ci-ref || 'main' }}
+      - id: generate
+        # Build the matrix dynamically from the test files on disk.
+        # jq is pre-installed on GitHub runners.
+        run: |
+          matrix=$(
+            for dir in test/ci test/container; do
+              type=$([[ "${dir}" == "test/ci" ]] && echo "Native" || echo "Container")
+              for f in $(find "${dir}" -name 'test-*\.sh' -type f); do
+                test=$(basename "${f}")
+                jq -n --arg test "${test}" --arg type "${type}" --arg dir "${dir}" --arg name "${test/.sh/}" \
+                  '{test: $test, type: $type, dir: $dir, name: $name}'
+              done
+            done | jq -cs '{include: .}'
+          )
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  e2e:
+    name: "${{ matrix.type }}: ${{ matrix.name }}"
+    runs-on: ubuntu-latest
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - name: Install golang
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26"
+
+      - name: Check out go-fdo-ci
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: fido-device-onboard/go-fdo-ci
+          ref: ${{ inputs.go-fdo-ci-ref || 'main' }}
+
+      - name: Check out go-fdo-server
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: fido-device-onboard/go-fdo-server
+          ref: ${{ inputs.go-fdo-server-ref || github.ref }}
+          path: src/server
+
+      - name: Check out go-fdo-client
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: fido-device-onboard/go-fdo-client
+          ref: ${{ inputs.go-fdo-client-ref || 'main' }}
+          path: src/client
+
+      - name: ${{ matrix.name }}
+        run: |
+          source ${{ matrix.dir }}/${{ matrix.test }}
+          run_test
+
+      - name: Get Manufacturer, Rendezvous and Owner server logs
+        if: always()
+        run: |
+          source ${{ matrix.dir }}/${{ matrix.test }}
+          get_logs
+
+      - name: Cleanup the environment
+        if: always()
+        run: |
+          source ${{ matrix.dir }}/${{ matrix.test }}
+          cleanup
