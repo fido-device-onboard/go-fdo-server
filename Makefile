@@ -224,7 +224,7 @@ fdo-openapi-ui:
 	[ -n "$${container_cmd}" ] || container_cmd=`command -v docker`; \
 	[ -n "$${container_cmd}" ] || { echo "No container runtime found" ; exit 1; }; \
 	$${container_cmd} rm --force fdo-openapi-ui; \
-	$${container_cmd} run --rm --name fdo-openapi-ui -d -p 9080:8080 -v ./api:/usr/share/nginx/html/api:z -e URLS='[{"url": "/api/manufacturer/openapi.yaml", "name": "Manufacturer API"}, {"url": "/api/rendezvous/openapi.yaml", "name": "Rendezvous API"}, {"url": "/api/owner/openapi.yaml", "name": "Owner API"} ]' docker.swagger.io/swaggerapi/swagger-ui; \
+	$${container_cmd} run --rm --name fdo-openapi-ui -d -p 9080:8080 -v ./api:/usr/share/nginx/html/api:z -e URLS='[{"url": "/api/v2/manufacturer/openapi.yaml", "name": "Manufacturer API"}, {"url": "/api/v2/rendezvous/openapi.yaml", "name": "Rendezvous API"}, {"url": "/api/v2/owner/openapi.yaml", "name": "Owner API"} ]' docker.swagger.io/swaggerapi/swagger-ui; \
 	until curl -s -o /dev/null http://127.0.0.1:9080; do \
 	  echo "Waiting for swagger-ui to be ready..."; \
 		sleep 1; \
