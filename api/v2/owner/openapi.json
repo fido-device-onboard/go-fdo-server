@@ -1512,7 +1512,7 @@
           }
         },
         "tags": [
-          "voucher"
+          "vouchers"
         ]
       },
       "post": {
@@ -1620,7 +1620,7 @@
           }
         },
         "tags": [
-          "voucher"
+          "vouchers"
         ]
       }
     },
@@ -1743,7 +1743,7 @@
           }
         },
         "tags": [
-          "voucher"
+          "vouchers"
         ]
       },
       "delete": {
@@ -1784,7 +1784,7 @@
           }
         },
         "tags": [
-          "voucher"
+          "vouchers"
         ]
       }
     },
@@ -1867,7 +1867,7 @@
           }
         },
         "tags": [
-          "voucher"
+          "vouchers"
         ]
       }
     },
@@ -4129,7 +4129,7 @@
       "description": "Operations related to rendezvous TO2 address management"
     },
     {
-      "name": "voucher",
+      "name": "vouchers",
       "description": "Operations related to ownership voucher management"
     }
   ]

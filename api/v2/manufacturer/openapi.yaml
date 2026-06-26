@@ -62,7 +62,7 @@ tags:
     description: Server's health monitoring
   - name: rvinfo
     description: Operations related to rendezvous info management
-  - name: voucher
+  - name: vouchers
     description: Operations related to ownership voucher management
 paths:
   /health:

@@ -7,7 +7,7 @@ info:
     name: Go FDO Server API Support
     url: https://github.com/fido-device-onboard/go-fdo-server/issues
 tags:
-  - name: voucher
+  - name: vouchers
     description: |
       Operations related to ownership voucher management.
 
@@ -18,7 +18,7 @@ paths:
   /vouchers:
     get:
       tags:
-        - voucher
+        - vouchers
       summary: List all ownership vouchers
       description: |
         Retrieves a paginated, filterable, and sortable list of all ownership vouchers.
@@ -152,7 +152,7 @@ paths:
           $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
     post:
       tags:
-        - voucher
+        - vouchers
       summary: Import ownership voucher(s)
       description: |
         Imports one or more ownership vouchers into the system.
@@ -248,7 +248,7 @@ paths:
   /vouchers/{guid}:
     get:
       tags:
-        - voucher
+        - vouchers
       summary: Get an ownership voucher by GUID
       description: |
         Retrieves a specific ownership voucher by its device GUID.
@@ -340,7 +340,7 @@ paths:
           $ref: "../components/openapi.yaml#/components/responses/InternalServerError"
     delete:
       tags:
-        - voucher
+        - vouchers
       summary: Delete an ownership voucher by GUID
       description: Deletes a specific ownership voucher by its device GUID.
       operationId: DeleteOwnershipVoucher
@@ -369,7 +369,7 @@ paths:
   /vouchers/{guid}/extend:
     post:
       tags:
-        - voucher
+        - vouchers
       summary: Extend an ownership voucher
       description: |
         Extends an ownership voucher by adding a new ownership entry. This operation
@@ -452,7 +452,7 @@ paths:
   /vouchers/verify-ownership:
     post:
       tags:
-        - voucher
+        - vouchers
       summary: Re-verify ownership of all vouchers
       description: |
         Scans all vouchers and updates the ownership_verified flag by comparing

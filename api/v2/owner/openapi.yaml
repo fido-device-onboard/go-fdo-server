@@ -66,7 +66,7 @@ tags:
     description: Operations related to trusted device CA certificates management
   - name: rvto2addr
     description: Operations related to rendezvous TO2 address management
-  - name: voucher
+  - name: vouchers
     description: Operations related to ownership voucher management
 paths:
   /health:
