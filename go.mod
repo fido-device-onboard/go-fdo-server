@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/elnormous/contenttype v1.0.4
-	github.com/fido-device-onboard/go-fdo v0.0.0-20251217141835-8aceb06ebe21
+	github.com/fido-device-onboard/go-fdo v0.0.0-20260316145830-3c6ea7fc24fb
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
 	github.com/getkin/kin-openapi v0.135.0
 	github.com/jackc/pgx/v5 v5.9.2
@@ -70,5 +70,7 @@ require (
 	golang.org/x/tools v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/fido-device-onboard/go-fdo => ../go-fdo
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen

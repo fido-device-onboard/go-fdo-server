@@ -18,4 +18,13 @@ device_ca:
 owner:
   cert: "/etc/pki/go-fdo-server/owner-example.crt"
   key: "/etc/pki/go-fdo-server/owner-example.key"
+  # FDO 2.0 Delegation (optional)
+  # When configured, the owner server uses a delegate key to sign TO2
+  # messages instead of the owner key. The delegate certificate chain
+  # must be rooted by the owner key and carry the required FDO permission
+  # OIDs (e.g. fdo-ekt-permit-onboard-new-cred).
+  # delegate:
+  #   name: "my-delegate"
+  #   key: "/etc/pki/go-fdo-server/delegate-example.key"
+  #   cert: "/etc/pki/go-fdo-server/delegate-example-chain.crt"
 

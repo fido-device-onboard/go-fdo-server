@@ -5,13 +5,14 @@ import (
 )
 
 type OwnerState struct {
-	Health     *HealthState
-	Token      *TokenService
-	DeviceCA   *TrustedDeviceCACertsState
-	TO2Session *TO2SessionState
-	Voucher    *VoucherPersistentState
-	OwnerKey   *OwnerKeyPersistentState
-	RVTO2Addr  *RVTO2AddrState
+	Health      *HealthState
+	Token       *TokenService
+	DeviceCA    *TrustedDeviceCACertsState
+	TO2Session  *TO2SessionState
+	Voucher     *VoucherPersistentState
+	OwnerKey    *OwnerKeyPersistentState
+	RVTO2Addr   *RVTO2AddrState
+	DelegateKey *DelegateKeyPersistentState // nil when delegation is not configured
 }
 
 func InitOwnerDB(db *gorm.DB) (*OwnerState, error) {

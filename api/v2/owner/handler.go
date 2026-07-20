@@ -42,6 +42,7 @@ type Owner struct {
 	State              *state.OwnerState
 	ReuseCred          bool
 	ServiceInfoModules *serviceinfo.ModuleStateMachines
+	DelegateName       string // non-empty enables FDO 2.0 delegation
 }
 
 // NewOwner creates a new Owner instance
@@ -86,6 +87,8 @@ func (o *Owner) Handler() http.Handler {
 		VerifyVoucher: func(ctx context.Context, voucher fdo.Voucher) error {
 			return VerifyVoucher(ctx, voucher, o.State, o.ReuseCred)
 		},
+		DelegateKeys:    o.State.DelegateKey,
+		OnboardDelegate: o.DelegateName,
 	}
 
 	deviceCACertContentTypes := []contenttype.MediaType{
@@ -101,6 +104,7 @@ func (o *Owner) Handler() http.Handler {
 		TO2Responder: to2Server,
 	}
 	ownerServeMux.Handle("POST /fdo/101/msg/{msg}", fdoHandler)
+	ownerServeMux.Handle("POST /fdo/200/msg/{msg}", fdoHandler)
 
 	// Wire Health API
 	healthServer := v2health.NewServer(o.State.Health)

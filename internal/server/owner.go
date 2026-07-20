@@ -66,6 +66,21 @@ func NewOwnerServer(config config.OwnerServerConfig) (*OwnerServer, error) {
 	// Initialize owner key state with loaded key and certificate chain
 	owner.State.OwnerKey = state.NewOwnerKeyPersistentState(ownerKey, ownerKeyType, chain)
 
+	// Load optional delegate key for FDO 2.0 delegation
+	delegateKey, delegateChain, err := config.GetDelegateKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load delegate key: %w", err)
+	}
+	if delegateKey != nil {
+		owner.State.DelegateKey = state.NewDelegateKeyPersistentState(
+			config.OwnerConfig.Delegate.Name,
+			delegateKey,
+			delegateChain,
+		)
+		owner.DelegateName = config.OwnerConfig.Delegate.Name
+		slog.Info("FDO 2.0 delegation enabled", "delegate", config.OwnerConfig.Delegate.Name)
+	}
+
 	if owner.State.Voucher.NeedsOwnershipMigration {
 		if _, _, err := owner.State.Voucher.MigrateOwnershipVerified(context.Background(), ownerKey.Public()); err != nil {
 			return nil, fmt.Errorf("failed to migrate ownership_verified: %w", err)
