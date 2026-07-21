@@ -7,6 +7,7 @@ require (
 	github.com/fido-device-onboard/go-fdo v0.0.0-20260316145830-3c6ea7fc24fb
 	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20260316145830-3c6ea7fc24fb
 	github.com/getkin/kin-openapi v0.144.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mattn/go-sqlite3 v1.14.48
 	github.com/mitchellh/mapstructure v1.5.0
@@ -29,7 +30,6 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
