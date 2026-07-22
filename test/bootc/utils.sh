@@ -87,6 +87,7 @@ EOF
     local compose_streams="${COMPOSE_STREAMS:-BaseOS AppStream}"
     local arch
     arch=$(uname -m)
+    local compose_base_url="${COMPOSE_BASE_URL%/}"  # strip trailing slash to avoid double slashes in baseurl
     mkdir -p files
     local repo_args=""
     for stream in ${compose_streams}; do
@@ -95,7 +96,7 @@ EOF
       cat > "${repo_file}" <<EOF
 [${repo_name}]
 name=${repo_name}
-baseurl=${COMPOSE_BASE_URL}/${stream}/${arch}/os/
+baseurl=${compose_base_url}/${stream}/${arch}/os/
 enabled=1
 gpgcheck=0
 sslverify=0

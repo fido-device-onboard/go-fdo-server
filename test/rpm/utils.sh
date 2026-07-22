@@ -255,6 +255,7 @@ install_from_compose() {
 
   local arch
   arch=$(uname -m)
+  compose_base_url="${compose_base_url%/}"  # strip trailing slash to avoid double slashes in baseurl
   for stream in ${compose_streams}; do
     local repo_name="compose-${ID}-${VERSION_ID}-${stream}"
     sudo tee "/etc/yum.repos.d/${repo_name}.repo" >/dev/null <<EOF
