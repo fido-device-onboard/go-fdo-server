@@ -235,6 +235,25 @@ configure_service_firewalld() {
     sudo dnf install -y firewalld
   fi
   sudo systemctl start firewalld
+
+  # firewalld 2.4.1+ no longer blocks on D-Bus at startup; poll until ready
+  # so the later libvirt network (zone=trusted) start doesn't race it.
+  log_info "Waiting for firewalld D-Bus interface to be ready"
+  local fw_timeout=30
+  local fw_elapsed=0
+  until sudo firewall-cmd --state >/dev/null 2>&1; do
+    sleep 1
+    fw_elapsed=$((fw_elapsed + 1))
+    if ! systemctl is-active --quiet firewalld; then
+      echo "firewalld systemd unit is not active" >&2
+      sudo systemctl status firewalld --no-pager >&2 || true
+      return 1
+    fi
+    if [[ ${fw_elapsed} -ge ${fw_timeout} ]]; then
+      echo "firewalld did not become ready after ${fw_timeout} seconds" >&2
+      return 1
+    fi
+  done
 }
 
 configure_service_libvirtd() {
