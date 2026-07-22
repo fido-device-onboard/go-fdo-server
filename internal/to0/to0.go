@@ -17,7 +17,7 @@ import (
 
 // to0Client is the minimal interface used from the TO0 client.
 type to0Client interface {
-	RegisterBlob(ctx context.Context, transport fdo.Transport, guid protocol.GUID, to2Addrs []protocol.RvTO2Addr) (uint32, error)
+	RegisterBlob(ctx context.Context, transport fdo.Transport, guid protocol.GUID, to2Addrs []protocol.RvTO2Addr, delegateName string) (uint32, error)
 }
 
 // rvto2AddrState is the minimal interface for RVTO2Addr state operations.
@@ -76,7 +76,7 @@ func RegisterRvBlob(ctx context.Context, rvInfo [][]protocol.RvInstruction, to0G
 		}
 		for _, url := range rv.URLs {
 			refresh, err := newTO0Client(voucherState, keyState, defaultTTL).RegisterBlob(
-				ctx, makeTransport(url.String(), nil, insecureTLS), guid, to2Addrs,
+				ctx, makeTransport(url.String(), nil, insecureTLS), guid, to2Addrs, "",
 			)
 			if err != nil {
 				slog.Error("failed registering 'RVTO2Addr' to rendezvous server", "url", url.String(), "error", err)

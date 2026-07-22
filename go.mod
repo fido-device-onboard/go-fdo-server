@@ -71,6 +71,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/fido-device-onboard/go-fdo => github.com/runcom/go-fdo v0.0.0-20260721092230-6a3ef2f46a35
+replace github.com/fido-device-onboard/go-fdo => github.com/runcom/go-fdo v0.0.0-20260722104355-282121892300
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
