@@ -398,26 +398,27 @@ stop_services() {
 
 # Parse a brew build base URL into its components.
 # The URL must point to the version/release directory of the package in brew.
-# Sets _brew_ver, _brew_rel, _brew_arch and returns the trailing-slash-stripped
-# URL on stdout so callers can capture it with: local url; url=$(parse_brew_url …)
+# Sets _brew_url, _brew_ver, _brew_rel and _brew_arch. Must be called directly
+# (not via command substitution) so the assignments aren't lost in a subshell:
+#   parse_brew_url "${SOME_RPM_URL}"
+#   echo "${_brew_url} ${_brew_ver} ${_brew_rel} ${_brew_arch}"
 parse_brew_url() {
   local url="${1%/}"  # strip any trailing slash to prevent empty basename
+  _brew_url="${url}"
   _brew_ver=$(basename "$(dirname "${url}")")
   _brew_rel=$(basename "${url}")
   _brew_arch=$(uname -m)
-  echo "${url}"
 }
 
 install_client() {
   if [ -n "${CLIENT_RPM_URL:-}" ]; then
     # Install from a specific brew build base path.
     # CLIENT_RPM_URL should point to the version/release directory of the package in brew.
-    local url
-    url=$(parse_brew_url "${CLIENT_RPM_URL}")
+    parse_brew_url "${CLIENT_RPM_URL}"
     # --nogpgcheck and sslverify=false are intentional: internal brew servers
     # use self-signed certificates and builds may not be GPG-signed.
     sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
-      "${url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
+      "${_brew_url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
   else
     go install github.com/fido-device-onboard/go-fdo-client@main
   fi

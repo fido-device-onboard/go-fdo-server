@@ -276,12 +276,11 @@ install_client() {
   elif [ -n "${CLIENT_RPM_URL:-}" ]; then
     # Install from a specific brew build base path.
     # CLIENT_RPM_URL should point to the version/release directory of the package in brew.
-    local url
-    url=$(parse_brew_url "${CLIENT_RPM_URL}")
+    parse_brew_url "${CLIENT_RPM_URL}"
     # --nogpgcheck and sslverify=false are intentional: internal brew servers
     # use self-signed certificates and builds may not be GPG-signed.
     sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
-      "${url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
+      "${_brew_url}/${_brew_arch}/go-fdo-client-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm"
   elif [ -n "${COMPOSE_BASE_URL:-}" ]; then
     install_from_compose ${go_fdo_client_rpms}
   else
@@ -308,15 +307,14 @@ install_server() {
   elif [ -n "${SERVER_RPM_URL:-}" ]; then
     # Install from a specific brew build base path.
     # SERVER_RPM_URL should point to the version/release directory of the package in brew.
-    local url
-    url=$(parse_brew_url "${SERVER_RPM_URL}")
+    parse_brew_url "${SERVER_RPM_URL}"
     # --nogpgcheck and sslverify=false are intentional: internal brew servers
     # use self-signed certificates and builds may not be GPG-signed.
     sudo dnf install -y --nogpgcheck --setopt=sslverify=false \
-      "${url}/${_brew_arch}/go-fdo-server-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm" \
-      "${url}/noarch/go-fdo-server-manufacturer-${_brew_ver}-${_brew_rel}.noarch.rpm" \
-      "${url}/noarch/go-fdo-server-owner-${_brew_ver}-${_brew_rel}.noarch.rpm" \
-      "${url}/noarch/go-fdo-server-rendezvous-${_brew_ver}-${_brew_rel}.noarch.rpm"
+      "${_brew_url}/${_brew_arch}/go-fdo-server-${_brew_ver}-${_brew_rel}.${_brew_arch}.rpm" \
+      "${_brew_url}/noarch/go-fdo-server-manufacturer-${_brew_ver}-${_brew_rel}.noarch.rpm" \
+      "${_brew_url}/noarch/go-fdo-server-owner-${_brew_ver}-${_brew_rel}.noarch.rpm" \
+      "${_brew_url}/noarch/go-fdo-server-rendezvous-${_brew_ver}-${_brew_rel}.noarch.rpm"
   elif [ -n "${COMPOSE_BASE_URL:-}" ]; then
     install_from_compose ${go_fdo_server_rpms}
   else
