@@ -16,7 +16,7 @@ type countingClient struct {
 	succeedOn int
 }
 
-func (c *countingClient) RegisterBlob(ctx context.Context, transport fdo.Transport, guid protocol.GUID, to2Addrs []protocol.RvTO2Addr) (uint32, error) {
+func (c *countingClient) RegisterBlob(ctx context.Context, transport fdo.Transport, guid protocol.GUID, to2Addrs []protocol.RvTO2Addr, delegateName string) (uint32, error) {
 	c.calls++
 	if c.calls == c.succeedOn {
 		return 123, nil
