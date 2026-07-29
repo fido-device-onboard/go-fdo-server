@@ -34,7 +34,7 @@ import (
 // Embedded OpenAPI specification
 //
 //go:embed openapi.json
-var openAPISpecJSON []byte
+var OpenAPISpecJSON []byte
 
 // Owner handles FDO protocol HTTP requests
 type Owner struct {
@@ -180,7 +180,7 @@ func (o *Owner) Handler() http.Handler {
 	voucherStrictHandlerV2 := v2voucher.NewStrictHandler(&voucherServerV2, voucherMiddlewaresV2)
 	v2voucher.HandlerFromMux(voucherStrictHandlerV2, mgmtAPIServeMuxV2)
 
-	validationMiddleware := middleware.OpenAPIValidationMiddleware(openAPISpecJSON)
+	validationMiddleware := middleware.OpenAPIValidationMiddleware(OpenAPISpecJSON)
 	mgmtHandlerV2 := middleware.RateLimitMiddleware(
 		rate.NewLimiter(2, 10), // 2 req/s, burst of 10
 		middleware.BodySizeMiddleware(10<<20, /* 10MB */
@@ -188,7 +188,7 @@ func (o *Owner) Handler() http.Handler {
 		),
 	)
 
-	middleware.ServeOpenAPI(ownerServeMux, "Owner", openAPISpecJSON)
+	middleware.ServeOpenAPI(ownerServeMux, "Owner", OpenAPISpecJSON)
 
 	ownerServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtHandlerV1))
 	ownerServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtHandlerV2))
