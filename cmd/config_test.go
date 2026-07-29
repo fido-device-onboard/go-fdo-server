@@ -38,14 +38,17 @@ func resetState(t *testing.T) {
 	manufacturingCmd.ResetFlags()
 	manufacturingCmd.ResetCommands()
 	manufacturingCmd.SetArgs(nil)
+	manufacturingInitAdminCmd.ResetFlags()
 
 	ownerCmd.ResetFlags()
 	ownerCmd.ResetCommands()
 	ownerCmd.SetArgs(nil)
+	ownerInitAdminCmd.ResetFlags()
 
 	rendezvousCmd.ResetFlags()
 	rendezvousCmd.ResetCommands()
 	rendezvousCmd.SetArgs(nil)
+	rendezvousInitAdminCmd.ResetFlags()
 
 	rootCmdInit()
 	ownerCmdInit()

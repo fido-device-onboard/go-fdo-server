@@ -8,8 +8,11 @@ import (
 	"log/slog"
 	"strings"
 
+	rendezvous "github.com/fido-device-onboard/go-fdo-server/api/v2/rendezvous"
+	"github.com/fido-device-onboard/go-fdo-server/internal/auth"
 	"github.com/fido-device-onboard/go-fdo-server/internal/config"
 	"github.com/fido-device-onboard/go-fdo-server/internal/server"
+	"github.com/fido-device-onboard/go-fdo-server/internal/state"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -98,6 +101,52 @@ directs devices to their Owner server during the TO1 protocol.`,
 	},
 }
 
+var rendezvousInitAdminCmd = &cobra.Command{
+	Use:   "init-admin",
+	Short: "Create initial admin user and API key",
+	Long:  `Creates an admin user with full permissions and generates an API key. The API key is printed to stdout.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var rvConfig config.RendezvousServerConfig
+		if err := viper.Unmarshal(&rvConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal config: %w", err)
+		}
+
+		gormDB, err := rvConfig.DB.GetDB()
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
+
+		ctx := cmd.Context()
+
+		if err := state.InitAuthDB(ctx, gormDB); err != nil {
+			return fmt.Errorf("failed to initialize auth database: %w", err)
+		}
+
+		name, _ := cmd.Flags().GetString("name")
+		email, _ := cmd.Flags().GetString("email")
+		force, _ := cmd.Flags().GetBool("force")
+
+		routeScopes, err := auth.ParseRouteScopes(rendezvous.OpenAPISpecJSON)
+		if err != nil {
+			return fmt.Errorf("failed to parse route scopes: %w", err)
+		}
+		serverScopes := auth.CollectAllScopes(routeScopes)
+
+		admin := &state.SeedAdminConfig{Name: name, Email: email}
+		apiKey, err := state.SeedAuth(ctx, gormDB, admin, serverScopes, force)
+		if err != nil {
+			return err
+		}
+
+		if apiKey == "" {
+			return fmt.Errorf("auth database already seeded; use --force to create an additional admin user")
+		}
+
+		fmt.Println(apiKey)
+		return nil
+	},
+}
+
 // Set up the rendezvous command line. Used by the unit tests to reset state between tests.
 func rendezvousCmdInit() {
 	rootCmd.AddCommand(rendezvousCmd)
@@ -110,6 +159,12 @@ func rendezvousCmdInit() {
 		rendezvousCmd.Flags().Uint32(flag.name, flag.defaultValue, description)
 		viper.SetDefault(flag.viperKey, flag.defaultValue)
 	}
+
+	// Add init-admin subcommand
+	rendezvousCmd.AddCommand(rendezvousInitAdminCmd)
+	rendezvousInitAdminCmd.Flags().String("name", "admin", "Admin user name")
+	rendezvousInitAdminCmd.Flags().String("email", "admin@example.com", "Admin user email")
+	rendezvousInitAdminCmd.Flags().Bool("force", false, "Create admin even if users exist")
 }
 
 func init() {
