@@ -34,6 +34,7 @@ The FDO server exposes management APIs under the `/api/v1/` and `/api/v2/` path 
 
 - **Manufacturing Service** (typically port 8038): Management APIs for rendezvous info and vouchers
 - **Owner Service** (typically port 8043): Management APIs for device ownership and onboarding
+- **Rendezvous Service** (typically port 8042): Management APIs for device CAs
 
 The reverse proxy should:
 
