@@ -1,0 +1,59 @@
+.nh
+.TH "GO-FDO-SERVER-MANUFACTURING-INIT-ADMIN" "1" "go-fdo-server" "Go FDO Server"
+
+.SH NAME
+go-fdo-server-manufacturing-init-admin - Create initial admin user and API key
+
+
+.SH SYNOPSIS
+\fBgo-fdo-server manufacturing init-admin [flags]\fP
+
+
+.SH DESCRIPTION
+Creates an admin user with full permissions and generates an API key. The API key is printed to stdout.
+
+
+.SH OPTIONS
+\fB--email\fP="admin@example.com"
+	Admin user email
+
+.PP
+\fB--force\fP[=false]
+	Create admin even if users exist
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for init-admin
+
+.PP
+\fB--name\fP="admin"
+	Admin user name
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--config\fP=""
+	Pathname of the configuration file
+
+.PP
+\fB--db-dsn\fP=""
+	Database DSN (connection string)
+
+.PP
+\fB--db-type\fP="sqlite"
+	Database type (sqlite or postgres)
+
+.PP
+\fB--http-cert\fP=""
+	Path to server certificate
+
+.PP
+\fB--http-key\fP=""
+	Path to server private key
+
+.PP
+\fB--log-level\fP="info"
+	Set logging level (debug, info, warn, error)
+
+
+.SH SEE ALSO
+\fBgo-fdo-server-manufacturing(1)\fP

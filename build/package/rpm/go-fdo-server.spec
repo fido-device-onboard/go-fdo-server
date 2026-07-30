@@ -103,8 +103,11 @@ install -m 0644 -vp docs/man/*.1 %{buildroot}%{_mandir}/man1
 # Man pages
 %{_mandir}/man1/go-fdo-server.1*
 %{_mandir}/man1/go-fdo-server-manufacturing.1*
+%{_mandir}/man1/go-fdo-server-manufacturing-init-admin.1*
 %{_mandir}/man1/go-fdo-server-owner.1*
+%{_mandir}/man1/go-fdo-server-owner-init-admin.1*
 %{_mandir}/man1/go-fdo-server-rendezvous.1*
+%{_mandir}/man1/go-fdo-server-rendezvous-init-admin.1*
 
 %pre
 %sysusers_create_compat %{SOURCE2}
