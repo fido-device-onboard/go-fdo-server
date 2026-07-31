@@ -49,3 +49,16 @@ rendezvous:
   # allowing the server to start serving requests before running potentially heavy cleanup operations.
   # Default: 300 (5 minutes)
   ##initial_cleanup_delay: 300
+
+# Authentication and authorization configuration.
+# When enabled, management API endpoints require valid credentials.
+# FDO protocol endpoints (/fdo/101/msg/*, /fdo/200/msg/*) are never affected.
+#auth:
+#  enabled: true
+#  mechanisms:
+#    api_key:
+#      enabled: true
+#  seed:
+#    admin:
+#      name: "admin"
+#      email: "admin@example.com"

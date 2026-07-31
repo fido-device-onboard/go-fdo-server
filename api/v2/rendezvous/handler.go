@@ -24,7 +24,7 @@ import (
 // Embedded OpenAPI specification
 //
 //go:embed openapi.json
-var openAPISpecJSON []byte
+var OpenAPISpecJSON []byte
 
 // Rendezvous handles FDO protocol HTTP requests
 type Rendezvous struct {
@@ -224,7 +224,7 @@ func (r *Rendezvous) Handler() http.Handler {
 	deviceCAStrictHandler := v2deviceca.NewStrictHandler(&deviceCAServerV2, deviceCAMiddlewaresV2)
 	v2deviceca.HandlerFromMux(deviceCAStrictHandler, mgmtAPIServeMuxV2)
 
-	validationMiddleware := middleware.OpenAPIValidationMiddleware(openAPISpecJSON)
+	validationMiddleware := middleware.OpenAPIValidationMiddleware(OpenAPISpecJSON)
 	mgmtAPIHandlerV2 := middleware.RateLimitMiddleware(
 		rate.NewLimiter(2, 10),
 		middleware.BodySizeMiddleware(1<<20, // 1MB
@@ -232,7 +232,7 @@ func (r *Rendezvous) Handler() http.Handler {
 		),
 	)
 
-	middleware.ServeOpenAPI(rendezvousServeMux, "Rendezvous", openAPISpecJSON)
+	middleware.ServeOpenAPI(rendezvousServeMux, "Rendezvous", OpenAPISpecJSON)
 
 	rendezvousServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandlerV1))
 	rendezvousServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))

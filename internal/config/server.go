@@ -8,4 +8,5 @@ type ServerConfig struct {
 	Log  LogConfig      `mapstructure:"log"`
 	DB   DatabaseConfig `mapstructure:"db"`
 	HTTP HTTPConfig     `mapstructure:"http"`
+	Auth AuthConfig     `mapstructure:"auth"`
 }

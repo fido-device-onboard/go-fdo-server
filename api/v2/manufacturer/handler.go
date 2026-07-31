@@ -33,7 +33,7 @@ import (
 // Embedded OpenAPI specification
 //
 //go:embed openapi.json
-var openAPISpecJSON []byte
+var OpenAPISpecJSON []byte
 
 // Manufacturer handles HTTP requests for the manufacturer server
 type Manufacturer struct {
@@ -163,11 +163,11 @@ func (m *Manufacturer) Handler() http.Handler {
 	voucherStrictHandlerV2 := v2voucher.NewStrictHandler(&voucherServerV2, voucherMiddlewaresV2)
 	v2voucher.HandlerFromMux(voucherStrictHandlerV2, mgmtAPIServeMuxV2)
 
-	validationMiddleware := middleware.OpenAPIValidationMiddleware(openAPISpecJSON)
+	validationMiddleware := middleware.OpenAPIValidationMiddleware(OpenAPISpecJSON)
 	mgmtAPIHandlerV2 := middleware.RateLimitMiddleware(rate.NewLimiter(2, 10),
 		middleware.BodySizeMiddleware(10<<20, validationMiddleware(mgmtAPIServeMuxV2)))
 
-	middleware.ServeOpenAPI(manufacturerServeMux, "Manufacturer", openAPISpecJSON)
+	middleware.ServeOpenAPI(manufacturerServeMux, "Manufacturer", OpenAPISpecJSON)
 
 	manufacturerServeMux.Handle("/api/v1/", http.StripPrefix("/api/v1", mgmtAPIHandlerV1))
 	manufacturerServeMux.Handle("/api/v2/", http.StripPrefix("/api/v2", mgmtAPIHandlerV2))

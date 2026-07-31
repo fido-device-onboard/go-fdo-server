@@ -19,3 +19,15 @@ owner:
   cert: "/etc/pki/go-fdo-server/owner-example.crt"
   key: "/etc/pki/go-fdo-server/owner-example.key"
 
+# Authentication and authorization configuration.
+# When enabled, management API endpoints require valid credentials.
+# FDO protocol endpoints (/fdo/101/msg/*, /fdo/200/msg/*) are never affected.
+#auth:
+#  enabled: true
+#  mechanisms:
+#    api_key:
+#      enabled: true
+#  seed:
+#    admin:
+#      name: "admin"
+#      email: "admin@example.com"
