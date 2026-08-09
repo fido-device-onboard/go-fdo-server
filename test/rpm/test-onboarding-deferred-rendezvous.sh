@@ -30,6 +30,8 @@ run_test() {
   log_info "Setting hostnames"
   set_hostnames
 
+  prepare_selinux_collection
+
   log_info "Start services (manufacturer, owner) — rendezvous is intentionally delayed"
   start_service_manufacturer
   start_service_owner
