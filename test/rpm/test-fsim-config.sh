@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-onboarding-config.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/utils.sh"
 
 # All relative filepaths on the device are expected to be relative to
 # the current directory of the process running go-fdo-client
@@ -19,8 +19,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/test-onb
 device_output_subdir="output"
 device_output_filename="script-out.txt"
 
-owner_download_dir="${base_dir}/fsim/download"
-owner_upload_dir="${base_dir}/fsim/upload"
+owner_download_dir="${rpm_owner_home_dir}/fsim/download"
+owner_upload_dir="${rpm_owner_home_dir}/fsim/upload"
 
 test_script_name="test-script.sh"
 test_file_content="Hello from the FDO client!"
@@ -32,7 +32,7 @@ test_file_content="Hello from the FDO client!"
 # temporary directory /tmp is a tmpfs mount and os.Rename cannot
 # "move" files across filesystems. This really needs to be fixed in
 # the go-fdo library.
-tmp_dir="${base_dir}/tmp"
+tmp_dir="${rpm_owner_database_dir}/tmp"
 directories+=("${tmp_dir}")
 export TMPDIR="${tmp_dir}"
 
@@ -41,6 +41,8 @@ export TMPDIR="${tmp_dir}"
 # a different filename on the device to ensure the device correctly
 # executes its local copy of the script
 generate_test_script() {
+  mkdir -p ${owner_download_dir}
+  chown ${rpm_owner_user}:${rpm_server_group} ${owner_download_dir} ${owner_upload_dir}
   cat >"${owner_download_dir}/${test_script_name}" <<EOF
 #!/bin/bash
 set -ueo pipefail
@@ -54,21 +56,37 @@ echo "${test_file_content}" > "\${outfile}"
 EOF
 }
 
-configure_service_owner() {
-  tee "${owner_config_file}" <<EOF
+generate_owner_config() {
+  mkdir -p ${owner_upload_dir}
+  generate_test_script
+
+  cat <<EOF
 log:
-  level: "${owner_log_level}"
-db:
-  type: "${owner_database_type}"
-  dsn: "${owner_database_dsn}"
+  level: "debug"
 http:
   ip: "${owner_dns}"
-  port: ${owner_port}
+  port: "${owner_port}"
+EOF
+
+  # Enable HTTP if https protocol is used
+  if [ "${owner_protocol}" = "https" ]; then
+    cat <<EOF
+  cert: "${rpm_owner_home_dir}/owner-http.crt"
+  key: "${rpm_owner_home_dir}/owner-http.key"
+EOF
+  fi
+
+  cat <<EOF
+db:
+  type: "${rpm_owner_db_type}"
+  dsn: "${rpm_owner_db_dsn}"
 device_ca:
-  cert: "${device_ca_crt}"
+  cert: "${rpm_owner_home_dir}/device_ca.crt"
 owner:
-  key: "${owner_key}"
-  to0_insecure_tls: true
+  cert: "${rpm_owner_home_dir}/owner.crt"
+  key: "${rpm_owner_home_dir}/owner.key"
+  reuse_credentials: "${owner_reuse_creds}"
+  to0_insecure_tls: "${owner_to0_insecure_tls}"
   service_info:
     fsims:
       - fsim: "fdo.download"
@@ -109,7 +127,6 @@ run_test() {
   show_env
 
   log_info "Creating directories"
-  directories+=("${owner_download_dir}" "${owner_upload_dir}")
   create_directories
 
   log_info "Generating service certificates"
@@ -123,9 +140,6 @@ run_test() {
 
   log_info "Configuring services"
   configure_services
-
-  log_info "Generate test script"
-  generate_test_script
 
   log_info "Configure DNS and start services"
   start_services

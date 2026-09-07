@@ -1,0 +1,22 @@
+summary: Device CA trust verification at rendezvous server
+description: |
+    Tests device CA certificate trust at rendezvous covering:
+    - Device CA certificate registration
+    - Trust chain validation during TO1 protocol
+    - Certificate verification at rendezvous
+    - Untrusted device rejection
+    - Certificate-based access control
+
+test: ../../rpm/test-device-ca-rendezvous-trust.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - device-ca
+  - rendezvous
+  - trust
+  - certificate
+  - rpm

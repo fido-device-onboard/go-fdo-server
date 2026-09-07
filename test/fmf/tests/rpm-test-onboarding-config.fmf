@@ -1,0 +1,21 @@
+summary: FDO onboarding with configuration files
+description: |
+    Tests FDO onboarding using configuration files covering:
+    - YAML configuration file parsing
+    - Server configuration via files
+    - Multi-service configuration management
+    - Configuration precedence and validation
+    - Device onboarding with configured services
+
+test: ../../rpm/test-onboarding-config.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - onboarding
+  - configuration
+  - yaml
+  - rpm

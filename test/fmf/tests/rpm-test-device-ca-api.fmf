@@ -1,0 +1,21 @@
+summary: Device CA certificate API testing
+description: |
+    Tests the device CA certificate management API covering:
+    - Uploading device CA certificates to rendezvous server
+    - Listing registered certificates
+    - Retrieving certificates by fingerprint
+    - Deleting certificates
+    - API validation and error handling
+
+test: ../../rpm/test-device-ca-api.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - api
+  - device-ca
+  - certificate
+  - rpm

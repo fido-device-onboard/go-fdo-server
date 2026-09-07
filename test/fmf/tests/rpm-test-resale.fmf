@@ -1,0 +1,21 @@
+summary: FDO device resale protocol testing
+description: |
+    Tests the FDO resale protocol covering:
+    - Device ownership transfer between owners
+    - Voucher extension protocol
+    - New owner onboarding
+    - Multi-owner orchestration
+    - Ownership verification
+
+test: ../../rpm/test-resale.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - resale
+  - ownership
+  - voucher
+  - rpm

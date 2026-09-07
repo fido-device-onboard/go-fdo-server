@@ -11,7 +11,8 @@ new_owner_dns=new_owner
 new_owner_ip=127.0.0.1
 new_owner_port=8045
 new_owner_pid_file="${pid_dir}/new_owner.pid"
-new_owner_log="${logs_dir}/${new_owner_dns}.log"
+new_owner_log_level="${log_level}"
+new_owner_log_file="${logs_dir}/${new_owner_dns}.log"
 # key crt pub and subj variables are required to generate certificates
 new_owner_key="${certs_dir}/new_owner.key"
 #shellcheck disable=SC2034
@@ -28,6 +29,9 @@ new_owner_health_url="${new_owner_url}/health"
 # The file where the new owner voucher will be saved after the resale protocol has been run
 new_owner_ov="${base_dir}/new_owner.ov"
 
+new_owner_database_type="sqlite"
+new_owner_database_dsn="file:${databases_dir}/new_owner.db"
+
 #shellcheck disable=SC2034
 new_owner_https_subj="/C=US/O=FDO/CN=new_owner"
 new_owner_https_key="${certs_dir}/new_owner-http.key"
@@ -36,12 +40,22 @@ new_owner_https_crt="${certs_dir}/new_owner-http.crt"
 start_service_new_owner() {
   local extra_opts=()
   if [ "${new_owner_protocol}" = "https" ]; then
-    extra_opts+=(--http-cert "${new_owner_https_crt}" --http-key "${new_owner_https_key}" --to0-insecure-tls)
+    extra_opts+=(--http-cert "${new_owner_https_crt}" --http-key "${new_owner_https_key}")
   fi
-  run_go_fdo_server owner ${new_owner_service} new_owner ${new_owner_pid_file} ${new_owner_log} \
+  if [ "${rendezvous_protocol}" = "https" ]; then
+    # skip verify of rendezvous cert (self signed)
+    extra_opts+=(--to0-insecure-tls)
+  fi
+  run_go_fdo_server owner \
+    "${new_owner_service}" \
+    "${new_owner_pid_file}" \
+    "${new_owner_log_level}" \
+    "${new_owner_log_file}" \
+    "${new_owner_database_type}" \
+    "${new_owner_database_dsn}" \
     --owner-key="${new_owner_key}" \
-    --device-ca-cert="${device_ca_crt}"
-  "${extra_opts[@]}"
+    --device-ca-cert="${device_ca_crt}" \
+    "${extra_opts[@]}"
 }
 
 run_test() {

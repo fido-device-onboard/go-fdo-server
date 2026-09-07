@@ -1,0 +1,22 @@
+summary: FDO ServiceInfo fdo.upload module testing
+description: |
+    Tests the fdo.upload FSIM module covering:
+    - File uploads from device to owner
+    - Upload path configuration
+    - File transfer verification
+    - ServiceInfo module integration
+    - Upload success validation
+
+test: ../../rpm/test-fsim-upload.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - fsim
+  - upload
+  - serviceinfo
+  - file-transfer
+  - rpm

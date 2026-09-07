@@ -36,8 +36,9 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../ci/ut
 # the variable `systemd_${service}_drop_in_dir`.  Remember to run
 # `sudo systemctl daemon-reload` after writing the drop-in file.
 
-configs_dir="${base_dir}/configs"
-directories+=("${configs_dir}")
+installation_source="${INSTALLATION_SOURCE:-}"
+client_installation_source="${CLIENT_INSTALLATION_SOURCE:-${installation_source}}"
+server_installation_source="${SERVER_INSTALLATION_SOURCE:-${installation_source}}"
 
 rpm_certs_dir="/etc/pki/go-fdo-server" # RPMs generate the default certs/keys
 rpm_server_group="go-fdo-server"       # server Group ID created by RPM install
@@ -48,7 +49,8 @@ rpm_manufacturer_config_dir="${rpm_manufacturer_home_dir}/.config/go-fdo-server"
 rpm_manufacturer_config_file="${rpm_manufacturer_config_dir}/manufacturing.yaml"
 rpm_manufacturer_db_type="sqlite"
 rpm_manufacturer_database_dir="/var/lib/go-fdo-server-manufacturer"
-rpm_manufacturer_db_dsn="file:${rpm_manufacturer_database_dir}/db.sqlite"
+rpm_manufacturer_database_file="${rpm_manufacturer_database_dir}/db.sqlite3"
+rpm_manufacturer_db_dsn="file:${rpm_manufacturer_database_file}"
 manufacturer_config_file="${configs_dir}/manufacturing.yaml"
 
 rpm_rendezvous_user="go-fdo-server-rendezvous"
@@ -57,7 +59,8 @@ rpm_rendezvous_config_dir="${rpm_rendezvous_home_dir}/.config/go-fdo-server"
 rpm_rendezvous_config_file="${rpm_rendezvous_config_dir}/rendezvous.yaml"
 rpm_rendezvous_db_type="sqlite"
 rpm_rendezvous_database_dir="/var/lib/go-fdo-server-rendezvous"
-rpm_rendezvous_db_dsn="file:${rpm_rendezvous_database_dir}/db.sqlite"
+rpm_rendezvous_database_file="${rpm_rendezvous_database_dir}/db.sqlite3"
+rpm_rendezvous_db_dsn="file:${rpm_rendezvous_database_file}"
 rendezvous_config_file="${configs_dir}/rendezvous.yaml"
 
 rpm_owner_user="go-fdo-server-owner"
@@ -66,10 +69,14 @@ rpm_owner_config_dir="${rpm_owner_home_dir}/.config/go-fdo-server"
 rpm_owner_config_file="${rpm_owner_config_dir}/owner.yaml"
 rpm_owner_db_type="sqlite"
 rpm_owner_database_dir="/var/lib/go-fdo-server-owner"
-rpm_owner_db_dsn="file:${rpm_owner_database_dir}/db.sqlite"
+rpm_owner_database_file="${rpm_owner_database_dir}/db.sqlite3"
+rpm_owner_db_dsn="file:${rpm_owner_database_file}"
 owner_config_file="${configs_dir}/owner.yaml"
 owner_reuse_creds="false"
 owner_to0_insecure_tls="false"
+
+go_fdo_server_rpms="go-fdo-server go-fdo-server-manufacturer go-fdo-server-owner go-fdo-server-rendezvous"
+go_fdo_client_rpms="go-fdo-client"
 
 # systemd drop-in file configuration
 #
@@ -115,7 +122,7 @@ EOF
 configure_service_manufacturer() {
   sudo rm -rf "${rpm_manufacturer_home_dir:?}"
   sudo mkdir -p "${rpm_manufacturer_config_dir}" # creates home dir
-  generate_manufacturer_config >"${manufacturer_config_file}"
+  generate_manufacturer_config | tee "${manufacturer_config_file}"
   sudo cp "${manufacturer_config_file}" "${rpm_manufacturer_config_file}"
   sudo cp "${manufacturer_key}" "${rpm_manufacturer_home_dir}"
   sudo cp "${owner_crt}" "${rpm_manufacturer_home_dir}"
@@ -152,7 +159,7 @@ EOF
 configure_service_rendezvous() {
   sudo rm -rf "${rpm_rendezvous_home_dir:?}"
   sudo mkdir -p "${rpm_rendezvous_config_dir}" # creates home dir
-  generate_rendezvous_config >"${rendezvous_config_file}"
+  generate_rendezvous_config | tee "${rendezvous_config_file}"
   sudo cp "${rendezvous_config_file}" "${rpm_rendezvous_config_file}"
   if [ "${rendezvous_protocol}" = "https" ]; then
     sudo cp "${rendezvous_https_key}" "${rendezvous_https_crt}" "${rpm_rendezvous_home_dir}"
@@ -192,7 +199,7 @@ EOF
 configure_service_owner() {
   sudo rm -rf "${rpm_owner_home_dir:?}"
   sudo mkdir -p "${rpm_owner_config_dir}" # creates home dir
-  generate_owner_config >"${owner_config_file}"
+  generate_owner_config | tee "${owner_config_file}"
   sudo cp "${owner_config_file}" "${rpm_owner_config_file}"
   sudo cp "${device_ca_crt}" "${rpm_owner_home_dir}"
   sudo cp "${owner_crt}" "${owner_key}" "${rpm_owner_home_dir}"
@@ -209,50 +216,153 @@ install_from_copr() {
   # https://docs.testing-farm.io/Testing%20Farm/0.1/test-environment.html#disabling-tag-repository
   sudo dnf install --disablerepo=* --enablerepo=copr:copr.fedorainfracloud.org:group_fedora-iot:fedora-iot -y "$@"
   sudo dnf copr disable -y @fedora-iot/fedora-iot
+  sudo dnf copr remove -y @fedora-iot/fedora-iot
+}
+
+install_from_compose(){
+  source /etc/os-release
+  case "${ID}-${VERSION_ID}" in
+    fedora-rawhide)
+      compose_host="http://kojipkgs.fedoraproject.org"
+      compose_id="latest-Fedora-${VERSION_ID^}"
+      compose_streams="${COMPOSE_STREAMS:-Everything}"
+      compose_base_url="${COMPOSE_BASE_URL:-${compose_host}/compose/${VERSION_ID}/${compose_id}/compose}"
+      ;;
+    fedora-*)
+      compose_host="http://kojipkgs.fedoraproject.org"
+      compose_streams="${COMPOSE_STREAMS:-Everything}"
+      compose_base_url="${COMPOSE_BASE_URL:-${compose_host}/compose/updates/f${VERSION_ID}-updates/compose}"
+      ;;
+    centos-*)
+      compose_host="https://composes.stream.centos.org"
+      compose_id="latest-CentOS-Stream"
+      compose_streams="${COMPOSE_STREAMS:-BaseOS AppStream}"
+      compose_base_url="${COMPOSE_BASE_URL:-${compose_host}/stream-${VERSION_ID}/production/${compose_id}/compose}"
+      ;;
+    rhel-*)
+      compose_base_url="${COMPOSE_BASE_URL:-}"
+      [ -n "${compose_base_url}" ] || log_error "Compose base URL must be set for RHEL (eg='http://download.host/.../latest-RHEL-Compose/compose/')"
+      compose_streams="${COMPOSE_STREAMS:-BaseOS AppStream}"
+      [ -n "${compose_streams}" ] || log_error "Streams must be set for RHEL (default='BaseOS AppStream')"
+      ;;
+    *)
+      log_error "OS not supported"
+      ;;
+  esac
+  for stream in ${compose_streams}; do
+    repo_name="compose-${ID}-${VERSION_ID}-${stream}"
+    sudo tee "/etc/yum.repos.d/compose-${repo_name}.repo" <<EOF
+[${repo_name}]
+name=${repo_name}
+baseurl=${compose_base_url}/${stream}/$(uname -m)/os/
+enabled=1
+gpgcheck=0
+EOF
+  done
+  sudo dnf install --disablerepo=* --enablerepo=compose* -y "$@"
+  sudo rm -f /etc/yum.repos.d/compose-*
+}
+
+
+install_rpms_from() {
+  local install_source="${1}"
+  [ -n "$install_source" ] || log_error "Installation source must be provided as first argument"
+  shift
+  rpms="${*}"
+  case "${install_source}" in
+    "distro-repos")
+      sudo dnf install -y $rpms
+      ;;
+    "fedora-iot-copr")
+      install_from_copr $rpms
+      ;;
+    "compose")
+      install_from_compose $rpms
+      ;;
+    *)
+      log_error "Unsupported installation source: '${install_source}'"
+      ;;
+  esac
 }
 
 install_client() {
-  # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will install the client from the copr repo
-  [ -v "PACKIT_COPR_RPMS" ] || rpm -q go-fdo-client &>/dev/null || install_from_copr go-fdo-client
-  log_info "Installed Client RPM:"
-  echo "    ⚙ $(rpm -q go-fdo-client)"
+  if [ -v "PACKIT_COPR_RPMS" ]; then
+    # if PACKIT_COPR_RPMS is defined and contains the 'go-fdo-client'
+    # package it means we are running the tests in the client repo
+    if [[ "${PACKIT_COPR_RPMS}" =~ go-fdo-client ]]; then
+      log_info "Expected Go FDO Client RPM:"
+      for i in ${PACKIT_COPR_RPMS}; do
+        echo "    ⚙ $i"
+      done | sort
+    else
+      install_rpms_from "fedora-iot-copr" ${go_fdo_client_rpms}
+    fi
+  else
+    # If PACKIT_COPR_RPMS is not defined it means we are running the test
+    # locally
+    if  [ -n "${client_installation_source}" ]; then
+      install_rpms_from "${client_installation_source}" "${go_fdo_client_rpms}"
+    else
+      if [ -f "build/package/rpm/go-fdo-client.spec" ] ; then
+        commit="$(git rev-parse --short HEAD)"
+        rpm -q go-fdo-client| grep -q "go-fdo-client.*git${commit}.*" || {
+          make rpm
+          sudo dnf install -y rpmbuild/rpms/"$(uname -m)"/*git"${commit}"*.rpm
+        }
+      else
+        install_rpms_from "fedora-iot-copr" "${go_fdo_client_rpms}"
+      fi
+    fi
+  fi
+  log_info "Installed Go FDO Client RPM:"
+  echo "    ⚙ $(rpm -q ${go_fdo_client_rpms})"
 }
 
 uninstall_client() {
-  # When running a test locally we remove the client package
-  # after a successful execution.
-  [ -v "PACKIT_COPR_RPMS" ] || {
-    sudo dnf remove -y go-fdo-client
-    sudo dnf copr remove -y @fedora-iot/fedora-iot
-  }
+  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y ${go_fdo_client_rpms}
 }
 
 install_server() {
-  # If PACKIT_COPR_RPMS is not defined it means we are running the test
-  # locally so we will build and install the RPMs from the *committed* code
-  if [ ! -v "PACKIT_COPR_RPMS" ]; then
-    commit="$(git rev-parse --short HEAD)"
-    rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
-      make rpm
-      sudo dnf install -y rpmbuild/rpms/{noarch,"$(uname -m)"}/*git"${commit}"*.rpm
-    }
+  # If PACKIT_COPR_RPMS is defined it means that all the rpms were built and installed already by packit
+  if [ -v "PACKIT_COPR_RPMS" ]; then
+    if [[ "${PACKIT_COPR_RPMS}" =~ go-fdo-server ]]; then
+      log_info "Expected Go FDO Server RPMs:"
+      for i in ${PACKIT_COPR_RPMS}; do
+        echo "    ⚙ $i"
+      done | sort
+    else
+      install_from_copr ${go_fdo_server_rpms}
+    fi
   else
-    log_info "Expected Server RPMs:"
-    for i in ${PACKIT_COPR_RPMS}; do
-      echo "    ⚙ $i"
-    done | sort
+    # If PACKIT_COPR_RPMS is not defined it means we are running the test
+    # locally
+    if  [ -n "${server_installation_source}" ]; then
+      install_rpms_from "${server_installation_source}" "${go_fdo_server_rpms}"
+    else
+      if [ -f "build/package/rpm/go-fdo-server.spec" ] ; then
+        commit="$(git rev-parse --short HEAD)"
+        rpm -q go-fdo-server | grep -q "go-fdo-server.*git${commit}.*" || {
+          make rpm
+          sudo dnf install -y rpmbuild/rpms/"$(uname -m)"/go-fdo-server-[1-9.]*.git"${commit}"*.rpm \
+                              rpmbuild/rpms/noarch/go-fdo-server-{manufacturer,owner,rendezvous}-[1-9.]*.git"${commit}"*.rpm
+
+        }
+      else
+        install_rpms_from "fedora-iot-copr" "${go_fdo_client_rpms}"
+      fi
+    fi
   fi
   # Make sure the RPMS are installed
-  installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " go-fdo-server{,-{manufacturer,owner,rendezvous}})
-  log_info "Installed Server RPMs:"
+  installed_rpms=$(rpm -q --qf "%{nvr}.%{arch} " ${go_fdo_server_rpms})
+  log_info "Installed Go FDO Server RPMs:"
   for i in ${installed_rpms}; do
     echo "    ⚙ $i"
   done | sort
+  sudo chmod o+rX /etc/pki/go-fdo-server/
 }
 
 uninstall_server() {
-  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y go-fdo-server{,-manufacturer,-owner,-rendezvous}
+  [ -v "PACKIT_COPR_RPMS" ] || sudo dnf remove -y ${go_fdo_server_rpms}
 }
 
 start_service_manufacturer() {
@@ -321,15 +431,15 @@ save_go_fdo_server_logs() {
 }
 
 save_service_logs_manufacturer() {
-  save_go_fdo_server_logs manufacturer "${manufacturer_log}"
+  save_go_fdo_server_logs manufacturer "${manufacturer_log_file}"
 }
 
 save_service_logs_rendezvous() {
-  save_go_fdo_server_logs rendezvous "${rendezvous_log}"
+  save_go_fdo_server_logs rendezvous "${rendezvous_log_file}"
 }
 
 save_service_logs_owner() {
-  save_go_fdo_server_logs owner "${owner_log}"
+  save_go_fdo_server_logs owner "${owner_log_file}"
 }
 
 save_service_logs() {
@@ -360,9 +470,9 @@ cleanup_home_dirs() {
 
 cleanup_databases() {
   for server in rendezvous manufacturer owner; do
-    local dbdir_var="rpm_${server}_database_dir"
+    local dbdir_var="rpm_${server}_database_file"
     if [[ -v "${dbdir_var}" ]]; then
-      sudo rm -vf "${!dbdir_var:?}"/*
+      sudo rm -vf "${!dbdir_var:?}"
     fi
   done
 }
@@ -373,7 +483,7 @@ cleanup_drop_ins() {
     local drop_in_dir_var="systemd_${service}_drop_in_dir"
     if [[ -d "${!drop_in_dir_var}" ]]; then
       reload_systemd=1
-      sudo rm -vf "${!drop_in_dir_var:?}"/*
+      sudo rm -vrf "${!drop_in_dir_var:?}"
     fi
   done
   if [[ ${reload_systemd} -eq 1 ]]; then

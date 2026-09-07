@@ -68,7 +68,7 @@ install -m 0644 -vp configs/manufacturing.yaml %{buildroot}%{_sysconfdir}/%{name
 install -m 0644 -vp configs/owner.yaml %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp configs/rendezvous.yaml %{buildroot}%{_sysconfdir}/%{name}
 # Certificates
-install -m 0750 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
+install -m 0755 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
 # Sysusers
 install -m 0644 -vp -D %{SOURCE2} %{buildroot}/%{_sysusersdir}/go-fdo-server.conf
 install -m 0644 -vp -D %{SOURCE3} %{buildroot}/%{_sysusersdir}/go-fdo-server-manufacturer.conf

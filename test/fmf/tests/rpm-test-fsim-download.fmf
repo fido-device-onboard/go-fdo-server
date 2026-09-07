@@ -1,0 +1,22 @@
+summary: FDO ServiceInfo fdo.download module testing
+description: |
+    Tests the fdo.download FSIM module covering:
+    - File downloads from owner to device
+    - File path configuration
+    - Subdirectory handling
+    - Download verification
+    - ServiceInfo module integration
+
+test: ../../rpm/test-fsim-download.sh
+
+framework: shell
+
+duration: 30m
+
+tag:
+  - fdo
+  - fsim
+  - download
+  - serviceinfo
+  - file-transfer
+  - rpm
