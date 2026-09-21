@@ -394,14 +394,203 @@ remove_files() {
   cleanup_home_dirs
 }
 
+# ---------------------------------------------------------------------------
+# SELinux AVC collection
+# ---------------------------------------------------------------------------
+
+selinux_reports_dir="${base_dir}/selinux"
+selinux_avc_raw="${selinux_reports_dir}/go_fdo_server_avc_raw.txt"
+selinux_avc_report="${selinux_reports_dir}/go_fdo_server_avc_report.txt"
+selinux_audit2allow_te="${selinux_reports_dir}/go_fdo_server_avc.te"
+directories+=("${selinux_reports_dir}")
+
+# Timestamp set just before services start; used to scope ausearch to this run
+_avc_start_timestamp=""
+
+# Set to 1 once collect_avcs has run; prevents a second collection in cleanup
+# overwriting data gathered by on_failure while services were still running
+_avcs_collected=0
+
+# Record the start of the AVC collection window
+mark_avc_start() {
+  _avc_start_timestamp="$(LC_ALL=C date '+%m/%d/%Y %H:%M:%S')"
+  log_info "AVC collection window starts at: ${_avc_start_timestamp}"
+}
+
+# Warn if go_fdo_server_t is not in permissive mode (non-fatal)
+check_go_fdo_server_permissive() {
+  if ! command -v semanage &>/dev/null; then
+    log_warn "semanage not found; cannot verify go_fdo_server_t permissive status"
+    return 0
+  fi
+  if semanage permissive -l 2>/dev/null | grep -q 'go_fdo_server_t'; then
+    log_info "go_fdo_server_t is in permissive mode"
+    return 0
+  fi
+  if [ "$(getenforce 2>/dev/null)" = "Permissive" ]; then
+    log_info "SELinux is globally permissive"
+    return 0
+  fi
+  log_warn "go_fdo_server_t is NOT in permissive mode; AVC denials may block services"
+}
+
+# Ensure auditd is running so that AVC records reach the audit log
+ensure_auditd_running() {
+  if systemctl is-active --quiet auditd 2>/dev/null; then
+    log_info "auditd is running"
+    return 0
+  fi
+  log_warn "auditd is not running; attempting to start it"
+  sudo systemctl start auditd || log_warn "Could not start auditd; AVC collection may be incomplete"
+}
+
+# Collect all AVC records for go-fdo-server since _avc_start_timestamp
+collect_avcs() {
+  if [ "${_avcs_collected}" -eq 1 ]; then
+    log_info "AVC denials already collected; skipping"
+    return 0
+  fi
+  _avcs_collected=1
+
+  if [ -z "${_avc_start_timestamp}" ]; then
+    log_warn "AVC start timestamp not set; skipping collection to avoid unrelated host denials"
+    return 0
+  fi
+
+  log_info "Collecting AVC denials for go-fdo-server"
+  mkdir -p "${selinux_reports_dir}"
+
+  if ! command -v ausearch &>/dev/null; then
+    log_warn "ausearch not found; skipping AVC collection"
+    echo "ausearch not available" >"${selinux_avc_raw}"
+    return 0
+  fi
+
+  local ausearch_args=("-m" "avc" "--comm" "go-fdo-server")
+  ausearch_args+=("-ts" "${_avc_start_timestamp}")
+
+  local rc=0
+  sudo LC_ALL=C ausearch "${ausearch_args[@]}" >"${selinux_avc_raw}" 2>/dev/null || rc=$?
+  if [ "${rc}" -ne 0 ]; then
+    if [ "${rc}" -eq 1 ]; then
+      echo "No AVC denials found for go-fdo-server" >"${selinux_avc_raw}"
+      log_info "No AVC denials found (policy may already be complete)"
+      return 0
+    fi
+    log_warn "ausearch exited with code ${rc}"
+  fi
+
+  local avc_count
+  avc_count=$(grep -c 'type=AVC' "${selinux_avc_raw}" 2>/dev/null || echo 0)
+  log_info "Found ${avc_count} AVC denial(s)"
+}
+
+# Generate a draft TE policy snippet from the collected AVC records
+generate_audit2allow_report() {
+  log_info "Generating audit2allow report"
+
+  if ! command -v audit2allow &>/dev/null; then
+    log_warn "audit2allow not found; skipping TE generation"
+    return 0
+  fi
+
+  if ! grep -q 'type=AVC' "${selinux_avc_raw}" 2>/dev/null; then
+    log_info "No AVC denials to process with audit2allow"
+    echo "No AVC denials to report" >"${selinux_audit2allow_te}"
+    return 0
+  fi
+
+  {
+    echo "# Draft SELinux rules generated from go-fdo-server AVC denials"
+    echo "# Test run: $(date -u --iso-8601=seconds)"
+    echo "# Policy domain: go_fdo_server_t"
+    echo "#"
+    echo "# These rules were produced by audit2allow and must be reviewed"
+    echo "# before being added to the upstream selinux-policy package."
+    echo ""
+  } >"${selinux_audit2allow_te}"
+
+  audit2allow -i "${selinux_avc_raw}" >>"${selinux_audit2allow_te}" 2>/dev/null ||
+    log_warn "audit2allow exited with a non-zero status"
+}
+
+# Print a human-readable AVC summary to stdout and save it as an artifact
+# Artifact paths are only reported when actual denials were found
+report_avcs() {
+  local has_denials=0
+  if grep -q 'type=AVC' "${selinux_avc_raw}" 2>/dev/null; then
+    has_denials=1
+  fi
+
+  {
+    echo "================================================================"
+    echo " go-fdo-server SELinux AVC Denial Report"
+    echo " Generated: $(date -u --iso-8601=seconds)"
+    echo "================================================================"
+    echo ""
+    if [ "${has_denials}" -eq 0 ]; then
+      if [ ! -s "${selinux_avc_raw}" ]; then
+        echo "No AVC data collected."
+      else
+        echo "No AVC denials were recorded during this test run."
+      fi
+    else
+      echo "--- Raw AVC denial records (from ausearch) ---"
+      echo ""
+      cat "${selinux_avc_raw}"
+      echo ""
+      echo "--- audit2allow suggested rules ---"
+      echo ""
+      cat "${selinux_audit2allow_te}" 2>/dev/null || echo "(audit2allow output not available)"
+    fi
+    echo ""
+    echo "================================================================"
+  } | tee "${selinux_avc_report}"
+
+  if [ "${has_denials}" -eq 1 ]; then
+    log_info "AVC report saved to: ${selinux_avc_report}"
+    log_info "Draft TE file saved to: ${selinux_audit2allow_te}"
+  fi
+}
+
+# Check SELinux status, start auditd, and record the AVC collection start timestamp
+prepare_selinux_collection() {
+  log_info "Checking SELinux status"
+  check_go_fdo_server_permissive
+  ensure_auditd_running
+  mark_avc_start
+}
+
+# Override start_services (from ci/utils.sh) to check SELinux status
+# and record the AVC start timestamp before any service is launched
+start_services() {
+  prepare_selinux_collection
+
+  log_info "Adding hostnames to '/etc/hosts'"
+  set_hostnames
+  log_info "Starting services"
+  for service in "${services[@]}"; do
+    log "  ⚙ Starting service ${service}"
+    start_service "${service}"
+    log_success
+  done
+}
+
 on_failure() {
   trap - ERR
+  collect_avcs
+  generate_audit2allow_report
+  report_avcs
   save_logs
   stop_services
   test_fail
 }
 
 cleanup() {
+  # Collect AVC denials before save_logs, which submits all files under base_dir
+  collect_avcs
+  generate_audit2allow_report
+  report_avcs
   [ ! -v "PACKIT_COPR_RPMS" ] || save_logs
   stop_services
   unset_hostnames
