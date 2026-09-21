@@ -174,13 +174,6 @@ jobs:
       - "epel-10-x86"
       - "epel-10-aarch64"
 
-  # https://packit.dev/docs/configuration/upstream/propose_downstream#syncing-the-release-to-centos-stream
-  - job: propose_downstream
-    trigger: release
-    packages: [go-fdo-server-centos]
-    dist_git_branches:
-      - "c10s"
-
   # CentOS E2E Testing jobs
   #
   - job: tests
