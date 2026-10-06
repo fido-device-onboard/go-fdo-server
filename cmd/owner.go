@@ -372,7 +372,18 @@ func (s *moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
-		next, stop := iter.Pull2(ownerModules(ctx, s.config, modules, s.DB))
+		// The iterator is stored and resumed across multiple HTTP requests, so
+		// it cannot capture the request context, which is canceled once the
+		// request that created it completes. Carry only the token over on a
+		// background context.
+		next, stop := iter.Pull2(func(yield func(string, serviceinfo.OwnerModule) bool) {
+			tokenCtx := s.DB.TokenContext(context.Background(), token)
+			for name, module := range ownerModules(tokenCtx, s.config, modules, s.DB) {
+				if !yield(name, module) {
+					return
+				}
+			}
+		})
 
 		// Reacquire the lock to write to the map. Another session may have
 		// raced us to it, in which case discard the state machine just built.
