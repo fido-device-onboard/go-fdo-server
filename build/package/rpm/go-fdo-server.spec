@@ -63,12 +63,12 @@ export GO_LDFLAGS='-X %{goipath}/internal/version.VERSION=%{version} %{?currentl
 install -m 0755 -vd %{buildroot}%{_bindir}
 install -m 0755 -vp %{gobuilddir}/bin/* %{buildroot}%{_bindir}
 # Configuration
-install -m 0750 -vd %{buildroot}%{_sysconfdir}/%{name}
+install -m 0755 -vd %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp configs/manufacturing.yaml %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp configs/owner.yaml %{buildroot}%{_sysconfdir}/%{name}
 install -m 0644 -vp configs/rendezvous.yaml %{buildroot}%{_sysconfdir}/%{name}
 # Certificates
-install -m 0750 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
+install -m 0755 -vd %{buildroot}%{_sysconfdir}/pki/%{name}
 # Sysusers
 install -m 0644 -vp -D %{SOURCE2} %{buildroot}/%{_sysusersdir}/go-fdo-server.conf
 install -m 0644 -vp -D %{SOURCE3} %{buildroot}/%{_sysusersdir}/go-fdo-server-manufacturer.conf
@@ -94,8 +94,8 @@ install -m 0644 -vp docs/man/*.1 %{buildroot}%{_mandir}/man1
 %license LICENSE vendor/modules.txt
 %doc README.md SECURITY.md docs
 %{_bindir}/go-fdo-server
-%dir %attr(750, root, go-fdo-server) %{_sysconfdir}/%{name}
-%dir %attr(750, root, go-fdo-server) %{_sysconfdir}/pki/%{name}
+%dir %attr(755, root, go-fdo-server) %{_sysconfdir}/%{name}
+%dir %attr(755, root, go-fdo-server) %{_sysconfdir}/pki/%{name}
 %{_sysusersdir}/%{name}.conf
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/cert-utils.sh
