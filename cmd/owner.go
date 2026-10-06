@@ -363,24 +363,35 @@ func (s *moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("invalid context: no token")
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	module, ok := s.states[token]
 	if !ok {
-		// Create a new module state machine
+		// Create a new module state machine, releasing the lock while
+		// getting devmod (database operation)
+		s.mu.Unlock()
 		_, modules, _, err := s.DB.Devmod(ctx)
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
 		}
 		next, stop := iter.Pull2(ownerModules(ctx, s.config, modules, s.DB))
-		module = &moduleStateMachineState{
-			Next: next,
-			Stop: stop,
+
+		// Reacquire the lock to write to the map. Another session may have
+		// raced us to it, in which case discard the state machine just built.
+		s.mu.Lock()
+		if existing, ok := s.states[token]; ok {
+			stop()
+			module = existing
+		} else {
+			module = &moduleStateMachineState{
+				Next: next,
+				Stop: stop,
+			}
+			s.states[token] = module
 		}
-		s.states[token] = module
 	}
 
 	var valid bool
 	module.Name, module.Impl, valid = module.Next()
+	s.mu.Unlock()
 	return valid, nil
 }
 
@@ -390,13 +401,15 @@ func (s *moduleStateMachines) CleanupModules(ctx context.Context) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	module, ok := s.states[token]
 	if !ok {
+		s.mu.Unlock()
 		return
 	}
-	module.Stop()
 	delete(s.states, token)
+	s.mu.Unlock()
+	// Call Stop outside the lock to avoid holding it during cleanup
+	module.Stop()
 }
 
 func ownerModules(ctx context.Context, config *ServiceInfoConfig, modules []string, dbState *db.State) iter.Seq2[string, serviceinfo.OwnerModule] { //nolint:gocyclo
