@@ -4,8 +4,8 @@ go 1.25.5
 
 require (
 	github.com/elnormous/contenttype v1.0.4
-	github.com/fido-device-onboard/go-fdo v0.0.0-20251217141835-8aceb06ebe21
-	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20250512135234-b46a4b0731f2
+	github.com/fido-device-onboard/go-fdo v0.0.0-20260908145651-65061850e1c9
+	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20260908145651-65061850e1c9
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mitchellh/mapstructure v1.5.0
