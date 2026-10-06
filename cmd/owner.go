@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sync"
 	"syscall"
 	"time"
 
@@ -236,7 +237,7 @@ func serveOwner(config *OwnerServerConfig) error {
 		RvInfo: func(_ context.Context, voucher fdo.Voucher) ([][]protocol.RvInstruction, error) {
 			return voucher.Header.Val.RvInfo, nil
 		},
-		Modules:         moduleStateMachines{DB: state.DB, config: &config.Owner.ServiceInfo, states: make(map[string]*moduleStateMachineState)},
+		Modules:         &moduleStateMachines{DB: state.DB, config: &config.Owner.ServiceInfo, states: make(map[string]*moduleStateMachineState)},
 		ReuseCredential: func(context.Context, fdo.Voucher) (bool, error) { return config.Owner.ReuseCred, nil },
 		VerifyVoucher: func(_ context.Context, voucher fdo.Voucher) error {
 			return handlers.VerifyVoucher(&voucher, []crypto.PublicKey{state.ownerKey.Public()})
@@ -329,6 +330,8 @@ func (state *OwnerServerState) OwnerKey(ctx context.Context, keyType protocol.Ke
 type moduleStateMachines struct {
 	DB     *db.State
 	config *ServiceInfoConfig
+	// mu guards states, which is accessed concurrently by TO2 sessions
+	mu sync.RWMutex
 	// current module state machine state for all sessions (indexed by token)
 	states map[string]*moduleStateMachineState
 }
@@ -340,11 +343,13 @@ type moduleStateMachineState struct {
 	Stop func()
 }
 
-func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
+func (s *moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.OwnerModule, error) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return "", nil, fmt.Errorf("invalid context: no token")
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	module, ok := s.states[token]
 	if !ok {
 		return "", nil, fmt.Errorf("NextModule not called")
@@ -352,11 +357,13 @@ func (s moduleStateMachines) Module(ctx context.Context) (string, serviceinfo.Ow
 	return module.Name, module.Impl, nil
 }
 
-func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
+func (s *moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return false, fmt.Errorf("invalid context: no token")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	module, ok := s.states[token]
 	if !ok {
 		// Create a new module state machine
@@ -377,11 +384,13 @@ func (s moduleStateMachines) NextModule(ctx context.Context) (bool, error) {
 	return valid, nil
 }
 
-func (s moduleStateMachines) CleanupModules(ctx context.Context) {
+func (s *moduleStateMachines) CleanupModules(ctx context.Context) {
 	token, ok := s.DB.TokenFromContext(ctx)
 	if !ok {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	module, ok := s.states[token]
 	if !ok {
 		return
