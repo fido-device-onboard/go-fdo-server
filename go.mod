@@ -4,8 +4,8 @@ go 1.26
 
 require (
 	github.com/elnormous/contenttype v1.0.4
-	github.com/fido-device-onboard/go-fdo v0.0.0-20260316145830-3c6ea7fc24fb
-	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20260316145830-3c6ea7fc24fb
+	github.com/fido-device-onboard/go-fdo v0.0.0-20260908145651-65061850e1c9
+	github.com/fido-device-onboard/go-fdo/fsim v0.0.0-20260908145651-65061850e1c9
 	github.com/getkin/kin-openapi v0.144.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
