@@ -23,7 +23,7 @@ build: generate tidy fmt vet man
 .PHONY: oapi-codegen
 oapi-codegen:
 	@echo "Installing oapi-codegen..."
-	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.0
+	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1
 
 .PHONY: generate
 generate: oapi-codegen
