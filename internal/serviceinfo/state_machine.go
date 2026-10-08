@@ -25,17 +25,58 @@ import (
 type ModuleStateMachines struct {
 	OwnerState *state.OwnerState
 	Config     *Config
+	// mu guards the states map itself, and nothing else: it must not be held
+	// across I/O, since it is shared by every concurrent TO2 session. It is
+	// taken only by the load, loadOrStore and loadAndDelete helpers.
+	mu sync.RWMutex
 	// current module state machine state for all sessions (indexed by token)
-	mu     sync.RWMutex
 	states map[string]*moduleStateMachineState
 }
 
 // moduleStateMachineState holds the state for a single TO2 session
 type moduleStateMachineState struct {
+	// mu serializes access to this session's state machine. Advancing the
+	// iterator runs owner module setup, which does file and database I/O, so
+	// this is held across I/O and must stay per-session. iter.Pull2 also
+	// forbids calling Next and Stop concurrently.
+	mu   sync.Mutex
 	Name string
 	Impl serviceinfo.OwnerModule
 	Next func() (string, serviceinfo.OwnerModule, bool)
 	Stop func()
+}
+
+// load returns the state machine registered for token, if any.
+func (s *ModuleStateMachines) load(token string) (*moduleStateMachineState, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	module, ok := s.states[token]
+	return module, ok
+}
+
+// loadOrStore returns the state machine already registered for token, if any,
+// and otherwise registers and returns module. The returned pointer is the one
+// every request on this token must use.
+func (s *ModuleStateMachines) loadOrStore(token string, module *moduleStateMachineState) *moduleStateMachineState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.states[token]; ok {
+		return existing
+	}
+	s.states[token] = module
+	return module
+}
+
+// loadAndDelete unregisters the state machine for token and returns it, so the
+// caller can stop it once no further request can reach it.
+func (s *ModuleStateMachines) loadAndDelete(token string) (*moduleStateMachineState, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	module, ok := s.states[token]
+	if ok {
+		delete(s.states, token)
+	}
+	return module, ok
 }
 
 // NewModuleStateMachines creates a new service info module state machine
@@ -53,12 +94,12 @@ func (s *ModuleStateMachines) Module(ctx context.Context) (string, serviceinfo.O
 	if !ok {
 		return "", nil, fmt.Errorf("invalid context: no token")
 	}
-	s.mu.RLock()
-	module, ok := s.states[token]
-	s.mu.RUnlock()
+	module, ok := s.load(token)
 	if !ok {
 		return "", nil, fmt.Errorf("NextModule not called")
 	}
+	module.mu.Lock()
+	defer module.mu.Unlock()
 	return module.Name, module.Impl, nil
 }
 
@@ -69,12 +110,10 @@ func (s *ModuleStateMachines) NextModule(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("invalid context: no token")
 	}
 
-	s.mu.Lock()
-	module, ok := s.states[token]
+	module, ok := s.load(token)
 	if !ok {
-		// Create a new module state machine
-		// Unlock while getting devmod (database operation)
-		s.mu.Unlock()
+		// Create a new module state machine. Getting devmod is a database
+		// operation, so it runs with no lock held.
 		_, modules, _, err := s.OwnerState.TO2Session.Devmod(ctx)
 		if err != nil {
 			return false, fmt.Errorf("error getting devmod: %w", err)
@@ -92,18 +131,21 @@ func (s *ModuleStateMachines) NextModule(ctx context.Context) (bool, error) {
 				}
 			}
 		})
-		module = &moduleStateMachineState{
-			Next: next,
-			Stop: stop,
+		created := &moduleStateMachineState{Next: next, Stop: stop}
+		if module = s.loadOrStore(token, created); module != created {
+			// A request racing us on the same token registered first and wins,
+			// so discard the state machine just built. Nothing else references
+			// its iterator, so stopping it needs no lock.
+			stop()
 		}
-		// Reacquire lock to write to map
-		s.mu.Lock()
-		s.states[token] = module
 	}
 
+	// Advancing the iterator runs owner module setup, which does I/O. Hold
+	// only this session's lock, never the map lock.
+	module.mu.Lock()
+	defer module.mu.Unlock()
 	var valid bool
 	module.Name, module.Impl, valid = module.Next()
-	s.mu.Unlock()
 	return valid, nil
 }
 
@@ -113,15 +155,14 @@ func (s *ModuleStateMachines) CleanupModules(ctx context.Context) {
 	if !ok {
 		return
 	}
-	s.mu.Lock()
-	module, ok := s.states[token]
+	module, ok := s.loadAndDelete(token)
 	if !ok {
-		s.mu.Unlock()
 		return
 	}
-	delete(s.states, token)
-	s.mu.Unlock()
-	// Call Stop outside the lock to avoid holding the lock during cleanup
+	// Stop runs outside the map lock, but under this session's lock: iter.Pull2
+	// forbids calling Stop concurrently with an in-flight Next.
+	module.mu.Lock()
+	defer module.mu.Unlock()
 	module.Stop()
 }
 
