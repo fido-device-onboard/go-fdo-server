@@ -29,6 +29,8 @@ prepare:
 
   - how: install
     package:
+      - audit
+      - policycoreutils-python-utils
       - golang
       - make
       - openssl
