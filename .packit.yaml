@@ -132,7 +132,7 @@ jobs:
       fmf_url: https://github.com/fido-device-onboard/go-fdo-ci
       fmf_ref: main
       use_target_repo_for_fmf_url: true
-    tmt_plan: test/fmf/plans/rpm-e2e
+    tmt_plan: test/fmf/plans/rpm
     packages: [go-fdo-server-fedora]
     targets: *copr_fedora_targets
 
@@ -140,7 +140,7 @@ jobs:
     trigger: pull_request
     identifier: bootc-e2e-fedora
     <<: *fmf_source
-    tmt_plan: test/fmf/plans/bootc-e2e
+    tmt_plan: test/fmf/plans/bootc
     packages: [go-fdo-server-fedora]
     targets: # Temporarily disabling rawhide due to bug https://issues.redhat.com/browse/HMS-9867
       - "fedora-latest-stable-x86_64"
@@ -187,6 +187,6 @@ jobs:
     trigger: pull_request
     identifier: rpm-e2e-centos
     <<: *fmf_source
-    tmt_plan: test/fmf/plans/rpm-e2e
+    tmt_plan: test/fmf/plans/rpm
     packages: [go-fdo-server-centos]
     targets: *copr_centos_targets
