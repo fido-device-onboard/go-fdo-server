@@ -42,6 +42,15 @@ packages:
     pkg_tool: centpkg
 
 actions:
+  # Packit otherwise derives the version from `git describe`. The 1.0.x tags
+  # are cut on release-1.0, which is not an ancestor of main, so main still
+  # describes as v1.0.0 and every build from it is labeled 1.0.0 regardless
+  # of the spec. Read the version from the spec file instead, which is the
+  # single source of truth we already bump by hand.
+  # https://packit.dev/docs/configuration/actions
+  get-current-version:
+    - awk '/^Version:/ {print $2; exit}' build/package/rpm/go-fdo-server.spec
+
   post-modifications:
     # https://fedora.gitlab.io/sigs/go/go-vendor-tools/scenarios/#manual-update
     - |
